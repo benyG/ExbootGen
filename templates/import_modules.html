@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Importer Domaines</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; }
+    .panel { display: inline-block; width: 45%; vertical-align: top;
+             border:1px solid #ccc; border-radius:6px; padding:1em; margin:1%; }
+    .field { margin: .5em 0; }
+    label { display:block; font-weight:bold; margin-bottom:.2em; }
+    select, textarea, button { width:100%; padding:.5em; font-size:1em; }
+    #progress { width:100%; background:#eee; border-radius:4px; overflow:hidden; margin-top:1em; }
+    #bar      { width:0%; height:1em; background:#4caf50; transition: width .3s; }
+    #log      { white-space: pre-wrap; background:#f9f9f9; padding:.5em;
+                 height:8em; overflow-y: auto; border:1px solid #ddd; margin-top:.5em; }
+  </style>
+</head>
+<body>
+  <h1>Importer des Domaines</h1>
+
+  <div class="panel">
+    <div class="field">
+      <label for="prov">Provider</label>
+      <select id="prov"></select>
+    </div>
+    <div class="field">
+      <label for="cert">Certification</label>
+      <select id="cert"></select>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="field">
+      <label for="json-input">Collez le JSON des domaines à importer</label>
+      <textarea id="json-input" rows="10" placeholder='[
+  {"name":"Domaine A","descr":"Description…"},
+  {"name":"Domaine B"}
+]'></textarea>
+    </div>
+    <button id="import-btn">OK</button>
+
+    <div id="progress"><div id="bar"></div></div>
+    <div id="log"></div>
+  </div>
+
+<script>
+  async function loadJSON(url) {
+    const res = await fetch(url);
+    return res.json();
+  }
+
+  function fill(sel, items) {
+    sel.innerHTML = '';
+    items.forEach(i=>{
+      const o = document.createElement('option');
+      o.value = i.id; o.text = i.name;
+      sel.appendChild(o);
+    });
+  }
+
+  // Initialisation des dropdowns
+  document.addEventListener('DOMContentLoaded', async ()=>{
+    const provSel = document.getElementById('prov'),
+          certSel = document.getElementById('cert');
+
+    // Charge providers
+    const providers = await loadJSON('/api/providers');
+    fill(provSel, providers);
+    provSel.value = providers[0]?.id;
+
+    // Quand change provider => recharge certifications
+    provSel.addEventListener('change', async ()=>{
+      const certs = await loadJSON(`/api/certifications/${provSel.value}`);
+      fill(certSel, certs);
+    });
+    // Trigger initial
+    provSel.dispatchEvent(new Event('change'));
+  });
+
+  // Gestion de l’import
+  document.getElementById('import-btn').onclick = async ()=>{
+    const certId = +document.getElementById('cert').value;
+    let domains;
+    try {
+      domains = JSON.parse(document.getElementById('json-input').value);
+      if (!Array.isArray(domains)) throw '';
+    } catch {
+      return alert('JSON invalide : attendez un tableau d’objets.');
+    }
+
+    const log = document.getElementById('log'),
+          bar = document.getElementById('bar'),
+          total = domains.length;
+    log.textContent = '';
+    bar.style.width = '0%';
+
+    for (let i = 0; i < total; i++) {
+      const dom = domains[i];
+      if (!dom.name) {
+        log.textContent += `Ignoré (pas de name): ${JSON.stringify(dom)}\n`;
+        continue;
+      }
+      try {
+        const res = await fetch('/api/modules', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({
+            certification_id: certId,
+            name: dom.name,
+            descr: dom.descr || null
+          })
+        });
+        const j = await res.json();
+        if (res.ok) {
+          log.textContent += `✓ [${j.id}] ${j.name}\n`;
+        } else {
+          log.textContent += `✗ Erreur: ${j.error}\n`;
+        }
+      } catch (e) {
+        log.textContent += `✗ Erreur réseau: ${e}\n`;
+      }
+      // Mise à jour de la barre
+      bar.style.width = `${Math.round((i+1)/total*100)}%`;
+    }
+
+    alert(`Import terminé : ${total} item(s) traités.`);
+  };
+</script>
+</body>
+</html>

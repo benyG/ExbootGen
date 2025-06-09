@@ -1,0 +1,196 @@
+import mysql.connector  
+import logging  
+import json  
+from config import DB_CONFIG
+
+# Valeurs de niveau : easy→0, medium→1, hard→2
+level_mapping = {"easy": 0, "medium": 1, "hard": 2}
+
+# Mapping de type de question et de scénario en codes numériques
+nature_mapping = {"qcm": 1, "truefalse": 2, "short-answer": 3, "matching": 4, "drag-n-drop": 5}
+ty_mapping = {"no": 1, "scenario": 2, "scenario-illustrated": 3}
+
+def get_connection():
+    return mysql.connector.connect(
+        host=DB_CONFIG["host"],
+        user=DB_CONFIG["user"],
+        password=DB_CONFIG["password"],
+        database=DB_CONFIG["database"],
+    )
+
+
+def get_providers():
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "SELECT id, name FROM provs"
+    cursor.execute(query)
+    providers = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return providers
+
+
+def get_certifications_by_provider(provider_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "SELECT id, name FROM courses WHERE prov = %s"
+    cursor.execute(query, (provider_id,))
+    certifications = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return certifications
+
+
+def get_domains_by_certification(cert_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "SELECT id, name FROM modules WHERE course = %s"
+    cursor.execute(query, (cert_id,))
+    domains = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return domains
+
+
+def count_total_questions(domain_id):
+    """
+    Renvoie le nombre total de questions dans le domaine (module) donné.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "SELECT COUNT(*) FROM questions WHERE module = %s"
+    cursor.execute(query, (domain_id,))
+    total = cursor.fetchone()[0]
+    cursor.close()
+    conn.close()
+    return total
+
+
+def count_questions_in_category(domain_id, level, qtype, scenario_type):
+    """
+    Compte le nombre de questions dans la table 'questions' correspondant aux critères donnés.
+    On filtre sur module, level, nature et ty.
+    """
+    # Conversion du niveau en code numérique
+    level_num = level_mapping.get(level, 1)  # défaut à medium
+    # Conversion de nature et scénario
+    nature_num = nature_mapping.get(qtype, 0)
+    ty_num = ty_mapping.get(scenario_type, 1)
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT COUNT(*) FROM questions 
+        WHERE module = %s AND level = %s AND nature = %s AND ty = %s
+    """
+    cursor.execute(query, (domain_id, level_num, nature_num, ty_num))
+    count = cursor.fetchone()[0]
+    logging.info(f"Count for module {domain_id}, level {level_num}, nature {nature_num}, ty {ty_num}: {count}")
+    cursor.close()
+    conn.close()
+    return count
+
+
+def insert_questions(domain_id, questions_json, scenario_type_str):
+    """
+    Insère les questions et leurs réponses depuis la structure JSON dans la base de données.
+    Pour chaque réponse, on insère l'intégralité du JSON sauf la clé "isok",
+    qui est utilisée dans la table "quest_ans".
+    En cas de doublon dans la table answers, on récupère l'id existant.
+    La colonne `descr` de questions recevra la valeur de `diagram_descr`.
+    """
+    # Mappage pour la conversion
+    ty_num = ty_mapping.get(scenario_type_str, 1)
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        num_questions = len(questions_json.get("questions", []))
+        logging.info(f"Inserting {num_questions} questions into domain {domain_id}.")
+        for question in questions_json.get("questions", []):
+            # Assemblage du texte final
+            context = question.get("context", "").strip()
+            diagram_descr = question.get("diagram_descr", "").strip()
+            image = question.get("image", "").strip()
+            text = question.get("text", "").strip()
+            if context or image:
+                full_text = ""
+                if context:
+                    full_text += context + "\n"
+                if image:
+                    full_text += image + "<br>"
+                full_text += text
+                question_text = full_text
+            else:
+                question_text = text
+
+            # Conversion du niveau
+            level_num = level_mapping.get(question.get("level", "medium"), 1)
+            # Conversion de la nature
+            nature_num = nature_mapping.get(question.get("nature", "qcm"), 0)
+
+            # Insertion de la question avec le champ descr
+            query_question = """
+                INSERT INTO questions (text, descr, level, module, nature, ty, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            """
+            cursor.execute(query_question, (
+                question_text,
+                diagram_descr,
+                level_num,
+                domain_id,
+                nature_num,
+                ty_num
+            ))
+            question_id = cursor.lastrowid
+            logging.info(f"Inserted question ID: {question_id}")
+
+            # Insertion des réponses
+            for answer in question.get("answers", []):
+                answer_data = {k: v for k, v in answer.items() if k != "isok"}
+                answer_json = json.dumps(answer_data, ensure_ascii=False)
+                isok = answer.get("isok", 0)
+                try:
+                    query_answer = "INSERT INTO answers (text, created_at) VALUES (%s, NOW())"
+                    cursor.execute(query_answer, (answer_json,))
+                    answer_id = cursor.lastrowid
+                    logging.info(f"  Inserted answer ID: {answer_id}")
+                except mysql.connector.Error as err:
+                    if err.errno == 1062:
+                        query_select = "SELECT id FROM answers WHERE text = %s"
+                        cursor.execute(query_select, (answer_json,))
+                        result = cursor.fetchone()
+                        if result:
+                            answer_id = result[0]
+                            logging.info(f"  Duplicate found, using existing answer ID: {answer_id}")
+                        else:
+                            raise
+                    else:
+                        raise
+                query_link = "INSERT INTO quest_ans (question, answer, isok) VALUES (%s, %s, %s)"
+                cursor.execute(query_link, (question_id, answer_id, isok))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        logging.error("Error during insertion: " + str(e))
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_domains_description_by_certif(cert_id):
+    """
+    Renvoie la liste des domaines (modules) pour la certification donnée,
+    avec leur id, nom et description textuelle.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    # On suppose que la table `modules` a une colonne `descr` qui contient la description
+    query = "SELECT id, name, descr FROM modules WHERE course = %s"
+    cursor.execute(query, (cert_id,))
+    domains = cursor.fetchall()  # liste de tuples (id, name, descr)
+    cursor.close()
+    conn.close()
+    # On renvoie sous forme de liste de dicts pour plus de clarté
+    return [{"id": d[0], "name": d[1], "descr": d[2]} for d in domains]

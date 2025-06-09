@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Déplacer Questions</title>
+  <style>
+    body { font-family: sans-serif; }
+    .panel { display: inline-block; width: 45%; vertical-align: top;
+             border: 1px solid #ccc; border-radius: 8px; padding: 1em;
+             margin: 1%; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
+    .panel h2 { margin-top: 0; }
+    .field { margin: 0.5em 0; }
+    label { display: block; margin-bottom: 0.2em; font-weight: bold; }
+    select, button { width: 100%; padding: 0.5em; font-size: 1em; }
+    .or { text-align: center; margin: 0.5em 0; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="panel" id="src">
+      <h1>Déplacer Questions</h1>
+    <h2>SOURCE</h2>
+    <div class="field">
+      <label>Provider</label>
+      <select id="src-prov"></select>
+    </div>
+    <div class="field">
+      <label>Certification</label>
+      <select id="src-cert"></select>
+    </div>
+    <div class="or">OU</div>
+    <div class="field">
+      <label>Domain</label>
+      <select id="src-dom"></select>
+    </div>
+  </div>
+
+  <div class="panel" id="dst">
+    <h2>DESTINATION</h2>
+    <div class="field">
+      <label>Provider</label>
+      <select id="dst-prov"></select>
+    </div>
+    <div class="field">
+      <label>Certification</label>
+      <select id="dst-cert"></select>
+    </div>
+    <div class="or">OU</div>
+    <div class="field">
+      <label>Domain</label>
+      <select id="dst-dom"></select>
+    </div>
+  </div>
+
+  <div style="text-align:center; margin-top:2em;">
+    <button id="move-btn">Déplacer</button>
+  </div>
+
+<script>
+async function loadJSON(url){
+  const r = await fetch(url);
+  return await r.json();
+}
+
+function fillSelect(el, items, addAll=false){
+  el.innerHTML = '';
+  if (addAll) {
+    const opt = document.createElement('option');
+    opt.value = '__all__'; opt.text = '— Tous —';
+    el.appendChild(opt);
+  }
+  items.forEach(i => {
+    const o = document.createElement('option');
+    o.value = i.id; o.text = i.name;
+    el.appendChild(o);
+  });
+}
+
+async function initPanel(prefix){
+  const prov = document.getElementById(prefix+'-prov');
+  const cert = document.getElementById(prefix+'-cert');
+  const dom  = document.getElementById(prefix+'-dom');
+  const isSource = prefix === 'src';
+
+  // 1) charger providers
+  const provs = await loadJSON('/api/providers');
+  fillSelect(prov, provs);
+  if (provs.length) {
+    prov.value = provs[0].id;
+    prov.dispatchEvent(new Event('change'));
+  }
+
+  prov.addEventListener('change', async ()=>{
+    const cs = await loadJSON(`/api/certifications/${prov.value}`);
+    fillSelect(cert, cs);
+    if (cs.length) {
+      cert.value = cs[0].id;
+      cert.dispatchEvent(new Event('change'));
+    }
+  });
+
+  cert.addEventListener('change', async ()=>{
+    const ds = await loadJSON(`/api/domains/${cert.value}`);
+    fillSelect(dom, ds, isSource);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  initPanel('src');
+  initPanel('dst');
+
+  document.getElementById('move-btn').addEventListener('click', async ()=>{
+    // source
+    const srcDomValue = document.getElementById('src-dom').value;
+    const srcModuleIds = srcDomValue === '__all__'
+      ? (await loadJSON(`/api/domains/${document.getElementById('src-cert').value}`)).map(d=>d.id)
+      : [parseInt(srcDomValue)];
+
+    // destination
+    const dstDomValue = document.getElementById('dst-dom').value;
+    if (!dstDomValue) {
+      return alert("Merci de sélectionner un domaine de destination.");
+    }
+    const dstModuleId = parseInt(dstDomValue);
+
+    const resp = await fetch('/api/move', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        source_module_ids: srcModuleIds,
+        destination_module_id: dstModuleId
+      })
+    });
+    const { moved } = await resp.json();
+    alert(`${moved} question(s) déplacée(s) avec succès !`);
+    location.reload();
+  });
+});
+</script>
+</body>
+</html>

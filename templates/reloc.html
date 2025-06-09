@@ -1,0 +1,110 @@
+<!-- templates/reloc.html -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Relocalisation IA</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; }
+    .panel { display: inline-block; width: 45%; vertical-align: top;
+             border: 1px solid #ccc; border-radius: 8px; padding: 1em; margin: 1%; }
+    .field { margin: .5em 0; }
+    label { font-weight: bold; display:block; margin-bottom:.3em; }
+    select, button { width:100%; padding:.5em; font-size:1em; }
+    #progress { width:100%; background:#eee; border-radius:4px; overflow:hidden; margin-top:1em; }
+    #bar      { width:0%; height:1em; background:#4caf50; transition:width .2s; }
+    #log      { white-space:pre-wrap; background:#f9f9f9; padding:.5em;
+                 height:8em; overflow-y:scroll; border:1px solid #ddd; margin-top:.5em; }
+  </style>
+</head>
+<body>      
+  <h1>Relocalisation Question via IA</h1>
+  <div class="panel" id="src">
+    <h2>SOURCE</h2>
+    <div class="field"><label>Provider<select id="src-prov"></select></label></div>
+    <div class="field"><label>Certification<select id="src-cert"></select></label></div>
+    <div class="field"><label>Domaine<select id="src-mod"></select></label></div>
+  </div>
+  <div class="panel" id="dst">
+    <h2>DESTINATION</h2>
+    <div class="field"><label>Provider<select id="dst-prov"></select></label></div>
+    <div class="field"><label>Certification<select id="dst-cert"></select></label></div>
+  </div>
+
+  <button id="reloc-btn">Relocaliser</button>
+  <div id="progress"><div id="bar"></div></div>
+  <div id="log"></div>
+
+<script>
+async function loadJSON(u){ return (await fetch(u)).json(); }
+function fill(el, items){
+  el.innerHTML = '';
+  items.forEach(i=>{
+    const o = document.createElement('option');
+    o.value = i.id; o.text = i.name;
+    el.appendChild(o);
+  });
+}
+
+async function initPanel(pref, hasModule){
+  const p = document.getElementById(pref+'-prov');
+  const c = document.getElementById(pref+'-cert');
+  const m = hasModule && document.getElementById(pref+'-mod');
+
+  const provs = await loadJSON('/api/providers');
+  fill(p, provs);
+  p.value = provs[0]?.id; p.dispatchEvent(new Event('change'));
+
+  p.addEventListener('change', async()=>{
+    const cs = await loadJSON(`/api/certifications/${p.value}`);
+    fill(c, cs);
+    c.value = cs[0]?.id; c.dispatchEvent(new Event('change'));
+  });
+
+  if(!m) return;
+  c.addEventListener('change', async()=>{
+    const ms = await loadJSON(`/api/modules/${c.value}`);
+    fill(m, ms);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  initPanel('src', true);
+  initPanel('dst', false);
+
+  document.getElementById('reloc-btn').onclick = ()=>{
+    const srcMod  = +document.getElementById('src-mod').value;
+    const dstCert = +document.getElementById('dst-cert').value;
+    if(!srcMod || !dstCert) return alert('Sélection manquante');
+
+    const params = new URLSearchParams({
+      source_module_id:    srcMod,
+      destination_cert_id: dstCert,
+      batch_size:          10
+    });
+    const evt = new EventSource(`/api/stream_relocate?${params}`);
+    const bar = document.getElementById('bar'),
+          log = document.getElementById('log');
+    let batches = 0;
+
+    evt.onmessage = e => {
+      log.textContent += e.data + "\n";
+      if(e.data.startsWith('Batch offset')) {
+        batches++;
+        // Si vous connaissez le nombre total de batches, adaptez ici le %
+        bar.style.width = Math.min(100, batches*10)+'%';
+      }
+      if(e.data.startsWith('DONE') || e.data.startsWith('Aucun')) {
+        bar.style.width = '100%';
+        evt.close();
+      }
+    };
+    evt.onerror = () => {
+      log.textContent += 'Erreur de connexion SSE\n';
+      evt.close();
+    };
+  };
+});
+</script>
+</body>
+</html>
