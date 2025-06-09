@@ -34,7 +34,8 @@ def generate_questions(
     q_type: str,
     practical: str,
     scenario_illustration_type: str,
-    num_questions: int
+    num_questions: int,
+    batch_size: int = 5
  ) -> dict:
     """
     Interroge l'API OpenAI pour générer des questions,
@@ -49,7 +50,8 @@ def generate_questions(
     q_type        : ex. "qcm", "truefalse", "short-answer", "matching", "drag-n-drop"
     practical     : "no", "scenario", "scenario-illustrated"
     scenario_illustration_type : ex. "none", "archi", "console", "code", etc.
-    num_questions : nombre de questions à générer
+    num_questions : nombre total de questions à générer
+    batch_size    : nombre de questions à générer par appel API
     """
 
     logging.error(f"scenario_illustration_type: {scenario_illustration_type}")
@@ -248,14 +250,20 @@ def generate_questions(
         )
         response_format = ""
     
-    # Construction du prompt
-    data = {
-        "model": OPENAI_MODEL,
-        "messages": [
-            {
-                'role': 'user',
-                'content': f"""
-TASK: Retrieve the official course content of the domain {domain} of {certification} certification exam and generate {num_questions} questions for that specific domain.
+    all_questions = []
+    remaining = num_questions
+
+    while remaining > 0:
+        current = min(batch_size, remaining)
+
+        # Construction du prompt pour ce batch
+        data = {
+            "model": OPENAI_MODEL,
+            "messages": [
+                {
+                    'role': 'user',
+                    'content': f"""
+TASK: Retrieve the official course content of the domain {domain} of {certification} certification exam and generate {current} questions for that specific domain.
 Main domain description: {domain_descr}
 Questions: {question_type_text}
 Difficulty level: {level}: {level_explained}
@@ -274,33 +282,36 @@ RULES:
 2. If you want to present a console command or result in your response, surround that portion with '[console]...[/console]'. This will help in formatting it.
 3. Strictly align questions to the content of the syllabus of the domain selected for the indicated certification.
 """
-            }
-        ]
-    }
+                }
+            ]
+        }
 
-    try:
-        response = requests.post(
-            'https://api.openai.com/v1/chat/completions',
-            headers={
-                'Content-Type': 'application/json',
-                'Authorization': f'Bearer {OPENAI_API_KEY}'
-            },
-            json=data,
-            timeout=60
-        )
-        response.raise_for_status()
-    except requests.RequestException as e:
-        raise Exception(f"API Request Error: {e}") from e
-    
-    resp_json = response.json()
-    if 'choices' not in resp_json or not resp_json['choices']:
-        raise Exception(f"Unexpected API Response: {resp_json}")
-    if 'message' not in resp_json['choices'][0] or 'content' not in resp_json['choices'][0]['message']:
-        raise Exception(f"Unexpected API Response structure: {resp_json}")
-    
-    content = resp_json['choices'][0]['message']['content']
-    decoded = clean_and_decode_json(content)
-    return decoded
+        try:
+            response = requests.post(
+                'https://api.openai.com/v1/chat/completions',
+                headers={
+                    'Content-Type': 'application/json',
+                    'Authorization': f'Bearer {OPENAI_API_KEY}'
+                },
+                json=data,
+                timeout=60
+            )
+            response.raise_for_status()
+        except requests.RequestException as e:
+            raise Exception(f"API Request Error: {e}") from e
+
+        resp_json = response.json()
+        if 'choices' not in resp_json or not resp_json['choices']:
+            raise Exception(f"Unexpected API Response: {resp_json}")
+        if 'message' not in resp_json['choices'][0] or 'content' not in resp_json['choices'][0]['message']:
+            raise Exception(f"Unexpected API Response structure: {resp_json}")
+
+        content = resp_json['choices'][0]['message']['content']
+        decoded = clean_and_decode_json(content)
+        all_questions.extend(decoded.get("questions", []))
+        remaining -= current
+
+    return {"questions": all_questions}
 
 def analyze_certif(provider_name: str, certification: str) -> list:
     """
