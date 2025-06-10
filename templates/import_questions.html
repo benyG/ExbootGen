@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Importer Questions</title>
+  <style>
+    body { font-family:sans-serif; padding:2rem; }
+    .panel { display:inline-block; width:45%; vertical-align:top;
+             border:1px solid #ccc; border-radius:6px; padding:1em; margin:1%; }
+    .field { margin:.5em 0; }
+    label { display:block; font-weight:bold; margin-bottom:.2em; }
+    select, textarea, button { width:100%; padding:.5em; font-size:1em; }
+    #progress { width:100%; background:#eee; border-radius:4px; overflow:hidden; margin-top:1em; }
+    #bar { width:0%; height:1em; background:#4caf50; transition:width .3s; }
+    #log { white-space:pre-wrap; background:#f9f9f9; padding:.5em; height:8em; overflow-y:auto; border:1px solid #ddd; margin-top:.5em; }
+  </style>
+</head>
+<body>
+  <h1>Importer des Questions</h1>
+  <div class="panel">
+    <div class="field">
+      <label for="prov">Provider</label>
+      <select id="prov"></select>
+    </div>
+    <div class="field">
+      <label for="cert">Certification</label>
+      <select id="cert"></select>
+    </div>
+    <div class="field">
+      <label for="mod">Domaine</label>
+      <select id="mod"></select>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="field">
+      <label for="json-input">Collez le JSON des questions</label>
+      <textarea id="json-input" rows="12" placeholder='{"questions":[{"text":"Question text","scenario":"none","nature":"qcm","level":"medium","answers":[{"value":"A","isok":1},{"value":"B","isok":0}]}]}'></textarea>
+    </div>
+    <button id="import-btn">Importer</button>
+    <div id="progress"><div id="bar"></div></div>
+    <div id="log"></div>
+  </div>
+
+<script>
+async function loadJSON(url){ const r = await fetch(url); return r.json(); }
+function fill(sel, items){ sel.innerHTML=''; items.forEach(i=>{ const o=document.createElement('option'); o.value=i.id; o.text=i.name; sel.appendChild(o); }); }
+
+document.addEventListener('DOMContentLoaded', async()=>{
+  const provSel=document.getElementById('prov');
+  const certSel=document.getElementById('cert');
+  const modSel=document.getElementById('mod');
+  const provs=await loadJSON('/api/providers');
+  fill(provSel, provs);
+  provSel.value=provs[0]?.id; provSel.dispatchEvent(new Event('change'));
+
+  provSel.addEventListener('change', async()=>{
+    const cs=await loadJSON(`/api/certifications/${provSel.value}`);
+    fill(certSel, cs);
+    certSel.value=cs[0]?.id; certSel.dispatchEvent(new Event('change'));
+  });
+
+  certSel.addEventListener('change', async()=>{
+    const ms=await loadJSON(`/api/modules/${certSel.value}`);
+    fill(modSel, ms);
+  });
+});
+
+ document.getElementById('import-btn').onclick = async ()=>{
+    const moduleId=+document.getElementById('mod').value;
+    if(!moduleId) return alert('Module manquant');
+    let data;
+    try{ data=JSON.parse(document.getElementById('json-input').value); }
+    catch{ return alert('JSON invalide'); }
+    const questions=data.questions;
+    if(!Array.isArray(questions)) return alert('Format JSON attendu: {"questions":[...] }');
+    const total=questions.length;
+    const log=document.getElementById('log');
+    const bar=document.getElementById('bar');
+    log.textContent=''; bar.style.width='0%';
+    for(let i=0;i<total;i++){
+      const q=questions[i];
+      try{
+        const res=await fetch('/api/questions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({module_id:moduleId, question:q})});
+        const j=await res.json();
+        if(res.ok) log.textContent+=`✓ [${j.id}]\n`;
+        else log.textContent+=`✗ ${j.error}\n`;
+      }catch(e){ log.textContent+=`✗ ${e}\n`; }
+      bar.style.width=Math.round((i+1)/total*100)+'%';
+    }
+    alert('Import terminé');
+ };
+</script>
+</body>
+</html>
