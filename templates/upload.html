@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Import PDF Questions</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding-top: 40px; }
+        .container { max-width: 900px; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { text-align: center; margin-bottom: 20px; }
+        label { font-weight: bold; margin-top: 10px; }
+        #jsonPreview { background-color: #1e1e1e; color: #d4d4d4; border-radius: 6px; padding: 10px; font-size: 14px; }
+        #confirmImport { margin-top: 10px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>📄 Import PDF Questions</h2>
+    <form id="uploadForm" enctype="multipart/form-data" class="mb-4">
+        <div class="mb-3">
+            <label>Provider:</label>
+            <select name="provider_id" id="providerSelect" class="form-select" required></select>
+        </div>
+        <div class="mb-3">
+            <label>Certification:</label>
+            <select name="cert_id" id="certSelect" class="form-select" required></select>
+        </div>
+        <div class="mb-3">
+            <label>Module:</label>
+            <select name="module_id" id="moduleSelect" class="form-select" required></select>
+        </div>
+        <div class="mb-3">
+            <label>PDF File:</label>
+            <input type="file" name="file" class="form-control" accept=".pdf,application/pdf" required>
+        </div>
+        <button type="submit" id="analyzeBtn" class="btn btn-primary w-100">Analyser PDF</button>
+    </form>
+
+    <div id="jsonContainer" style="display:none;">
+        <h4>📋 JSON extrait</h4>
+        <textarea id="jsonPreview" class="form-control" style="height:300px; font-family: monospace;" readonly></textarea>
+        <button id="confirmImport" class="btn btn-success w-100 mt-3">✅ Confirmer Import</button>
+    </div>
+</div>
+
+<script>
+// helper
+function option(text, value) {
+    const o = document.createElement("option");
+    o.textContent = text; o.value = value;
+    return o;
+}
+
+// 1) Providers -> auto-sélection + cascade
+fetch("/api/providers").then(r => r.json()).then(data => {
+    const providerSelect = document.getElementById("providerSelect");
+    providerSelect.innerHTML = "";
+    if (!data || data.length === 0) {
+        providerSelect.appendChild(option("— Aucun provider —", ""));
+        return;
+    }
+    data.forEach(p => providerSelect.appendChild(option(p.name, p.id)));
+    providerSelect.value = data[0].id;
+    providerSelect.dispatchEvent(new Event("change"));
+});
+
+// 2) Provider change -> Certifications (puis cascade vers Modules)
+document.getElementById("providerSelect").addEventListener("change", function () {
+    const prov_id = this.value;
+    const certSelect = document.getElementById("certSelect");
+    const modSelect  = document.getElementById("moduleSelect");
+
+    certSelect.innerHTML = "";
+    modSelect.innerHTML  = "";
+
+    if (!prov_id) {
+        certSelect.appendChild(option("— Aucune certification —", ""));
+        modSelect.appendChild(option("— Aucun module —", ""));
+        return;
+    }
+
+    fetch(`/api/certifications/${prov_id}`).then(r => r.json()).then(data => {
+        certSelect.innerHTML = "";
+        if (!data || data.length === 0) {
+            certSelect.appendChild(option("— Aucune certification —", ""));
+            modSelect.appendChild(option("— Aucun module —", ""));
+            return;
+        }
+        data.forEach(c => certSelect.appendChild(option(c.name, c.id)));
+        certSelect.value = data[0].id;
+        certSelect.dispatchEvent(new Event("change"));
+    }).catch(() => {
+        certSelect.innerHTML = ""; modSelect.innerHTML = "";
+        certSelect.appendChild(option("— Erreur chargement —", ""));
+    });
+});
+
+// 3) Certification change -> Modules (auto-sélection du 1er)
+document.getElementById("certSelect").addEventListener("change", function () {
+    const cert_id = this.value;
+    const modSelect = document.getElementById("moduleSelect");
+
+    modSelect.innerHTML = "";
+    if (!cert_id) {
+        modSelect.appendChild(option("— Aucun module —", ""));
+        return;
+    }
+
+    fetch(`/api/modules/${cert_id}`).then(r => r.json()).then(data => {
+        modSelect.innerHTML = "";
+        if (!data || data.length === 0) {
+            modSelect.appendChild(option("— Aucun module —", ""));
+            return;
+        }
+        data.forEach(m => modSelect.appendChild(option(m.name, m.id)));
+        modSelect.value = data[0].id;
+    }).catch(() => {
+        modSelect.appendChild(option("— Erreur chargement —", ""));
+    });
+});
+
+// 4) Soumission pour analyse PDF
+let currentSession = null;
+document.getElementById("uploadForm").addEventListener("submit", async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById("analyzeBtn");
+    btn.disabled = true;
+
+    try {
+        const formData = new FormData(this);
+        const res = await fetch("/upload-pdf", { method: "POST", body: formData });
+        const data = await res.json();
+        if (data.status === "ok") {
+            currentSession = data.session_id;
+            document.getElementById("jsonPreview").value = JSON.stringify(data.json_data, null, 4);
+            document.getElementById("jsonContainer").style.display = "block";
+        } else {
+            alert("Erreur : " + (data.message || "analyse impossible"));
+        }
+    } catch (err) {
+        alert("Erreur réseau : " + err);
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+// 5) Confirmation import (affiche les bonnes clés de la réponse)
+document.getElementById("confirmImport").addEventListener("click", async function() {
+    if (!currentSession) {
+        alert("Aucune session d’analyse en mémoire. Analyse un PDF d’abord.");
+        return;
+    }
+    const formData = new FormData();
+    formData.append("session_id", currentSession);
+
+    try {
+        const res = await fetch("/import-questions", { method: "POST", body: formData });
+        const data = await res.json();
+        if (data.status === "ok") {
+            alert(`✅ Import terminé : ${data.imported_questions} questions, ${data.imported_answers} réponses`);
+        } else {
+            alert("❌ Erreur import : " + (data.message || "échec"));
+        }
+    } catch (err) {
+        alert("Erreur réseau : " + err);
+    }
+});
+</script>
+</body>
+</html>

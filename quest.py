@@ -37,7 +37,7 @@ def api_modules(cert_id):
     cur.close(); conn.close()
     return jsonify(rows)
 
-# --- Insert question ---
+# --- Insert question (une par une) ---
 @app.route('/api/questions', methods=['POST'])
 def api_questions():
     data = request.get_json() or {}
@@ -63,6 +63,7 @@ def api_questions():
     image = (question.get('image') or '').strip()
     text = (question.get('text') or '').strip()
 
+    # Même logique que le fichier d’origine : context/image préfixés dans text
     if context or image:
         question_text = ''
         if context:
@@ -75,35 +76,71 @@ def api_questions():
 
     conn = mysql.connector.connect(**DB_CONFIG)
     cur = conn.cursor()
+    question_id = None
     try:
-        cur.execute(
-            "INSERT INTO questions (text, descr, level, module, nature, ty, created_at) VALUES (%s,%s,%s,%s,%s,%s,NOW())",
-            (question_text, diagram_descr, level_num, module_id, nature_num, ty_num)
-        )
-        question_id = cur.lastrowid
+        try:
+            cur.execute(
+                "INSERT INTO questions (text, descr, level, module, nature, ty, created_at) "
+                "VALUES (%s,%s,%s,%s,%s,%s,NOW())",
+                (question_text, diagram_descr, level_num, module_id, nature_num, ty_num)
+            )
+            question_id = cur.lastrowid
+        except mysql.connector.Error as e:
+            # DUPLICATE question -> on passe à la suivante (skip)
+            if e.errno == 1062:
+                # On récupère l'id existant pour info
+                cur.execute(
+                    "SELECT id FROM questions WHERE module=%s AND text=%s LIMIT 1",
+                    (module_id, question_text)
+                )
+                row = cur.fetchone()
+                existing_id = row[0] if row else None
+                conn.rollback()
+                cur.close(); conn.close()
+                return jsonify({'status': 'skipped-duplicate', 'existing_id': existing_id}), 200
+            else:
+                raise
+
+        # Réponses (JSON) + liaisons quest_ans
         for ans in question.get('answers', []):
-            ans_data = {k:v for k,v in ans.items() if k != 'isok'}
+            ans_data = {k: v for k, v in ans.items() if k != 'isok'}
             ans_json = json.dumps(ans_data, ensure_ascii=False)
-            isok = ans.get('isok',0)
+            isok = int(ans.get('isok', 0))
+
+            # Insert ou reuse answer
             try:
                 cur.execute("INSERT INTO answers (text, created_at) VALUES (%s,NOW())", (ans_json,))
                 ans_id = cur.lastrowid
             except mysql.connector.Error as e:
                 if e.errno == 1062:
-                    cur.execute("SELECT id FROM answers WHERE text=%s", (ans_json,))
-                    res = cur.fetchone()
-                    ans_id = res[0] if res else None
+                    cur.execute("SELECT id FROM answers WHERE text=%s LIMIT 1", (ans_json,))
+                    r = cur.fetchone()
+                    ans_id = r[0] if r else None
                 else:
                     raise
+
             if ans_id:
-                cur.execute("INSERT INTO quest_ans (question, answer, isok) VALUES (%s,%s,%s)", (question_id, ans_id, isok))
+                # Lien quest_ans (ignore si déjà présent)
+                try:
+                    cur.execute(
+                        "INSERT INTO quest_ans (question, answer, isok) VALUES (%s,%s,%s)",
+                        (question_id, ans_id, isok)
+                    )
+                except mysql.connector.Error as e:
+                    if e.errno == 1062:
+                        # paire (question, answer) déjà liée -> on ignore
+                        pass
+                    else:
+                        raise
+
         conn.commit()
     except Exception as e:
         conn.rollback()
         cur.close(); conn.close()
         return jsonify({'error': str(e)}), 500
-    cur.close(); conn.close()
-    return jsonify({'id': question_id})
 
+    cur.close(); conn.close()
+    return jsonify({'id': question_id, 'status': 'inserted'})
+    
 if __name__ == '__main__':
     app.run(debug=True, port=9002)

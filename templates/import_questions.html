@@ -66,17 +66,20 @@ document.addEventListener('DOMContentLoaded', async()=>{
   });
 });
 
+function parseFlexibleJSON(txt){
+  txt = txt.replace(/[‘’]/g, "'").replace(/[“”]/g, '"').trim();
+  try{ return JSON.parse(txt); }catch(e){}
+  try{ return (new Function('return ('+txt+')'))(); }catch(e){}
+  txt = txt.replace(/\bNone\b/g,'null').replace(/\bTrue\b/g,'true').replace(/\bFalse\b/g,'false');
+  try{ return (new Function('return ('+txt+')'))(); }catch(e){}
+  return null;
+}
+
  document.getElementById('import-btn').onclick = async ()=>{
     const moduleId=+document.getElementById('mod').value;
     if(!moduleId) return alert('Module manquant');
-    let txt=document.getElementById('json-input').value;
-    txt = txt.replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
-    let data;
-    try{ data=JSON.parse(txt); }
-    catch{
-      try{ data=(new Function('return '+txt))(); }
-      catch{ return alert('JSON invalide'); }
-    }
+    const data = parseFlexibleJSON(document.getElementById('json-input').value);
+    if(!data) return alert('JSON invalide');
     const questions=data.questions;
     if(!Array.isArray(questions)) return alert('Format JSON attendu: {"questions":[...] }');
     const total=questions.length;
