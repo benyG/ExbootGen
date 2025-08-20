@@ -1,17 +1,17 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify
 import mysql.connector
 import json
 from config import DB_CONFIG
 
-app = Flask(__name__)
+dom_bp = Blueprint('dom', __name__)
 
 # --- Routes pour l’interface ---
-@app.route('/')
+@dom_bp.route('/')
 def index():
     return render_template('import_modules.html')
 
 # --- API pour remplir les dropdowns ---
-@app.route('/api/providers')
+@dom_bp.route('/api/providers')
 def api_providers():
     conn = mysql.connector.connect(**DB_CONFIG)
     cur  = conn.cursor(dictionary=True)
@@ -20,7 +20,7 @@ def api_providers():
     cur.close(); conn.close()
     return jsonify(rows)
 
-@app.route('/api/certifications/<int:prov_id>')
+@dom_bp.route('/api/certifications/<int:prov_id>')
 def api_certs(prov_id):
     conn = mysql.connector.connect(**DB_CONFIG)
     cur  = conn.cursor(dictionary=True)
@@ -30,7 +30,7 @@ def api_certs(prov_id):
     return jsonify(rows)
 
 # --- API pour créer un domaine (module) ---
-@app.route('/api/modules', methods=['POST'])
+@dom_bp.route('/api/modules', methods=['POST'])
 def api_create_module():
     data = request.get_json() or {}
     cert_id = data.get('certification_id')
@@ -57,5 +57,3 @@ def api_create_module():
 
     return jsonify({'id': new_id, 'name': name})
 
-if __name__ == '__main__':
-    app.run(debug=True, port=9001)

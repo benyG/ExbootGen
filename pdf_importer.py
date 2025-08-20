@@ -1,19 +1,15 @@
 import os
 import json
 from pathlib import Path
-from jinja2 import ChoiceLoader, FileSystemLoader
-from flask import Flask, request, jsonify, render_template
+from flask import Blueprint, request, jsonify, render_template
 from werkzeug.utils import secure_filename
 
 from routes_pdf import detect_questions, extract_text_from_pdf, db_conn
 
-# -------- Flask / Templates --------
+# -------- Blueprint / Templates --------
+pdf_bp = Blueprint('pdf', __name__)
+
 BASE_DIR = Path(__file__).resolve().parent
-TEMPLATE_DIRS = [BASE_DIR / "templates", BASE_DIR]
-
-app = Flask(__name__, template_folder=str(BASE_DIR))
-app.jinja_loader = ChoiceLoader([FileSystemLoader(str(p)) for p in TEMPLATE_DIRS if p.exists()])
-
 UPLOAD_DIR = BASE_DIR / "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -68,7 +64,7 @@ def to_nature_code(raw):
 
 # -------------------- APIs dropdown (schéma: provs, courses.prov, modules.course) --------------------
 
-@app.route("/api/providers")
+@pdf_bp.route("/api/providers")
 def api_providers():
     conn = db_conn()
     try:
@@ -80,7 +76,7 @@ def api_providers():
         except Exception: pass
         conn.close()
 
-@app.route("/api/certifications/<int:provider_id>")
+@pdf_bp.route("/api/certifications/<int:provider_id>")
 def api_certifications(provider_id):
     conn = db_conn()
     try:
@@ -92,7 +88,7 @@ def api_certifications(provider_id):
         except Exception: pass
         conn.close()
 
-@app.route("/api/modules/<int:cert_id>")
+@pdf_bp.route("/api/modules/<int:cert_id>")
 def api_modules(cert_id):
     conn = db_conn()
     try:
@@ -106,13 +102,13 @@ def api_modules(cert_id):
 
 # -------------------- UI --------------------
 
-@app.route("/")
+@pdf_bp.route("/")
 def index():
     return render_template("upload.html")
 
 # -------------------- Upload / Analyse PDF --------------------
 
-@app.route("/upload-pdf", methods=["POST"])
+@pdf_bp.route("/upload-pdf", methods=["POST"])
 def upload_pdf():
     module_id_raw = request.form.get("module_id")
     try:
@@ -144,7 +140,7 @@ def upload_pdf():
 
 # -------------------- Import BD --------------------
 
-@app.route("/import-questions", methods=["POST"])
+@pdf_bp.route("/import-questions", methods=["POST"])
 def import_questions():
     session_id = request.form.get("session_id")
     if not session_id or session_id not in SESSIONS:
@@ -249,6 +245,3 @@ def import_questions():
         "reused_answers": a_reused
     })
 
-if __name__ == "__main__":
-    print("Template search paths:", [str(p) for p in TEMPLATE_DIRS if p.exists()])
-    app.run(port=5001, debug=True)

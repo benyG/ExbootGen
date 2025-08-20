@@ -51,8 +51,10 @@ function option(text, value) {
     return o;
 }
 
+const base = '{{ url_for('pdf.index') }}';
+
 // 1) Providers -> auto-sélection + cascade
-fetch("/api/providers").then(r => r.json()).then(data => {
+fetch(base + "api/providers").then(r => r.json()).then(data => {
     const providerSelect = document.getElementById("providerSelect");
     providerSelect.innerHTML = "";
     if (!data || data.length === 0) {
@@ -79,7 +81,7 @@ document.getElementById("providerSelect").addEventListener("change", function ()
         return;
     }
 
-    fetch(`/api/certifications/${prov_id}`).then(r => r.json()).then(data => {
+    fetch(`${base}api/certifications/${prov_id}`).then(r => r.json()).then(data => {
         certSelect.innerHTML = "";
         if (!data || data.length === 0) {
             certSelect.appendChild(option("— Aucune certification —", ""));
@@ -106,7 +108,7 @@ document.getElementById("certSelect").addEventListener("change", function () {
         return;
     }
 
-    fetch(`/api/modules/${cert_id}`).then(r => r.json()).then(data => {
+    fetch(`${base}api/modules/${cert_id}`).then(r => r.json()).then(data => {
         modSelect.innerHTML = "";
         if (!data || data.length === 0) {
             modSelect.appendChild(option("— Aucun module —", ""));
@@ -128,7 +130,7 @@ document.getElementById("uploadForm").addEventListener("submit", async function(
 
     try {
         const formData = new FormData(this);
-        const res = await fetch("/upload-pdf", { method: "POST", body: formData });
+        const res = await fetch(base + "upload-pdf", { method: "POST", body: formData });
         const data = await res.json();
         if (data.status === "ok") {
             currentSession = data.session_id;
@@ -154,7 +156,7 @@ document.getElementById("confirmImport").addEventListener("click", async functio
     formData.append("session_id", currentSession);
 
     try {
-        const res = await fetch("/import-questions", { method: "POST", body: formData });
+        const res = await fetch(base + "import-questions", { method: "POST", body: formData });
         const data = await res.json();
         if (data.status === "ok") {
             alert(`✅ Import terminé : ${data.imported_questions} questions, ${data.imported_answers} réponses`);

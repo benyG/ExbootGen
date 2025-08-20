@@ -7,8 +7,21 @@ from openai_api import generate_questions, analyze_certif
 from eraser_api import render_diagram
 import db
 
+from dom import dom_bp
+from move import move_bp
+from reloc import reloc_bp
+from pdf_importer import pdf_bp
+from quest import quest_bp
+
 # Instanciation de l'application Flask
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates')
+
+# Enregistrement des blueprints
+app.register_blueprint(dom_bp, url_prefix='/modules')
+app.register_blueprint(move_bp, url_prefix='/move')
+app.register_blueprint(reloc_bp, url_prefix='/reloc')
+app.register_blueprint(pdf_bp, url_prefix='/pdf')
+app.register_blueprint(quest_bp, url_prefix='/quest')
 
 # Objet d'événement pour gérer la pause/reprise du processus.
 pause_event = threading.Event()
@@ -35,8 +48,12 @@ def pick_secondary_domains(all_domains, primary_domain):
     count = min(count, len(candidates))
     return random.sample(candidates, k=count)
 
-@app.route("/", methods=["GET", "POST"])
-def index():
+@app.route("/")
+def home():
+    return render_template("home.html")
+
+@app.route("/populate", methods=["GET", "POST"])
+def populate_index():
     if request.method == "POST":
         provider_id = int(request.form.get("provider_id"))
         cert_id = int(request.form.get("cert_id"))
@@ -44,14 +61,14 @@ def index():
     providers = db.get_providers()
     return render_template("populate.html", providers=providers, is_populating=False)
 
-@app.route("/get_certifications", methods=["POST"])
+@app.route("/populate/get_certifications", methods=["POST"])
 def get_certifications():
     provider_id = int(request.form.get("provider_id"))
     certs = db.get_certifications_by_provider(provider_id)
     cert_list = [{"id": cert[0], "name": cert[1]} for cert in certs]
     return jsonify(cert_list)
 
-@app.route("/populate_process", methods=["POST"])
+@app.route("/populate/process", methods=["POST"])
 def populate_process():
     provider_id = int(request.form.get("provider_id"))
     cert_id = int(request.form.get("cert_id"))
@@ -286,12 +303,12 @@ def process_domain_by_difficulty(domain_id, domain_name, difficulty, distributio
                     )
     return progress_log
 
-@app.route("/pause_populate", methods=["POST"])
+@app.route("/populate/pause", methods=["POST"])
 def pause_populate():
     pause_event.clear()
     return jsonify({"status": "paused"})
 
-@app.route("/resume_populate", methods=["POST"])
+@app.route("/populate/resume", methods=["POST"])
 def resume_populate():
     pause_event.set()
     return jsonify({"status": "resumed"})
