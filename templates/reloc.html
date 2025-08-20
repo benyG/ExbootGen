@@ -51,19 +51,21 @@ async function initPanel(pref, hasModule){
   const c = document.getElementById(pref+'-cert');
   const m = hasModule && document.getElementById(pref+'-mod');
 
-  const provs = await loadJSON('/api/providers');
+  const base = '{{ url_for('reloc.index') }}';
+
+  const provs = await loadJSON(base + 'api/providers');
   fill(p, provs);
   p.value = provs[0]?.id; p.dispatchEvent(new Event('change'));
 
   p.addEventListener('change', async()=>{
-    const cs = await loadJSON(`/api/certifications/${p.value}`);
+    const cs = await loadJSON(`${base}api/certifications/${p.value}`);
     fill(c, cs);
     c.value = cs[0]?.id; c.dispatchEvent(new Event('change'));
   });
 
   if(!m) return;
   c.addEventListener('change', async()=>{
-    const ms = await loadJSON(`/api/modules/${c.value}`);
+    const ms = await loadJSON(`${base}api/modules/${c.value}`);
     fill(m, ms);
   });
 }
@@ -82,7 +84,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
       destination_cert_id: dstCert,
       batch_size:          10
     });
-    const evt = new EventSource(`/api/stream_relocate?${params}`);
+    const base = '{{ url_for('reloc.index') }}';
+    const evt = new EventSource(`${base}api/stream_relocate?${params}`);
     const bar = document.getElementById('bar'),
           log = document.getElementById('log');
     let batches = 0;

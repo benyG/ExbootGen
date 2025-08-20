@@ -1,6 +1,6 @@
 # reloc.py
 
-from flask import Flask, render_template, request, Response
+from flask import Blueprint, render_template, request, Response
 import mysql.connector
 import requests
 import json
@@ -10,14 +10,14 @@ from config import OPENAI_API_KEY, OPENAI_MODEL, DB_CONFIG
 
 OPENAI_ENDPOINT = 'https://api.openai.com/v1/chat/completions'
 
-app = Flask(__name__)
+reloc_bp = Blueprint('reloc', __name__)
 
 # -- Routes pour remplir les dropdowns --
-@app.route('/')
+@reloc_bp.route('/')
 def index():
     return render_template('reloc.html')
 
-@app.route('/api/providers')
+@reloc_bp.route('/api/providers')
 def api_providers():
     conn = mysql.connector.connect(**DB_CONFIG)
     cur  = conn.cursor(dictionary=True)
@@ -26,7 +26,7 @@ def api_providers():
     cur.close(); conn.close()
     return json.dumps(rows, ensure_ascii=False), 200, {'Content-Type':'application/json'}
 
-@app.route('/api/certifications/<int:prov_id>')
+@reloc_bp.route('/api/certifications/<int:prov_id>')
 def api_certs(prov_id):
     conn = mysql.connector.connect(**DB_CONFIG)
     cur  = conn.cursor(dictionary=True)
@@ -35,7 +35,7 @@ def api_certs(prov_id):
     cur.close(); conn.close()
     return json.dumps(rows, ensure_ascii=False), 200, {'Content-Type':'application/json'}
 
-@app.route('/api/modules/<int:cert_id>')
+@reloc_bp.route('/api/modules/<int:cert_id>')
 def api_modules(cert_id):
     conn = mysql.connector.connect(**DB_CONFIG)
     cur  = conn.cursor(dictionary=True)
@@ -45,7 +45,7 @@ def api_modules(cert_id):
     return json.dumps(rows, ensure_ascii=False), 200, {'Content-Type':'application/json'}
 
 # -- SSE pour le streaming de la relocalisation --
-@app.route('/api/stream_relocate', methods=['GET'])
+@reloc_bp.route('/api/stream_relocate', methods=['GET'])
 def stream_relocate():
     src_module = request.args.get('source_module_id',    type=int)
     dst_cert    = request.args.get('destination_cert_id', type=int)
@@ -165,5 +165,3 @@ def stream_relocate():
     return Response(generate(), mimetype='text/event-stream')
 
 
-if __name__ == '__main__':
-    app.run(debug=True, port=9000)

@@ -1,8 +1,8 @@
-from flask import Flask, render_template, jsonify, request, g
+from flask import Blueprint, render_template, jsonify, request, g
 import mysql.connector
 from config import DB_CONFIG
 
-app = Flask(__name__)
+move_bp = Blueprint('move', __name__)
 
 def get_db():
     """Ouvre une connexion MySQL si nécessaire et la stocke dans g."""
@@ -16,18 +16,18 @@ def get_db():
         )
     return g.db
 
-@app.teardown_appcontext
+@move_bp.teardown_request
 def close_db(exc):
     """Ferme la connexion à la fin de la requête."""
     db = g.pop('db', None)
     if db is not None:
         db.close()
 
-@app.route('/')
+@move_bp.route('/')
 def index():
     return render_template('move_questions.html')
 
-@app.route('/api/providers')
+@move_bp.route('/api/providers')
 def api_providers():
     db = get_db()
     cur = db.cursor(dictionary=True)
@@ -36,7 +36,7 @@ def api_providers():
     cur.close()
     return jsonify(rows)
 
-@app.route('/api/certifications/<int:prov_id>')
+@move_bp.route('/api/certifications/<int:prov_id>')
 def api_certs(prov_id):
     db = get_db()
     cur = db.cursor(dictionary=True)
@@ -48,7 +48,7 @@ def api_certs(prov_id):
     cur.close()
     return jsonify(rows)
 
-@app.route('/api/domains/<int:cert_id>')
+@move_bp.route('/api/domains/<int:cert_id>')
 def api_domains(cert_id):
     db = get_db()
     cur = db.cursor(dictionary=True)
@@ -60,7 +60,7 @@ def api_domains(cert_id):
     cur.close()
     return jsonify(rows)
 
-@app.route('/api/move', methods=['POST'])
+@move_bp.route('/api/move', methods=['POST'])
 def api_move():
     data = request.get_json()
     src_modules = data.get('source_module_ids', [])
@@ -84,6 +84,3 @@ def api_move():
     cur.close()
 
     return jsonify({'moved': moved})
-
-if __name__ == '__main__':
-    app.run(debug=True, port=8000)  # <-- ajuste le port si besoin

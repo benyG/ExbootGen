@@ -50,18 +50,19 @@ document.addEventListener('DOMContentLoaded', async()=>{
   const provSel=document.getElementById('prov');
   const certSel=document.getElementById('cert');
   const modSel=document.getElementById('mod');
-  const provs=await loadJSON('/api/providers');
+  const base='{{ url_for('quest.index') }}';
+  const provs=await loadJSON(base+'api/providers');
   fill(provSel, provs);
   provSel.value=provs[0]?.id; provSel.dispatchEvent(new Event('change'));
 
   provSel.addEventListener('change', async()=>{
-    const cs=await loadJSON(`/api/certifications/${provSel.value}`);
+    const cs=await loadJSON(`${base}api/certifications/${provSel.value}`);
     fill(certSel, cs);
     certSel.value=cs[0]?.id; certSel.dispatchEvent(new Event('change'));
   });
 
   certSel.addEventListener('change', async()=>{
-    const ms=await loadJSON(`/api/modules/${certSel.value}`);
+    const ms=await loadJSON(`${base}api/modules/${certSel.value}`);
     fill(modSel, ms);
   });
 });
@@ -89,7 +90,7 @@ function parseFlexibleJSON(txt){
     for(let i=0;i<total;i++){
       const q=questions[i];
       try{
-        const res=await fetch('/api/questions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({module_id:moduleId, question:q})});
+        const res=await fetch(base+'api/questions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({module_id:moduleId, question:q})});
         const j=await res.json();
         if(res.ok) log.textContent+=`✓ [${j.id}]\n`;
         else log.textContent+=`✗ ${j.error}\n`;

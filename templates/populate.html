@@ -14,7 +14,7 @@
     
     {% if not is_populating %}
     <!-- Formulaire de sélection -->
-    <form id="select-form" method="POST" action="/" class="space-y-6">
+    <form id="select-form" method="POST" action="{{ url_for('populate_index') }}" class="space-y-6">
       <div>
         <label for="provider_id" class="block text-lg font-medium text-gray-700">Provider:</label>
         <select name="provider_id" id="provider_id" class="mt-1 block w-full rounded border-gray-300 shadow-sm">
@@ -82,7 +82,7 @@
     $(document).ready(function(){
         // Charger les certifications quand un provider est sélectionné.
         $("#provider_id").change(function(){
-            $.post("/get_certifications", { provider_id: $(this).val() }, function(data){
+            $.post("{{ url_for('get_certifications') }}", { provider_id: $(this).val() }, function(data){
                 $("#cert_id").empty();
                 $.each(data, function(i, item){
                     $("#cert_id").append($("<option>", { 
@@ -101,7 +101,7 @@
             $("#analysisResult").text("En attente...");
             $("#domainCounter").text("0 / 0");
             $("#questionCounter").text("0");
-            $.post("/populate_process", {
+            $.post("{{ url_for('populate_process') }}", {
                 provider_id: "{{ provider_id }}",
                 cert_id: "{{ cert_id }}"
             }, function(response){
@@ -128,14 +128,14 @@
 
         // Bouton de pause
         $("#pausePopulate").click(function(){
-            $.post("/pause_populate", {}, function(response){
+            $.post("{{ url_for('pause_populate') }}", {}, function(response){
                 $("#logList").append("<li>Processus mis en pause.</li>");
             }, "json");
         });
 
         // Bouton de reprise
         $("#resumePopulate").click(function(){
-            $.post("/resume_populate", {}, function(response){
+            $.post("{{ url_for('resume_populate') }}", {}, function(response){
                 $("#logList").append("<li>Processus repris.</li>");
             }, "json");
         });

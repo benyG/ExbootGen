@@ -1,16 +1,16 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify
 import mysql.connector
 import json
 from config import DB_CONFIG
 
-app = Flask(__name__)
+quest_bp = Blueprint('quest', __name__)
 
-@app.route('/')
+@quest_bp.route('/')
 def index():
     return render_template('import_questions.html')
 
 # --- Dropdown APIs ---
-@app.route('/api/providers')
+@quest_bp.route('/api/providers')
 def api_providers():
     conn = mysql.connector.connect(**DB_CONFIG)
     cur = conn.cursor(dictionary=True)
@@ -19,7 +19,7 @@ def api_providers():
     cur.close(); conn.close()
     return jsonify(rows)
 
-@app.route('/api/certifications/<int:prov_id>')
+@quest_bp.route('/api/certifications/<int:prov_id>')
 def api_certs(prov_id):
     conn = mysql.connector.connect(**DB_CONFIG)
     cur = conn.cursor(dictionary=True)
@@ -28,7 +28,7 @@ def api_certs(prov_id):
     cur.close(); conn.close()
     return jsonify(rows)
 
-@app.route('/api/modules/<int:cert_id>')
+@quest_bp.route('/api/modules/<int:cert_id>')
 def api_modules(cert_id):
     conn = mysql.connector.connect(**DB_CONFIG)
     cur = conn.cursor(dictionary=True)
@@ -38,7 +38,7 @@ def api_modules(cert_id):
     return jsonify(rows)
 
 # --- Insert question (une par une) ---
-@app.route('/api/questions', methods=['POST'])
+@quest_bp.route('/api/questions', methods=['POST'])
 def api_questions():
     data = request.get_json() or {}
     module_id = data.get('module_id')
@@ -141,6 +141,4 @@ def api_questions():
 
     cur.close(); conn.close()
     return jsonify({'id': question_id, 'status': 'inserted'})
-    
-if __name__ == '__main__':
-    app.run(debug=True, port=9002)
+

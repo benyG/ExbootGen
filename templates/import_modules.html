@@ -64,14 +64,16 @@
     const provSel = document.getElementById('prov'),
           certSel = document.getElementById('cert');
 
+    const base = '{{ url_for('dom.index') }}';
+
     // Charge providers
-    const providers = await loadJSON('/api/providers');
+    const providers = await loadJSON(base + 'api/providers');
     fill(provSel, providers);
     provSel.value = providers[0]?.id;
 
     // Quand change provider => recharge certifications
     provSel.addEventListener('change', async ()=>{
-      const certs = await loadJSON(`/api/certifications/${provSel.value}`);
+      const certs = await loadJSON(`${base}api/certifications/${provSel.value}`);
       fill(certSel, certs);
     });
     // Trigger initial
@@ -102,7 +104,7 @@
         continue;
       }
       try {
-        const res = await fetch('/api/modules', {
+        const res = await fetch(base + 'api/modules', {
           method: 'POST',
           headers: {'Content-Type':'application/json'},
           body: JSON.stringify({
