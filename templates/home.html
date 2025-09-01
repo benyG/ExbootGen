@@ -2,20 +2,52 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ExBoot Laboratory</title>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-100">
-  <div class="max-w-2xl mx-auto p-8 mt-12 bg-white shadow-xl rounded">
-    <h1 class="text-4xl font-bold text-center mb-8">ExBoot Laboratory</h1>
-    <ul class="space-y-4 text-blue-600">
-      <li><a class="underline" href="{{ url_for('populate_index') }}">Populate Questions</a></li>
-      <li><a class="underline" href="{{ url_for('dom.index') }}">Import Modules</a></li>
-      <li><a class="underline" href="{{ url_for('move.index') }}">Move Questions</a></li>
-      <li><a class="underline" href="{{ url_for('reloc.index') }}">Relocate Questions</a></li>
-      <li><a class="underline" href="{{ url_for('pdf.index') }}">PDF Importer</a></li>
-      <li><a class="underline" href="{{ url_for('quest.index') }}">Manual Question Import</a></li>
-    </ul>
-  </div>
+  <nav class="bg-blue-600 text-white">
+    <div class="container mx-auto px-4 py-4 flex flex-wrap items-center justify-between">
+      <span class="text-2xl font-semibold">ExBoot Laboratory</span>
+      <ul class="flex flex-wrap space-x-4 mt-4 sm:mt-0">
+        <li><a class="px-3 py-2 rounded hover:bg-blue-500" href="{{ url_for('populate_index') }}">Populate</a></li>
+        <li><a class="px-3 py-2 rounded hover:bg-blue-500" href="{{ url_for('dom.index') }}">Import Modules</a></li>
+        <li><a class="px-3 py-2 rounded hover:bg-blue-500" href="{{ url_for('move.index') }}">Move Questions</a></li>
+        <li><a class="px-3 py-2 rounded hover:bg-blue-500" href="{{ url_for('reloc.index') }}">Relocate</a></li>
+        <li><a class="px-3 py-2 rounded hover:bg-blue-500" href="{{ url_for('pdf.index') }}">PDF Importer</a></li>
+        <li><a class="px-3 py-2 rounded hover:bg-blue-500" href="{{ url_for('quest.index') }}">Manual Import</a></li>
+      </ul>
+    </div>
+  </nav>
+  <main class="container mx-auto px-4 mt-12">
+    <h1 class="text-4xl font-bold text-center mb-8">Welcome to ExBoot Laboratory</h1>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <a class="block p-6 bg-white rounded shadow hover:shadow-lg" href="{{ url_for('populate_index') }}">
+        <h2 class="text-xl font-semibold mb-2">Populate Questions</h2>
+        <p class="text-gray-600">Bulk load questions into the system.</p>
+      </a>
+      <a class="block p-6 bg-white rounded shadow hover:shadow-lg" href="{{ url_for('dom.index') }}">
+        <h2 class="text-xl font-semibold mb-2">Import Modules</h2>
+        <p class="text-gray-600">Upload question modules from external sources.</p>
+      </a>
+      <a class="block p-6 bg-white rounded shadow hover:shadow-lg" href="{{ url_for('move.index') }}">
+        <h2 class="text-xl font-semibold mb-2">Move Questions</h2>
+        <p class="text-gray-600">Reassign questions between modules.</p>
+      </a>
+      <a class="block p-6 bg-white rounded shadow hover:shadow-lg" href="{{ url_for('reloc.index') }}">
+        <h2 class="text-xl font-semibold mb-2">Relocate Questions</h2>
+        <p class="text-gray-600">Move questions from one course to another.</p>
+      </a>
+      <a class="block p-6 bg-white rounded shadow hover:shadow-lg" href="{{ url_for('pdf.index') }}">
+        <h2 class="text-xl font-semibold mb-2">PDF Importer</h2>
+        <p class="text-gray-600">Extract questions directly from PDF files.</p>
+      </a>
+      <a class="block p-6 bg-white rounded shadow hover:shadow-lg" href="{{ url_for('quest.index') }}">
+        <h2 class="text-xl font-semibold mb-2">Manual Question Import</h2>
+        <p class="text-gray-600">Add questions one by one manually.</p>
+      </a>
+    </div>
+  </main>
 </body>
 </html>
