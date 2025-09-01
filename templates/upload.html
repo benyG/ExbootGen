@@ -7,6 +7,13 @@
   <style>
     .brand-bg { background-color:#28a745; }
     .brand-hover:hover { background-color:#218838; }
+    #loadingOverlay { position:fixed; top:0; left:0; width:100%; height:100%;
+                      background:rgba(0,0,0,0.4); display:none; align-items:center;
+                      justify-content:center; z-index:50; }
+    #loadingOverlay.show { display:flex; }
+    .loader { border:8px solid #f3f3f3; border-top:8px solid #28a745; border-radius:50%;
+              width:60px; height:60px; animation:spin 1s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
   </style>
 </head>
 <body class="bg-gray-100">
@@ -37,6 +44,7 @@
         </div>
         <div>
           <label class="font-bold block mb-1">Module:</label>
+          <input type="text" id="moduleSearch" placeholder="Rechercher..." class="w-full border rounded p-2 mb-2">
           <select name="module_id" id="moduleSelect" class="w-full border rounded p-2" required></select>
         </div>
         <div>
@@ -51,6 +59,7 @@
         <button id="confirmImport" class="brand-bg text-white w-full py-2 rounded mt-3 brand-hover">✅ Confirmer Import</button>
       </div>
     </div>
+    <div id="loadingOverlay"><div class="loader"></div></div>
   </main>
 <script>
 // helper
@@ -71,7 +80,8 @@ fetch(base + "api/providers").then(r => r.json()).then(data => {
         return;
     }
     data.forEach(p => providerSelect.appendChild(option(p.name, p.id)));
-    providerSelect.value = data[0].id;
+    const defProv = data.find(p => p.id === 169);
+    providerSelect.value = defProv ? defProv.id : data[0].id;
     providerSelect.dispatchEvent(new Event("change"));
 });
 
@@ -98,7 +108,12 @@ document.getElementById("providerSelect").addEventListener("change", function ()
             return;
         }
         data.forEach(c => certSelect.appendChild(option(c.name, c.id)));
-        certSelect.value = data[0].id;
+        let sel = data[0].id;
+        if (Number(prov_id) === 169) {
+            const defCert = data.find(c => c.id === 23);
+            if (defCert) sel = defCert.id;
+        }
+        certSelect.value = sel;
         certSelect.dispatchEvent(new Event("change"));
     }).catch(() => {
         certSelect.innerHTML = ""; modSelect.innerHTML = "";
@@ -124,7 +139,8 @@ document.getElementById("certSelect").addEventListener("change", function () {
             return;
         }
         data.forEach(m => modSelect.appendChild(option(m.name, m.id)));
-        modSelect.value = data[0].id;
+        modSearch.value = "";
+        modSearch.dispatchEvent(new Event('input'));
     }).catch(() => {
         modSelect.appendChild(option("— Erreur chargement —", ""));
     });
@@ -136,6 +152,8 @@ document.getElementById("uploadForm").addEventListener("submit", async function(
     e.preventDefault();
     const btn = document.getElementById("analyzeBtn");
     btn.disabled = true;
+    const overlay = document.getElementById("loadingOverlay");
+    overlay.classList.add('show');
 
     try {
         const formData = new FormData(this);
@@ -152,6 +170,7 @@ document.getElementById("uploadForm").addEventListener("submit", async function(
         alert("Erreur réseau : " + err);
     } finally {
         btn.disabled = false;
+        overlay.classList.remove('show');
     }
 });
 
@@ -163,6 +182,10 @@ document.getElementById("confirmImport").addEventListener("click", async functio
     }
     const formData = new FormData();
     formData.append("session_id", currentSession);
+    const overlay = document.getElementById("loadingOverlay");
+    const btn = this;
+    btn.disabled = true;
+    overlay.classList.add('show');
 
     try {
         const res = await fetch(base + "import-questions", { method: "POST", body: formData });
@@ -174,7 +197,19 @@ document.getElementById("confirmImport").addEventListener("click", async functio
         }
     } catch (err) {
         alert("Erreur réseau : " + err);
+    } finally {
+        btn.disabled = false;
+        overlay.classList.remove('show');
     }
+});
+
+const modSearch = document.getElementById('moduleSearch');
+const moduleSelect = document.getElementById('moduleSelect');
+modSearch.addEventListener('input', function(){
+    const term = this.value.toLowerCase();
+    Array.from(moduleSelect.options).forEach(o => {
+        o.style.display = o.text.toLowerCase().includes(term) ? '' : 'none';
+    });
 });
 </script>
 </body>
