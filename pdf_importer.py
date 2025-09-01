@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify, render_template
 from werkzeug.utils import secure_filename
 
 from routes_pdf import detect_questions, extract_text_from_pdf, db_conn
-from openai_api import generate_questions as ai_generate_questions
+from openai_api import generate_questions
 from config import DISTRIBUTION, API_REQUEST_DELAY
 
 # -------- Blueprint / Templates --------
@@ -17,7 +17,7 @@ UPLOAD_DIR = BASE_DIR / "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Mémoire légère (session d’analyse)
-SESSIONS = {}  # { session_id: { "module_id": int, "questions": [...] } }
+SESSIONS = {}  # { session_id: { "domain_id": int, "questions": [...] } }
 
 # -------- Mappings (text -> code BD) --------
 LEVEL_MAP = {"easy": 0, "medium": 1, "hard": 2}
@@ -92,6 +92,7 @@ def api_certifications(provider_id):
         conn.close()
 
 @pdf_bp.route("/api/modules/<int:cert_id>")
+@pdf_bp.route("/api/domains/<int:cert_id>")
 def api_modules(cert_id):
     conn = db_conn()
     try:
@@ -148,13 +149,16 @@ def generate_questions_from_pdf():
     try:
         provider_id = int(request.form.get("provider_id", 0))
         cert_id = int(request.form.get("cert_id", 0))
-        module_id = int(request.form.get("module_id", 0))
+        domain_id = int(request.form.get("domain_id", 0))
         num_questions = int(request.form.get("num_questions", 0))
     except ValueError:
         return jsonify({"status": "error", "message": "Paramètres invalides"}), 400
 
     use_distribution = request.form.get("use_distribution") == "on"
     q_type = request.form.get("q_type", "qcm")
+    level = request.form.get("level", "medium")
+    scenario = request.form.get("scenario", "no")
+    scenario_illustration_type = request.form.get("scenario_illustration_type", "none")
 
     pdf_file = request.files.get("pdf_file")
     if not pdf_file or not pdf_file.filename.lower().endswith(".pdf"):
@@ -182,7 +186,7 @@ def generate_questions_from_pdf():
     if not text.strip():
         return jsonify({"status": "error", "message": "PDF vide"}), 400
 
-    # Récupération des noms provider et certification
+    # Récupération des noms provider, certification et domaine
     conn = db_conn()
     try:
         cur = conn.cursor()
@@ -190,6 +194,8 @@ def generate_questions_from_pdf():
         prov_row = cur.fetchone()
         cur.execute("SELECT name FROM courses WHERE id=%s", (cert_id,))
         cert_row = cur.fetchone()
+        cur.execute("SELECT name FROM modules WHERE id=%s", (domain_id,))
+        dom_row = cur.fetchone()
     finally:
         try:
             cur.close()
@@ -199,23 +205,24 @@ def generate_questions_from_pdf():
 
     provider_name = prov_row[0] if prov_row else ""
     cert_name = cert_row[0] if cert_row else ""
+    domain_name = dom_row[0] if dom_row else ""
 
     # Distribution des questions
-    pairs = []  # (q_type, scenario, count)
+    pairs = []  # (q_type, scenario, scenario_illu, count)
     if use_distribution:
-        dist = DISTRIBUTION.get("medium", {})
+        dist = DISTRIBUTION.get(level, {})
         base_total = sum(sum(s.values()) for s in dist.values()) or 1
         scale = num_questions / base_total
         for qt, scen_dict in dist.items():
             for scen, base_count in scen_dict.items():
                 count = int(round(base_count * scale))
                 if count > 0:
-                    pairs.append([qt, scen, count])
-        total = sum(p[2] for p in pairs)
+                    pairs.append([qt, scen, "none", count])
+        total = sum(p[3] for p in pairs)
         if pairs and total != num_questions:
-            pairs[0][2] += num_questions - total
+            pairs[0][3] += num_questions - total
     else:
-        pairs.append([q_type, "no", num_questions])
+        pairs.append([q_type, scenario, scenario_illustration_type, num_questions])
 
     chunk_size = 4000
     chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)] or [text]
@@ -223,23 +230,24 @@ def generate_questions_from_pdf():
     questions = []
     chunk_idx = 0
     num_chunks = len(chunks)
-    for qt, scen, count in pairs:
+    for qt, scen, scen_illu, count in pairs:
         remaining = count
         while remaining > 0:
             chunk = chunks[chunk_idx % num_chunks]
             chunk_idx += 1
             to_generate = min(remaining, 5)
             try:
-                data = ai_generate_questions(
+                data = generate_questions(
                     provider_name=provider_name,
                     certification=cert_name,
-                    domain="PDF content",
+                    domain=domain_name,
                     domain_descr=chunk,
-                    level="medium",
+                    level=level,
                     q_type=qt,
                     practical=scen,
-                    scenario_illustration_type="none",
+                    scenario_illustration_type=scen_illu,
                     num_questions=to_generate,
+                    use_text=True,
                 )
                 questions.extend(data.get("questions", []))
                 remaining -= len(data.get("questions", []))
@@ -252,7 +260,7 @@ def generate_questions_from_pdf():
                 }), 500
 
     session_id = os.urandom(8).hex()
-    SESSIONS[session_id] = {"module_id": module_id, "questions": questions}
+    SESSIONS[session_id] = {"domain_id": domain_id, "questions": questions}
     return jsonify({"status": "ok", "session_id": session_id, "json_data": {"questions": questions}})
 
 # -------------------- Upload / Analyse PDF --------------------
@@ -336,7 +344,7 @@ def import_questions():
                     INSERT INTO questions (text, level, descr, nature, ty, maxr, module)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (question_text, q_level_code, None, q_nature_code, q_scenario_code, maxr, data["module_id"]),
+                    (question_text, q_level_code, None, q_nature_code, q_scenario_code, maxr, data["domain_id"]),
                 )
                 question_id = cur.lastrowid
                 q_imported += 1

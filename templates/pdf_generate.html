@@ -41,9 +41,9 @@
           <select name="cert_id" id="certSelect" class="w-full border rounded p-2" required></select>
         </div>
         <div>
-          <label class="font-bold block mb-1">Module:</label>
-          <input type="text" id="moduleSearch" placeholder="Rechercher..." class="w-full border rounded p-2 mb-2">
-          <select name="module_id" id="moduleSelect" class="w-full border rounded p-2" required></select>
+          <label class="font-bold block mb-1">Domain:</label>
+          <input type="text" id="domainSearch" placeholder="Rechercher..." class="w-full border rounded p-2 mb-2">
+          <select name="domain_id" id="domainSelect" class="w-full border rounded p-2" required></select>
         </div>
         <div>
           <label class="font-bold block mb-1">PDF File:</label>
@@ -52,6 +52,33 @@
         <div>
           <label class="font-bold block mb-1">Number of questions:</label>
           <input type="number" name="num_questions" id="numQuestions" min="1" value="5" class="w-full border rounded p-2" required>
+        </div>
+        <div>
+          <label class="font-bold block mb-1">Difficulty level:</label>
+          <select name="level" id="levelSelect" class="w-full border rounded p-2">
+            <option value="easy">Easy</option>
+            <option value="medium" selected>Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </div>
+        <div>
+          <label class="font-bold block mb-1">Scenario type:</label>
+          <select name="scenario" id="scenarioSelect" class="w-full border rounded p-2">
+            <option value="no">No Scenario</option>
+            <option value="scenario">Scenario</option>
+            <option value="scenario-illustrated">Scenario Illustrated</option>
+          </select>
+        </div>
+        <div>
+          <label class="font-bold block mb-1">Scenario illustration:</label>
+          <select name="scenario_illustration_type" id="scenarioIllustration" class="w-full border rounded p-2" disabled>
+            <option value="none">None</option>
+            <option value="case">Case Study</option>
+            <option value="archi">Architecture</option>
+            <option value="config">Configuration</option>
+            <option value="console">Console</option>
+            <option value="code">Code</option>
+          </select>
         </div>
         <div>
           <label class="font-bold block mb-1">Question type:</label>
@@ -84,7 +111,7 @@ const base = '{{ url_for('pdf.index') }}';
 const genUrl = '{{ url_for('pdf.generate_questions_from_pdf') }}';
 let currentSession = null;
 
-// Providers -> Certifications -> Modules cascade (reuse from upload.html)
+// Providers -> Certifications -> Domains cascade
 fetch(base + "api/providers").then(r => r.json()).then(data => {
     const providerSelect = document.getElementById("providerSelect");
     providerSelect.innerHTML = "";
@@ -98,8 +125,8 @@ fetch(base + "api/providers").then(r => r.json()).then(data => {
 document.getElementById("providerSelect").addEventListener("change", function(){
     const prov_id = this.value;
     const certSelect = document.getElementById("certSelect");
-    const modSelect = document.getElementById("moduleSelect");
-    certSelect.innerHTML = ""; modSelect.innerHTML = "";
+    const domSelect = document.getElementById("domainSelect");
+    certSelect.innerHTML = ""; domSelect.innerHTML = "";
     if (!prov_id) return;
     fetch(`${base}api/certifications/${prov_id}`).then(r=>r.json()).then(data=>{
         data.forEach(c => certSelect.appendChild(option(c.name, c.id)));
@@ -109,26 +136,41 @@ document.getElementById("providerSelect").addEventListener("change", function(){
 
 document.getElementById("certSelect").addEventListener("change", function(){
     const cert_id = this.value;
-    const modSelect = document.getElementById("moduleSelect");
-    modSelect.innerHTML = "";
+    const domSelect = document.getElementById("domainSelect");
+    domSelect.innerHTML = "";
     if (!cert_id) return;
-    fetch(`${base}api/modules/${cert_id}`).then(r=>r.json()).then(data=>{
-        data.forEach(m => modSelect.appendChild(option(m.name, m.id)));
+    fetch(`${base}api/domains/${cert_id}`).then(r=>r.json()).then(data=>{
+        data.forEach(m => domSelect.appendChild(option(m.name, m.id)));
     });
 });
 
-// Module search filter
-const modSearch = document.getElementById('moduleSearch');
-modSearch.addEventListener('input', function(){
+// Domain search filter
+const domSearch = document.getElementById('domainSearch');
+domSearch.addEventListener('input', function(){
     const term = this.value.toLowerCase();
-    const sel = document.getElementById('moduleSelect');
+    const sel = document.getElementById('domainSelect');
     Array.from(sel.options).forEach(o => { o.hidden = term && !o.text.toLowerCase().includes(term); });
 });
 
-// Toggle qType when distribution checkbox checked
+// Toggle inputs when distribution checkbox checked
 const useDist = document.getElementById('useDistribution');
 useDist.addEventListener('change', function(){
     document.getElementById('qType').disabled = this.checked;
+    document.getElementById('levelSelect').disabled = this.checked;
+    document.getElementById('scenarioSelect').disabled = this.checked;
+    document.getElementById('scenarioIllustration').disabled = this.checked || document.getElementById('scenarioSelect').value === 'no';
+});
+
+// Enable/disable scenario illustration
+const scenarioSelect = document.getElementById('scenarioSelect');
+const scenIllu = document.getElementById('scenarioIllustration');
+scenarioSelect.addEventListener('change', function(){
+    if(this.value === 'no'){
+        scenIllu.value = 'none';
+        scenIllu.disabled = true;
+    } else {
+        scenIllu.disabled = useDist.checked ? true : false;
+    }
 });
 
 // Submit generation form
