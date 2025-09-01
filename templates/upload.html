@@ -26,7 +26,7 @@
   <main class="container mx-auto px-4 mt-8">
     <div class="max-w-3xl mx-auto bg-white p-8 shadow rounded">
       <h2 class="text-2xl font-bold text-center mb-4">📄 Import PDF Questions</h2>
-      <form id="uploadForm" enctype="multipart/form-data" class="space-y-4 mb-4">
+      <form id="uploadForm" class="space-y-4 mb-4">
         <div>
           <label class="font-bold block mb-1">Provider:</label>
           <select name="provider_id" id="providerSelect" class="w-full border rounded p-2" required></select>
@@ -40,8 +40,13 @@
           <select name="module_id" id="moduleSelect" class="w-full border rounded p-2" required></select>
         </div>
         <div>
+          <label class="font-bold block mb-1">PDF Folder:</label>
+          <input type="text" id="dirInput" class="w-full border rounded p-2" placeholder="/chemin/vers/dossier" required>
+        </div>
+        <div>
           <label class="font-bold block mb-1">PDF File:</label>
-          <input type="file" name="file" class="w-full border rounded p-2" accept=".pdf,application/pdf" required>
+          <input type="text" id="fileInput" list="pdfList" class="w-full border rounded p-2" placeholder="Commencez à taper..." required>
+          <datalist id="pdfList"></datalist>
         </div>
         <button type="submit" id="analyzeBtn" class="brand-bg text-white w-full py-2 rounded brand-hover">Analyser PDF</button>
       </form>
@@ -130,6 +135,30 @@ document.getElementById("certSelect").addEventListener("change", function () {
     });
 });
 
+// 3bis) Recherche dynamique de PDF
+const dirInput = document.getElementById("dirInput");
+const fileInput = document.getElementById("fileInput");
+const pdfList   = document.getElementById("pdfList");
+
+fileInput.addEventListener("input", function() {
+    const root = dirInput.value.trim();
+    const query = this.value.trim();
+    if (!root || query.length === 0) {
+        pdfList.innerHTML = "";
+        return;
+    }
+    fetch(`${base}api/search-pdfs?root=${encodeURIComponent(root)}&q=${encodeURIComponent(query)}`)
+        .then(r => r.json())
+        .then(data => {
+            pdfList.innerHTML = "";
+            data.forEach(p => {
+                const opt = document.createElement("option");
+                opt.value = p;
+                pdfList.appendChild(opt);
+            });
+        });
+});
+
 // 4) Soumission pour analyse PDF
 let currentSession = null;
 document.getElementById("uploadForm").addEventListener("submit", async function(e) {
@@ -138,7 +167,11 @@ document.getElementById("uploadForm").addEventListener("submit", async function(
     btn.disabled = true;
 
     try {
-        const formData = new FormData(this);
+        const formData = new FormData();
+        formData.append("module_id", document.getElementById("moduleSelect").value);
+        const dir = dirInput.value.trim().replace(/\/+$/, "");
+        const file = fileInput.value.trim();
+        formData.append("file_path", dir ? `${dir}/${file}` : file);
         const res = await fetch(base + "upload-pdf", { method: "POST", body: formData });
         const data = await res.json();
         if (data.status === "ok") {

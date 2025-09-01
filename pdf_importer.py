@@ -100,6 +100,31 @@ def api_modules(cert_id):
         except Exception: pass
         conn.close()
 
+# -------------------- Search PDFs --------------------
+
+@pdf_bp.route("/api/search-pdfs")
+def api_search_pdfs():
+    """Return a list of PDF files under ``root`` matching query ``q``."""
+    root = request.args.get("root") or ""
+    query = (request.args.get("q") or "").lower()
+    if not root or not os.path.isdir(root):
+        return jsonify([])
+
+    matches = []
+    for dirpath, _, files in os.walk(root):
+        for name in files:
+            if not name.lower().endswith(".pdf"):
+                continue
+            if query in name.lower():
+                rel_path = os.path.relpath(os.path.join(dirpath, name), root)
+                matches.append(rel_path)
+                if len(matches) >= 20:
+                    break
+        if len(matches) >= 20:
+            break
+
+    return jsonify(matches)
+
 # -------------------- UI --------------------
 
 @pdf_bp.route("/")
@@ -117,15 +142,22 @@ def upload_pdf():
         return jsonify({"status": "error", "message": "module_id invalide"}), 400
 
     file = request.files.get("file")
-    if not file:
-        return jsonify({"status": "error", "message": "Aucun fichier envoyé"}), 400
+    file_path = request.form.get("file_path")
 
-    filename = secure_filename(file.filename or "upload.pdf")
-    save_path = UPLOAD_DIR / filename
-    file.save(str(save_path))
+    if file:
+        filename = secure_filename(file.filename or "upload.pdf")
+        save_path = UPLOAD_DIR / filename
+        file.save(str(save_path))
+        pdf_to_read = str(save_path)
+    elif file_path:
+        if not os.path.isfile(file_path):
+            return jsonify({"status": "error", "message": "Fichier introuvable"}), 400
+        pdf_to_read = file_path
+    else:
+        return jsonify({"status": "error", "message": "Aucun fichier fourni"}), 400
 
     text = extract_text_from_pdf(
-        str(save_path),
+        pdf_to_read,
         use_ocr=False,
         skip_first_page=True,
         header_ratio=0.10,
