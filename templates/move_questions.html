@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Déplacer Questions</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <style>
     body { font-family: sans-serif; }
     .panel { display: inline-block; width: 45%; vertical-align: top;
@@ -13,11 +14,27 @@
     label { display: block; margin-bottom: 0.2em; font-weight: bold; }
     select, button { width: 100%; padding: 0.5em; font-size: 1em; }
     .or { text-align: center; margin: 0.5em 0; color: #666; }
+    .brand-bg { background-color:#28a745; }
+    .brand-hover:hover { background-color:#218838; }
   </style>
 </head>
-<body>
+<body class="bg-gray-100">
+  <nav class="brand-bg text-white">
+    <div class="container mx-auto px-4 py-4 flex flex-wrap items-center justify-between">
+      <a href="{{ url_for('home') }}" class="text-2xl font-semibold">ExBoot Laboratory</a>
+      <ul class="flex flex-wrap space-x-4 mt-4 sm:mt-0">
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('populate_index') }}">Populate</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('dom.index') }}">Import Modules</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('move.index') }}">Move Questions</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('reloc.index') }}">Relocate</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('pdf.index') }}">PDF Importer</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('quest.index') }}">Manual Import</a></li>
+      </ul>
+    </div>
+  </nav>
+  <main class="container mx-auto px-4 mt-8">
   <div class="panel" id="src">
-      <h1>Déplacer Questions</h1>
+      <h1 class="text-2xl font-bold mb-4">Déplacer Questions</h1>
     <h2>SOURCE</h2>
     <div class="field">
       <label>Provider</label>
@@ -52,7 +69,7 @@
   </div>
 
   <div style="text-align:center; margin-top:2em;">
-    <button id="move-btn">Déplacer</button>
+    <button id="move-btn" class="px-6 py-3 brand-bg text-white rounded brand-hover">Déplacer</button>
   </div>
 
 <script>
@@ -138,5 +155,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 });
 </script>
+</main>
 </body>
 </html>
