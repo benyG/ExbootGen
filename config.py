@@ -10,11 +10,16 @@ import os
 # ---------------------------------------------------------------------------
 # Database configuration
 # ---------------------------------------------------------------------------
+
+# Values for the database connection are sourced from environment variables to
+# avoid hard-coding credentials.  Each key falls back to an empty string when
+# the corresponding variable is missing so that imports succeed even if the
+# database is not configured (e.g. during tests).
 DB_CONFIG = {
-    "host": "x.x.x.x",
-    "user": "user",
-    "password": "pass",
-    "database": "db",
+    "host": os.environ.get("DB_HOST", ""),
+    "user": os.environ.get("DB_USER", ""),
+    "password": os.environ.get("DB_PASSWORD", ""),
+    "database": os.environ.get("DB_NAME", ""),
 }
 
 # ---------------------------------------------------------------------------
