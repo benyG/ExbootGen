@@ -101,19 +101,24 @@ def api_questions():
             else:
                 raise
 
-        # Réponses (JSON) + liaisons quest_ans
+        # Réponses stockées en JSON + liaisons quest_ans
         for ans in question.get('answers', []):
-            ans_data = {k: v for k, v in ans.items() if k != 'isok'}
-            ans_json = json.dumps(ans_data, ensure_ascii=False)
-            isok = int(ans.get('isok', 0))
+            raw_val = (ans.get('value') or ans.get('text') or '').strip()
+            if not raw_val:
+                continue
 
-            # Insert ou reuse answer
+            answer_data = {k: v for k, v in ans.items() if k not in ('isok', 'value', 'text')}
+            answer_data['value'] = raw_val
+            a_json = json.dumps(answer_data, ensure_ascii=False)[:700]
+            isok = 1 if int(ans.get('isok') or 0) == 1 else 0
+
+            # Insert ou réutilise answer
             try:
-                cur.execute("INSERT INTO answers (text, created_at) VALUES (%s,NOW())", (ans_json,))
+                cur.execute("INSERT INTO answers (text, created_at) VALUES (%s,NOW())", (a_json,))
                 ans_id = cur.lastrowid
             except mysql.connector.Error as e:
                 if e.errno == 1062:
-                    cur.execute("SELECT id FROM answers WHERE text=%s LIMIT 1", (ans_json,))
+                    cur.execute("SELECT id FROM answers WHERE text=%s LIMIT 1", (a_json,))
                     r = cur.fetchone()
                     ans_id = r[0] if r else None
                 else:
