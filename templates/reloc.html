@@ -40,7 +40,9 @@
     <h2>SOURCE</h2>
     <div class="field"><label>Provider<select id="src-prov"></select></label></div>
     <div class="field"><label>Certification<select id="src-cert"></select></label></div>
-    <div class="field"><label>Domaine<select id="src-mod"></select></label></div>
+    <div class="field"><label>Domaine
+      <input type="text" id="src-mod-search" placeholder="Rechercher..." class="w-full border rounded p-1 mb-1">
+      <select id="src-mod"></select></label></div>
   </div>
   <div class="panel" id="dst">
     <h2>DESTINATION</h2>
@@ -63,32 +65,50 @@ function fill(el, items){
   });
 }
 
-async function initPanel(pref, hasModule){
+async function initPanel(pref, hasModule, defProv=null, defCert=null){
   const p = document.getElementById(pref+'-prov');
   const c = document.getElementById(pref+'-cert');
   const m = hasModule && document.getElementById(pref+'-mod');
+  const s = hasModule && document.getElementById(pref+'-mod-search');
 
   const base = '{{ url_for('reloc.index') }}';
 
   const provs = await loadJSON(base + 'api/providers');
   fill(p, provs);
-  p.value = provs[0]?.id; p.dispatchEvent(new Event('change'));
+  p.value = provs.find(x=>x.id===defProv)?.id || provs[0]?.id;
+  p.dispatchEvent(new Event('change'));
 
   p.addEventListener('change', async()=>{
     const cs = await loadJSON(`${base}api/certifications/${p.value}`);
     fill(c, cs);
-    c.value = cs[0]?.id; c.dispatchEvent(new Event('change'));
+    let sel = cs[0]?.id;
+    if(Number(p.value) === defProv){
+      const found = cs.find(x=>x.id===defCert);
+      if(found) sel = found.id;
+    }
+    c.value = sel;
+    c.dispatchEvent(new Event('change'));
   });
 
   if(!m) return;
+
+  s.addEventListener('input', function(){
+    const term = this.value.toLowerCase();
+    Array.from(m.options).forEach(o=>{
+      o.style.display = o.text.toLowerCase().includes(term) ? '' : 'none';
+    });
+  });
+
   c.addEventListener('change', async()=>{
     const ms = await loadJSON(`${base}api/modules/${c.value}`);
     fill(m, ms);
+    s.value='';
+    s.dispatchEvent(new Event('input'));
   });
 }
 
 document.addEventListener('DOMContentLoaded', ()=>{
-  initPanel('src', true);
+  initPanel('src', true, 169, 23);
   initPanel('dst', false);
 
   document.getElementById('reloc-btn').onclick = ()=>{
