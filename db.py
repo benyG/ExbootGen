@@ -1,6 +1,6 @@
-import mysql.connector  
-import logging  
-import json  
+import mysql.connector
+import logging
+import json
 from config import DB_CONFIG
 
 # Valeurs de niveau : easy→0, medium→1, hard→2
@@ -93,11 +93,12 @@ def count_questions_in_category(domain_id, level, qtype, scenario_type):
 
 def insert_questions(domain_id, questions_json, scenario_type_str):
     """
-    Insère les questions et leurs réponses depuis la structure JSON dans la base de données.
-    Pour chaque réponse, on insère l'intégralité du JSON sauf la clé "isok",
-    qui est utilisée dans la table "quest_ans".
-    En cas de doublon dans la table answers, on récupère l'id existant.
-    La colonne `descr` de questions recevra la valeur de `diagram_descr`.
+    Insère les questions et leurs réponses depuis la structure JSON dans la base.
+    Chaque réponse est sérialisée en JSON (hors champ ``isok``) et stockée dans
+    la colonne ``answers.text``. Le champ ``isok`` détermine la valeur à insérer
+    dans ``quest_ans``. En cas de doublon sur la table ``answers`` (unicité du
+    JSON), l'id existant est réutilisé. La colonne ``descr`` de ``questions``
+    reçoit la valeur de ``diagram_descr``.
     """
     # Mappage pour la conversion
     ty_num = ty_mapping.get(scenario_type_str, 1)
@@ -147,9 +148,18 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
 
             # Insertion des réponses
             for answer in question.get("answers", []):
-                answer_data = {k: v for k, v in answer.items() if k != "isok"}
-                answer_json = json.dumps(answer_data, ensure_ascii=False)
-                isok = answer.get("isok", 0)
+                raw_val = (answer.get("value") or answer.get("text") or "").strip()
+                if not raw_val:
+                    continue
+
+                # Construit un objet JSON sans le champ isok, en normalisant la clé 'value'
+                answer_data = {
+                    k: v for k, v in answer.items() if k not in ("isok", "value", "text")
+                }
+                answer_data["value"] = raw_val
+                answer_json = json.dumps(answer_data, ensure_ascii=False)[:700]
+                isok = int(answer.get("isok", 0))
+
                 try:
                     query_answer = "INSERT INTO answers (text, created_at) VALUES (%s, NOW())"
                     cursor.execute(query_answer, (answer_json,))
@@ -167,6 +177,7 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
                             raise
                     else:
                         raise
+
                 query_link = "INSERT INTO quest_ans (question, answer, isok) VALUES (%s, %s, %s)"
                 cursor.execute(query_link, (question_id, answer_id, isok))
         conn.commit()
