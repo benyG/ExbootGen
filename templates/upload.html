@@ -1,48 +1,57 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Import PDF Questions</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; padding-top: 40px; }
-        .container { max-width: 900px; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        h2 { text-align: center; margin-bottom: 20px; }
-        label { font-weight: bold; margin-top: 10px; }
-        #jsonPreview { background-color: #1e1e1e; color: #d4d4d4; border-radius: 6px; padding: 10px; font-size: 14px; }
-        #confirmImport { margin-top: 10px; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Import PDF Questions</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    .brand-bg { background-color:#28a745; }
+    .brand-hover:hover { background-color:#218838; }
+  </style>
 </head>
-<body>
-<div class="container">
-    <h2>📄 Import PDF Questions</h2>
-    <form id="uploadForm" enctype="multipart/form-data" class="mb-4">
-        <div class="mb-3">
-            <label>Provider:</label>
-            <select name="provider_id" id="providerSelect" class="form-select" required></select>
-        </div>
-        <div class="mb-3">
-            <label>Certification:</label>
-            <select name="cert_id" id="certSelect" class="form-select" required></select>
-        </div>
-        <div class="mb-3">
-            <label>Module:</label>
-            <select name="module_id" id="moduleSelect" class="form-select" required></select>
-        </div>
-        <div class="mb-3">
-            <label>PDF File:</label>
-            <input type="file" name="file" class="form-control" accept=".pdf,application/pdf" required>
-        </div>
-        <button type="submit" id="analyzeBtn" class="btn btn-primary w-100">Analyser PDF</button>
-    </form>
-
-    <div id="jsonContainer" style="display:none;">
-        <h4>📋 JSON extrait</h4>
-        <textarea id="jsonPreview" class="form-control" style="height:300px; font-family: monospace;" readonly></textarea>
-        <button id="confirmImport" class="btn btn-success w-100 mt-3">✅ Confirmer Import</button>
+<body class="bg-gray-100">
+  <nav class="brand-bg text-white">
+    <div class="container mx-auto px-4 py-4 flex flex-wrap items-center justify-between">
+      <a href="{{ url_for('home') }}" class="text-2xl font-semibold">ExBoot Laboratory</a>
+      <ul class="flex flex-wrap space-x-4 mt-4 sm:mt-0">
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('populate_index') }}">Populate</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('dom.index') }}">Import Modules</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('move.index') }}">Move Questions</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('reloc.index') }}">Relocate</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('pdf.index') }}">PDF Importer</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('quest.index') }}">Manual Import</a></li>
+      </ul>
     </div>
-</div>
-
+  </nav>
+  <main class="container mx-auto px-4 mt-8">
+    <div class="max-w-3xl mx-auto bg-white p-8 shadow rounded">
+      <h2 class="text-2xl font-bold text-center mb-4">📄 Import PDF Questions</h2>
+      <form id="uploadForm" enctype="multipart/form-data" class="space-y-4 mb-4">
+        <div>
+          <label class="font-bold block mb-1">Provider:</label>
+          <select name="provider_id" id="providerSelect" class="w-full border rounded p-2" required></select>
+        </div>
+        <div>
+          <label class="font-bold block mb-1">Certification:</label>
+          <select name="cert_id" id="certSelect" class="w-full border rounded p-2" required></select>
+        </div>
+        <div>
+          <label class="font-bold block mb-1">Module:</label>
+          <select name="module_id" id="moduleSelect" class="w-full border rounded p-2" required></select>
+        </div>
+        <div>
+          <label class="font-bold block mb-1">PDF File:</label>
+          <input type="file" name="file" class="w-full border rounded p-2" accept=".pdf,application/pdf" required>
+        </div>
+        <button type="submit" id="analyzeBtn" class="brand-bg text-white w-full py-2 rounded brand-hover">Analyser PDF</button>
+      </form>
+      <div id="jsonContainer" class="hidden">
+        <h4 class="text-lg font-bold mb-2">📋 JSON extrait</h4>
+        <textarea id="jsonPreview" class="w-full h-72 border rounded p-2 font-mono bg-gray-800 text-gray-100" readonly></textarea>
+        <button id="confirmImport" class="brand-bg text-white w-full py-2 rounded mt-3 brand-hover">✅ Confirmer Import</button>
+      </div>
+    </div>
+  </main>
 <script>
 // helper
 function option(text, value) {
@@ -135,7 +144,7 @@ document.getElementById("uploadForm").addEventListener("submit", async function(
         if (data.status === "ok") {
             currentSession = data.session_id;
             document.getElementById("jsonPreview").value = JSON.stringify(data.json_data, null, 4);
-            document.getElementById("jsonContainer").style.display = "block";
+            document.getElementById("jsonContainer").classList.remove("hidden");
         } else {
             alert("Erreur : " + (data.message || "analyse impossible"));
         }
