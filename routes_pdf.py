@@ -331,13 +331,18 @@ def import_questions_route():
             q_imported += 1
 
             for ans in answers:
-                a_text = (ans.get("value") or "").strip()
-                if not a_text:
+                raw_val = (ans.get("value") or ans.get("text") or "").strip()
+                if not raw_val:
                     continue
-                a_text = a_text[:700]
+
+                answer_data = {
+                    k: v for k, v in ans.items() if k not in ("isok", "value", "text")
+                }
+                answer_data["value"] = raw_val
+                a_json = json.dumps(answer_data, ensure_ascii=False)[:700]
                 isok = 1 if int(ans.get("isok") or 0) == 1 else 0
 
-                cur.execute("INSERT INTO answers (text) VALUES (%s)", (a_text,))
+                cur.execute("INSERT INTO answers (text) VALUES (%s)", (a_json,))
                 answer_id = cur.lastrowid
                 a_imported += 1
 
