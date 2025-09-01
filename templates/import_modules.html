@@ -62,6 +62,8 @@
   </div>
 
 <script>
+  const base = '{{ url_for('dom.index') }}';
+
   async function loadJSON(url) {
     const res = await fetch(url);
     return res.json();
@@ -80,8 +82,6 @@
   document.addEventListener('DOMContentLoaded', async ()=>{
     const provSel = document.getElementById('prov'),
           certSel = document.getElementById('cert');
-
-    const base = '{{ url_for('dom.index') }}';
 
     // Charge providers
     const providers = await loadJSON(base + 'api/providers');
