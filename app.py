@@ -2,7 +2,7 @@ import time
 import threading
 import random
 from flask import Flask, render_template, request, jsonify
-from config import DISTRIBUTION
+from config import DISTRIBUTION, API_REQUEST_DELAY
 from openai_api import generate_questions, analyze_certif
 from eraser_api import render_diagram
 import db
@@ -81,14 +81,14 @@ def populate_process():
     if not cert_name:
         return jsonify({"status": "error", "log": [f"Certification with id {cert_id} not found."]})
 
-    # Analyse de la certification
+    # Certification analysis
     try:
         analysis_result = analyze_certif(provider_name, cert_name)
         analysis = {k: str(v).strip('"') for d in analysis_result for k, v in d.items()}
-        log_analysis = f"Analyse de certification: {analysis}"
+        log_analysis = f"Certification analysis: {analysis}"
     except Exception as e:
         analysis = {}
-        log_analysis = f"Analyse de certification non disponible: {e}"
+        log_analysis = f"Certification analysis unavailable: {e}"
     
     progress_log = [log_analysis]
 
@@ -99,68 +99,69 @@ def populate_process():
     domains_processed = 0
 
     for domain_id, domain_name in domains:
-        progress_log.append(f"[{domain_name}] Début du traitement du domaine.")
+        pause_event.wait()
+        progress_log.append(f"[{domain_name}] Domain processing started.")
         current_total = db.count_total_questions(domain_id)
-        progress_log.append(f"[{domain_name}] Total questions initiales: {current_total}")
-        
+        progress_log.append(f"[{domain_name}] Initial question count: {current_total}")
+
         if current_total >= TARGET_PER_DOMAIN:
             domains_processed += 1
-            progress_log.append(f"[{domain_name}] Domaine déjà traité (>= {TARGET_PER_DOMAIN} questions).")
+            progress_log.append(f"[{domain_name}] Domain already complete (>= {TARGET_PER_DOMAIN} questions).")
             continue
-        
-        progress_log.append(f"[{domain_name}] Besoin de {TARGET_PER_DOMAIN - current_total} questions supplémentaires pour atteindre {TARGET_PER_DOMAIN}.")
+
+        progress_log.append(f"[{domain_name}] Needs {TARGET_PER_DOMAIN - current_total} additional questions to reach {TARGET_PER_DOMAIN}.")
         
         # --- Élaboration par niveau de difficulté ---
         # Traitement EASY si le domaine est vide
         if current_total == 0:
-            progress_log.append(f"[{domain_name}] Domaine vide, utilisation de la distribution EASY.")
+            pause_event.wait()
+            progress_log.append(f"[{domain_name}] Empty domain, using EASY distribution.")
             distribution = DISTRIBUTION.get("easy", {})
             progress_log = process_domain_by_difficulty(
                 domain_id, domain_name, "easy", distribution,
-                provider_name, cert_name, analysis, progress_log, all_domain_names
+                provider_name, cert_id, cert_name, analysis, progress_log, all_domain_names
             )
             current_total = db.count_total_questions(domain_id)
-            progress_log.append(f"[{domain_name}] Total après EASY: {current_total}")
+            progress_log.append(f"[{domain_name}] Total after EASY: {current_total}")
         
         # Traitement MEDIUM si nécessaire
         if current_total < TARGET_PER_DOMAIN:
+            pause_event.wait()
             needed_total = TARGET_PER_DOMAIN - current_total
-            progress_log.append(f"[{domain_name}] Besoin de {needed_total} questions supplémentaires via MEDIUM.")
+            progress_log.append(f"[{domain_name}] Needs {needed_total} additional questions via MEDIUM.")
             distribution = DISTRIBUTION.get("medium", {})
             progress_log = process_domain_by_difficulty(
                 domain_id, domain_name, "medium", distribution,
-                provider_name, cert_name, analysis, progress_log, all_domain_names
+                provider_name, cert_id, cert_name, analysis, progress_log, all_domain_names
             )
             current_total = db.count_total_questions(domain_id)
-            progress_log.append(f"[{domain_name}] Total après MEDIUM: {current_total}")
+            progress_log.append(f"[{domain_name}] Total after MEDIUM: {current_total}")
         
         # Traitement HARD si toujours nécessaire
         if current_total < TARGET_PER_DOMAIN:
+            pause_event.wait()
             needed_total = TARGET_PER_DOMAIN - current_total
-            progress_log.append(f"[{domain_name}] Besoin de {needed_total} questions supplémentaires via HARD.")
+            progress_log.append(f"[{domain_name}] Needs {needed_total} additional questions via HARD.")
             distribution = DISTRIBUTION.get("hard", {})
             progress_log = process_domain_by_difficulty(
                 domain_id, domain_name, "hard", distribution,
-                provider_name, cert_name, analysis, progress_log, all_domain_names
+                provider_name, cert_id, cert_name, analysis, progress_log, all_domain_names
             )
             current_total = db.count_total_questions(domain_id)
-            progress_log.append(f"[{domain_name}] Total après HARD: {current_total}")
+            progress_log.append(f"[{domain_name}] Total after HARD: {current_total}")
         
         # Fallback transverse
         if current_total < TARGET_PER_DOMAIN:
+            pause_event.wait()
             needed_total = TARGET_PER_DOMAIN - current_total
-            progress_log.append(f"[{domain_name}] Total après HARD = {current_total}. Fallback transverse de {needed_total} questions.")
-            # Choix aléatoire du practical entre 'no' et 'scenario'
+            progress_log.append(f"[{domain_name}] After HARD = {current_total}. Fallback of {needed_total} questions.")
             practical_val = random.choice(['no', 'scenario'])
-            # Choix des domaines secondaires même en fallback
             secondaries = pick_secondary_domains(all_domain_names, domain_name)
             progress_log.append(f"[{domain_name} - FALLBACK] Practical: {practical_val}, Secondary domains: {secondaries}")
-            # Construction de l'argument Domain
             if secondaries:
                 domain_arg = f"main domain :{domain_name}; includes context from domains: {', '.join(secondaries)}"
             else:
                 domain_arg = domain_name
-            # Détermination du scenario_illustration_type pour fallback scenario
             if practical_val == 'scenario':
                 candidates = [k for k, v in analysis.items() if v == '1']
                 scenario_illu_val = random.choice(candidates) if candidates else 'none'
@@ -179,18 +180,18 @@ def populate_process():
                     practical=practical_val,
                     scenario_illustration_type=scenario_illu_val,
                     num_questions=needed_total
-                )          
-                
+                )
+                time.sleep(API_REQUEST_DELAY)
                 db.insert_questions(domain_id, questions_data, practical_val)
-                progress_log.append(f"[{domain_name}] {needed_total} questions fallback insérées.")
+                progress_log.append(f"[{domain_name}] {needed_total} fallback questions inserted.")
             except Exception as e:
-                progress_log.append(f"[{domain_name}] Erreur lors de la génération fallback: {e}")
+                progress_log.append(f"[{domain_name}] Error during fallback generation: {e}")
         
         domains_processed += 1
         final_total = db.count_total_questions(domain_id)
-        progress_log.append(f"[{domain_name}] Domaine traité: total final = {final_total} ({domains_processed}/{total_domains}).")
+        progress_log.append(f"[{domain_name}] Domain completed: final total = {final_total} ({domains_processed}/{total_domains}).")
 
-    progress_log.append(f"Processus terminé: {domains_processed} domaines traités sur {total_domains}.")
+    progress_log.append(f"Process finished: {domains_processed} domains processed out of {total_domains}.")
     counters = {
         "analysis": log_analysis,
         "domainsProcessed": domains_processed,
@@ -201,16 +202,16 @@ def populate_process():
 
 
 def process_domain_by_difficulty(domain_id, domain_name, difficulty, distribution,
-                                 provider_name, certification_name, analysis, progress_log, all_domain_names):
+                                 provider_name, cert_id, cert_name, analysis, progress_log, all_domain_names):
+    """Generate and insert questions for a domain according to the distribution.
+
+    Secondary domains are randomly injected when ``practical`` is not "no".
     """
-    Génère et insère les questions pour un domaine donné selon la distribution fournie,
-    en injectant aléatoirement des domaines secondaires lorsque pratique != 'no'.
-    """
-    import json  # on peut le déclarer en haut du fichier aussi
+    import json  # local import to avoid dependency at module import time
 
     for qtype, scenarios in distribution.items():
         for scenario_type, target_count in scenarios.items():
-            # Détermination des paramètres practical et scenario_illustration_type
+            # Determine practical and scenario_illustration_type parameters
             if scenario_type == "no":
                 practical_val = "no"
                 scenario_illu_val = "none"
@@ -228,16 +229,16 @@ def process_domain_by_difficulty(domain_id, domain_name, difficulty, distributio
 
             existing_count = db.count_questions_in_category(domain_id, difficulty, qtype, scenario_type)
             progress_log.append(
-                f"[{domain_name} - {difficulty.upper()}] {qtype} avec scenario '{scenario_type}' existant: "
+                f"[{domain_name} - {difficulty.upper()}] {qtype} with scenario '{scenario_type}' existing: "
                 f"{existing_count} (target: {target_count})."
             )
             if existing_count < target_count:
+                pause_event.wait()
                 needed = target_count - existing_count
                 progress_log.append(
-                    f"[{domain_name} - {difficulty.upper()}] Besoin de {needed} questions pour "
-                    f"{qtype} avec scenario '{scenario_type}'."
+                    f"[{domain_name} - {difficulty.upper()}] Needs {needed} questions for "
+                    f"{qtype} with scenario '{scenario_type}'."
                 )
-                # Injection des domaines secondaires si scenario != 'no'
                 if practical_val != 'no':
                     secondaries = pick_secondary_domains(all_domain_names, domain_name)
                     progress_log.append(
@@ -256,7 +257,7 @@ def process_domain_by_difficulty(domain_id, domain_name, difficulty, distributio
                     questions_data = generate_questions(
                         provider_name=provider_name,
                         certification=cert_name,
-                        domain=domain_name,
+                        domain=domain_arg,
                         domain_descr=desc,
                         level=difficulty,
                         q_type=qtype,
@@ -264,19 +265,19 @@ def process_domain_by_difficulty(domain_id, domain_name, difficulty, distributio
                         scenario_illustration_type=scenario_illu_val,
                         num_questions=needed
                     )
+                    time.sleep(API_REQUEST_DELAY)
                 except Exception as e:
                     progress_log.append(
-                        f"[{domain_name} - {difficulty.upper()}] Erreur génération pour {qtype} "
-                        f"avec scenario '{scenario_type}': {e}"
+                        f"[{domain_name} - {difficulty.upper()}] Generation error for {qtype} "
+                        f"with scenario '{scenario_type}': {e}"
                     )
                     continue
 
-                # Génération et insertion des diagrammes éventuels
                 for question in questions_data.get("questions", []):
                     if practical_val == "scenario-illustrated" and question.get("diagram_descr"):
                         diagram_description = question.get("diagram_descr", "").strip()
                         try:
-                             diag_type = question.get("diagram_type", "")
+                            diag_type = question.get("diagram_type", "")
                             # diagram_data_str = render_diagram(provider_name, diagram_description, diag_type)
                             # diag_dict = json.loads(diagram_data_str)
                             # question["image"] = (
@@ -285,21 +286,21 @@ def process_domain_by_difficulty(domain_id, domain_name, difficulty, distributio
                             # )
                         except Exception as e:
                             progress_log.append(
-                                f"[{domain_name} - {difficulty.upper()}] Erreur diagramme pour {qtype} "
-                                f"avec scenario '{scenario_type}': {e}"
+                                f"[{domain_name} - {difficulty.upper()}] Diagram error for {qtype} "
+                                f"with scenario '{scenario_type}' (desc: {diagram_description}, type: {diag_type}): {e}"
                             )
-                            question["image"] = f""
+                            question["image"] = ""
 
                 try:
                     db.insert_questions(domain_id, questions_data, scenario_type)
                     progress_log.append(
-                        f"[{domain_name} - {difficulty.upper()}] {needed} questions insérées pour "
-                        f"{qtype} avec scenario '{scenario_type}'."
+                        f"[{domain_name} - {difficulty.upper()}] {needed} questions inserted for "
+                        f"{qtype} with scenario '{scenario_type}'."
                     )
                 except Exception as e:
                     progress_log.append(
-                        f"[{domain_name} - {difficulty.upper()}] Erreur insertion pour {qtype} "
-                        f"avec scenario '{scenario_type}': {e}"
+                        f"[{domain_name} - {difficulty.upper()}] Insert error for {qtype} "
+                        f"with scenario '{scenario_type}': {e}"
                     )
     return progress_log
 

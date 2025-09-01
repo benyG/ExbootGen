@@ -1,12 +1,17 @@
+import sys
+import os
 import unittest
 from unittest.mock import patch
 import json
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 import openai_api
 
 class DummyResponse:
     def __init__(self, questions):
         self._questions = questions
+        self.status_code = 200
     def json(self):
         content = json.dumps({"questions": [{"text": q} for q in self._questions]})
         return {"choices": [{"message": {"content": content}}]}

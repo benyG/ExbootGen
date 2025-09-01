@@ -4,14 +4,21 @@ import requests
 import logging
 import re
 import json
-from config import OPENAI_API_KEY, OPENAI_MODEL
+import time
+import random
+from config import (
+    OPENAI_API_KEY,
+    OPENAI_MODEL,
+    OPENAI_API_URL,
+    OPENAI_MAX_RETRIES,
+)
 
 def clean_and_decode_json(content: str) -> dict:
     """
     Nettoie le contenu (retire les balises ```json) et décode le JSON.
     En cas d'erreur, on log et on lève une exception.
     """
-    logging.error(f"Raw content received: {content}")
+    logging.debug(f"Raw content received: {content}")
     
     # Supprimer les balises ```json et ```
     content = re.sub(r'```json|```', '', content).strip()
@@ -20,10 +27,60 @@ def clean_and_decode_json(content: str) -> dict:
         decoded_json = json.loads(content)
     except json.JSONDecodeError as e:
         logging.error(f"JSON Decoding Error: {str(e)} - content was: {content}")
-        raise Exception("JSON Decoding Error.") from e
-    
-    logging.error(f"Decoded JSON: {decoded_json}")
+        err = Exception(f"JSON Decoding Error. Raw content: {content}")
+        setattr(err, "raw_content", content)
+        raise err from e
+
+    logging.debug(f"Decoded JSON: {decoded_json}")
     return decoded_json
+
+
+def _post_with_retry(payload: dict) -> requests.Response:
+    """Send a POST request to the OpenAI API with retry and backoff.
+
+    Retries the request when the API returns HTTP 429 or any 5xx status code.
+    """
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+    }
+    attempt = 0
+    while True:
+        try:
+            response = requests.post(
+                OPENAI_API_URL,
+                headers=headers,
+                json=payload,
+                timeout=60,
+            )
+            if response.status_code == 429 or 500 <= response.status_code < 600:
+                raise requests.HTTPError(
+                    f"HTTP {response.status_code}: {response.text}",
+                    response=response,
+                )
+            response.raise_for_status()
+            return response
+        except requests.HTTPError as e:
+            attempt += 1
+            if attempt > OPENAI_MAX_RETRIES:
+                raise Exception(f"API Request Error: {e}") from e
+            delay = min(60, (2 ** (attempt - 1))) + random.uniform(0, 1)
+            logging.warning(
+                f"OpenAI API call failed (attempt {attempt}/{OPENAI_MAX_RETRIES}). "
+                f"Retrying in {delay:.1f}s."
+            )
+            time.sleep(delay)
+        except requests.RequestException as e:
+            attempt += 1
+            if attempt > OPENAI_MAX_RETRIES:
+                raise Exception(f"API Request Error: {e}") from e
+            delay = min(60, (2 ** (attempt - 1))) + random.uniform(0, 1)
+            logging.warning(
+                f"OpenAI API network error (attempt {attempt}/{OPENAI_MAX_RETRIES}). "
+                f"Retrying in {delay:.1f}s."
+            )
+            time.sleep(delay)
 
 def generate_questions(
     provider_name: str,
@@ -54,10 +111,10 @@ def generate_questions(
     batch_size    : nombre de questions à générer par appel API
     """
 
-    logging.error(f"scenario_illustration_type: {scenario_illustration_type}")
-    logging.error(f"domain: {domain}")
-    logging.error(f"description: {domain_descr}")
-    logging.error(f"level: {level}")
+    logging.debug(f"scenario_illustration_type: {scenario_illustration_type}")
+    logging.debug(f"domain: {domain}")
+    logging.debug(f"description: {domain_descr}")
+    logging.debug(f"level: {level}")
     
    # Always initialize text_for_diagram_type to ensure it's defined.
     text_for_diagram_type = ""
@@ -314,19 +371,11 @@ RULES:
     return {"questions": all_questions}
 
 def analyze_certif(provider_name: str, certification: str) -> list:
-    """
-    Analyse la certification en interrogeant l'API OpenAI pour déterminer
-    si, en fonction du programme, il est pertinent de générer des questions
-    avec des scénarios pratiques basés sur différents contextes.
-    
-    Le prompt demande de renvoyer un tableau JSON de la forme :
-    [
-        {"case": 0},
-        {"archi": 1},
-        {"config": 0"},
-        {"console": 0},
-        {"code": 1}
-    ]
+    """Analyse a certification using the OpenAI API.
+
+    The call asks the model whether the syllabus supports practical scenarios in
+    various contexts (case study, architecture, configuration, console or code)
+    and returns a list of dictionaries with 0/1 values.
     """
     prompt = f"""
 TASK: Retrieve the syllabus and content for the specified domain of the indicated certification exam. Analyze whether the topics typically covered for this certification support the creation of exam questions featuring practical scenarios in the following areas:
@@ -360,20 +409,7 @@ Certification: {certification}
             }
         ]
     }
-    try:
-        response = requests.post(
-            'https://api.openai.com/v1/chat/completions',
-            headers={
-                'Content-Type': 'application/json',
-                'Authorization': f'Bearer {OPENAI_API_KEY}'
-            },
-            json=data,
-            timeout=60
-        )
-        response.raise_for_status()
-    except requests.RequestException as e:
-        raise Exception(f"API Request Error in analyze_certif: {e}") from e
-    
+    response = _post_with_retry(data)
     resp_json = response.json()
     if 'choices' not in resp_json or not resp_json['choices']:
         raise Exception(f"Unexpected API Response in analyze_certif: {resp_json}")
