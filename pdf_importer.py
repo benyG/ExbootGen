@@ -1,10 +1,13 @@
 import os
 import json
+import time
 from pathlib import Path
 from flask import Blueprint, request, jsonify, render_template
 from werkzeug.utils import secure_filename
 
 from routes_pdf import detect_questions, extract_text_from_pdf, db_conn
+from openai_api import generate_questions as ai_generate_questions
+from config import DISTRIBUTION, API_REQUEST_DELAY
 
 # -------- Blueprint / Templates --------
 pdf_bp = Blueprint('pdf', __name__)
@@ -130,6 +133,127 @@ def api_search_pdfs():
 @pdf_bp.route("/")
 def index():
     return render_template("upload.html")
+
+# -------------------- PDF Question Generator --------------------
+
+@pdf_bp.route("/generate")
+def generate_index():
+    """Render the question generation form."""
+    return render_template("pdf_generate.html")
+
+
+@pdf_bp.route("/generate-questions", methods=["POST"])
+def generate_questions_from_pdf():
+    """Generate questions from an uploaded PDF using the OpenAI API."""
+    try:
+        provider_id = int(request.form.get("provider_id", 0))
+        cert_id = int(request.form.get("cert_id", 0))
+        module_id = int(request.form.get("module_id", 0))
+        num_questions = int(request.form.get("num_questions", 0))
+    except ValueError:
+        return jsonify({"status": "error", "message": "Paramètres invalides"}), 400
+
+    use_distribution = request.form.get("use_distribution") == "on"
+    q_type = request.form.get("q_type", "qcm")
+
+    pdf_file = request.files.get("pdf_file")
+    if not pdf_file or not pdf_file.filename.lower().endswith(".pdf"):
+        return jsonify({"status": "error", "message": "Fichier PDF requis"}), 400
+
+    # Taille max 20 Mo
+    pdf_file.stream.seek(0, os.SEEK_END)
+    size = pdf_file.stream.tell()
+    pdf_file.stream.seek(0)
+    if size > 20 * 1024 * 1024:
+        return jsonify({"status": "error", "message": "Fichier trop volumineux (>20Mo)"}), 400
+
+    filename = secure_filename(pdf_file.filename)
+    save_path = UPLOAD_DIR / filename
+    pdf_file.save(str(save_path))
+
+    text = extract_text_from_pdf(
+        str(save_path),
+        use_ocr=False,
+        skip_first_page=True,
+        header_ratio=0.10,
+        footer_ratio=0.10,
+    )
+
+    if not text.strip():
+        return jsonify({"status": "error", "message": "PDF vide"}), 400
+
+    # Récupération des noms provider et certification
+    conn = db_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM provs WHERE id=%s", (provider_id,))
+        prov_row = cur.fetchone()
+        cur.execute("SELECT name FROM courses WHERE id=%s", (cert_id,))
+        cert_row = cur.fetchone()
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        conn.close()
+
+    provider_name = prov_row[0] if prov_row else ""
+    cert_name = cert_row[0] if cert_row else ""
+
+    # Distribution des questions
+    pairs = []  # (q_type, scenario, count)
+    if use_distribution:
+        dist = DISTRIBUTION.get("medium", {})
+        base_total = sum(sum(s.values()) for s in dist.values()) or 1
+        scale = num_questions / base_total
+        for qt, scen_dict in dist.items():
+            for scen, base_count in scen_dict.items():
+                count = int(round(base_count * scale))
+                if count > 0:
+                    pairs.append([qt, scen, count])
+        total = sum(p[2] for p in pairs)
+        if pairs and total != num_questions:
+            pairs[0][2] += num_questions - total
+    else:
+        pairs.append([q_type, "no", num_questions])
+
+    chunk_size = 4000
+    chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)] or [text]
+
+    questions = []
+    chunk_idx = 0
+    num_chunks = len(chunks)
+    for qt, scen, count in pairs:
+        remaining = count
+        while remaining > 0:
+            chunk = chunks[chunk_idx % num_chunks]
+            chunk_idx += 1
+            to_generate = min(remaining, 5)
+            try:
+                data = ai_generate_questions(
+                    provider_name=provider_name,
+                    certification=cert_name,
+                    domain="PDF content",
+                    domain_descr=chunk,
+                    level="medium",
+                    q_type=qt,
+                    practical=scen,
+                    scenario_illustration_type="none",
+                    num_questions=to_generate,
+                )
+                questions.extend(data.get("questions", []))
+                remaining -= len(data.get("questions", []))
+                time.sleep(API_REQUEST_DELAY)
+            except Exception as e:
+                return jsonify({
+                    "status": "error",
+                    "message": str(e),
+                    "json_data": {"questions": questions},
+                }), 500
+
+    session_id = os.urandom(8).hex()
+    SESSIONS[session_id] = {"module_id": module_id, "questions": questions}
+    return jsonify({"status": "ok", "session_id": session_id, "json_data": {"questions": questions}})
 
 # -------------------- Upload / Analyse PDF --------------------
 
