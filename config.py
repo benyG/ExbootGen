@@ -10,6 +10,7 @@ import os
 # ---------------------------------------------------------------------------
 # Database configuration
 # ---------------------------------------------------------------------------
+
 # Values for the database connection are sourced from environment variables to
 # avoid hard-coding credentials.  Each key falls back to an empty string when
 # the corresponding variable is missing so that imports succeed even if the

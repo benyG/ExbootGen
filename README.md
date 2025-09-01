@@ -2,6 +2,7 @@
 
 ## Configuration des variables d'environnement
 
+
 L'application lit plusieurs variables d'environnement pour configurer l'accès à la base de données et à l'API OpenAI ainsi que pour contrôler le taux d'envoi des requêtes. Les variables principales sont :
 
 - `DB_HOST` : adresse du serveur MySQL
