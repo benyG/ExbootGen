@@ -44,6 +44,17 @@ def api_modules(cert_id):
     cur.close(); conn.close()
     return json.dumps(rows, ensure_ascii=False), 200, {'Content-Type':'application/json'}
 
+
+@reloc_bp.route('/api/question_count/<int:module_id>')
+def api_question_count(module_id):
+    """Retourne le nombre de questions restantes dans un module."""
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM questions WHERE module = %s", (module_id,))
+    count = cur.fetchone()[0]
+    cur.close(); conn.close()
+    return json.dumps({'count': count}, ensure_ascii=False), 200, {'Content-Type': 'application/json'}
+
 # -- SSE pour le streaming de la relocalisation --
 @reloc_bp.route('/api/stream_relocate', methods=['GET'])
 def stream_relocate():
@@ -57,22 +68,20 @@ def stream_relocate():
     def generate():
         # 1) Charger la liste des modules de destination (une seule fois)
         conn0 = mysql.connector.connect(**DB_CONFIG)
-        cur0  = conn0.cursor(dictionary=True)
+        cur0 = conn0.cursor(dictionary=True)
         cur0.execute("SELECT id, name FROM modules WHERE course = %s", (dst_cert,))
         modules = cur0.fetchall()
         cur0.close(); conn0.close()
 
-        offset = 0
         total_moved = 0
 
         while True:
-            # 2) Récupérer un batch de questions
+            # 2) Récupérer un batch de questions (toujours les premières restantes)
             conn1 = mysql.connector.connect(**DB_CONFIG)
-            cur1  = conn1.cursor(dictionary=True)
+            cur1 = conn1.cursor(dictionary=True)
             cur1.execute(
-                "SELECT id, text FROM questions WHERE module = %s "
-                "LIMIT %s OFFSET %s",
-                (src_module, batch_size, offset)
+                "SELECT id, text FROM questions WHERE module = %s LIMIT %s",
+                (src_module, batch_size)
             )
             questions = cur1.fetchall()
             cur1.close(); conn1.close()
@@ -150,10 +159,9 @@ def stream_relocate():
             conn2.close()
 
             total_moved += moved
-            offset += batch_size
 
             # 7) Envoi de l’événement SSE pour ce batch
-            yield f"data: Batch offset={offset}, moved={moved}, total={total_moved}\n\n"
+            yield f"data: Batch moved={moved}, total={total_moved}\n\n"
             sleep(0.1)
 
         # 8) Fin du flux
