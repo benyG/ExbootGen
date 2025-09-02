@@ -162,6 +162,8 @@ def stream_relocate():
 
             # 7) Envoi de l’événement SSE pour ce batch
             yield f"data: Batch moved={moved}, total={total_moved}\n\n"
+            if moved == 0:
+                break
             sleep(0.1)
 
         # 8) Fin du flux
