@@ -54,27 +54,46 @@ def _post_with_retry(payload: dict) -> requests.Response:
                 json=payload,
                 timeout=60,
             )
+
+            # Treat 429 and 5xx responses as retryable
             if response.status_code == 429 or 500 <= response.status_code < 600:
                 raise requests.HTTPError(
                     f"HTTP {response.status_code}: {response.text}",
                     response=response,
                 )
+
             response.raise_for_status()
             return response
+
         except requests.HTTPError as e:
             attempt += 1
             if attempt > OPENAI_MAX_RETRIES:
                 raise Exception(f"API Request Error: {e}") from e
-            delay = min(60, (2 ** (attempt - 1))) + random.uniform(0, 1)
+
+            retry_after = getattr(e.response, "headers", {}).get("Retry-After")
+            if retry_after:
+                try:
+                    delay = float(retry_after)
+                except ValueError:
+                    delay = None
+            else:
+                delay = None
+
+            if delay is None:
+                delay = min(60, (2 ** (attempt - 1)))
+
+            delay += random.uniform(0, 1)
             logging.warning(
                 f"OpenAI API call failed (attempt {attempt}/{OPENAI_MAX_RETRIES}). "
                 f"Retrying in {delay:.1f}s."
             )
             time.sleep(delay)
+
         except requests.RequestException as e:
             attempt += 1
             if attempt > OPENAI_MAX_RETRIES:
                 raise Exception(f"API Request Error: {e}") from e
+
             delay = min(60, (2 ** (attempt - 1))) + random.uniform(0, 1)
             logging.warning(
                 f"OpenAI API network error (attempt {attempt}/{OPENAI_MAX_RETRIES}). "
