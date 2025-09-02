@@ -351,6 +351,7 @@ def import_questions():
             maxr = max(2, min(15, len(answers))) if answers else 2
 
             # ----- INSERT question (skip si doublon via UNIQUE) -----
+
             try:
                 cur.execute(
                     """
