@@ -93,36 +93,44 @@
             }, "json");
         });
         
-        // Lancement du processus de population et mise à jour dynamique des logs et compteurs
+        // Lancement du processus de population et suivi temps réel
+        let poller = null;
+        let lastLogIndex = 0;
+        function fetchStatus(){
+            $.get("/populate/status", function(resp){
+                if(resp.log){
+                    for(; lastLogIndex < resp.log.length; lastLogIndex++){
+                        $("#logList").append("<li>" + resp.log[lastLogIndex] + "</li>");
+                    }
+                }
+                if(resp.counters){
+                    $("#analysisResult").text(resp.counters.analysis);
+                    $("#domainCounter").text(resp.counters.domainsProcessed + " / " + resp.counters.totalDomains);
+                    $("#questionCounter").text(resp.counters.totalQuestions);
+                    var percent = 0;
+                    if(resp.counters.totalDomains){
+                        percent = Math.round((resp.counters.domainsProcessed / resp.counters.totalDomains) * 100);
+                    }
+                    $("#progressBarFill").css("width", percent + "%").text(percent + "%");
+                }
+                if(resp.status === "completed" || resp.status === "error"){
+                    clearInterval(poller);
+                }
+            }, "json");
+        }
+
         $("#startPopulate").click(function(){
             $("#logList").empty();
             $("#progressBarFill").css("width", "0%").text("0%");
-            // Réinitialiser les compteurs affichés
             $("#analysisResult").text("En attente...");
             $("#domainCounter").text("0 / 0");
             $("#questionCounter").text("0");
+            lastLogIndex = 0;
             $.post("/populate/process", {
                 provider_id: "{{ provider_id }}",
                 cert_id: "{{ cert_id }}"
-            }, function(response){
-                var logs = response.log;
-                var total = logs.length;
-                var i = 0;
-                if(response.counters) {
-                    $("#analysisResult").text(response.counters.analysis);
-                    $("#domainCounter").text(response.counters.domainsProcessed + " / " + response.counters.totalDomains);
-                    $("#questionCounter").text(response.counters.totalQuestions);
-                }
-                function displayNextLog() {
-                    if (i < total) {
-                        $("#logList").append("<li>" + logs[i] + "</li>");
-                        var percent = Math.round(((i+1) / total) * 100);
-                        $("#progressBarFill").css("width", percent + "%").text(percent + "%");
-                        i++;
-                        setTimeout(displayNextLog, 500);
-                    }
-                }
-                displayNextLog();
+            }, function(){
+                poller = setInterval(fetchStatus, 1000);
             }, "json");
         });
 
