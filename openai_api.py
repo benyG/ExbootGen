@@ -54,27 +54,46 @@ def _post_with_retry(payload: dict) -> requests.Response:
                 json=payload,
                 timeout=60,
             )
+
+            # Treat 429 and 5xx responses as retryable
             if response.status_code == 429 or 500 <= response.status_code < 600:
                 raise requests.HTTPError(
                     f"HTTP {response.status_code}: {response.text}",
                     response=response,
                 )
+
             response.raise_for_status()
             return response
+
         except requests.HTTPError as e:
             attempt += 1
             if attempt > OPENAI_MAX_RETRIES:
                 raise Exception(f"API Request Error: {e}") from e
-            delay = min(60, (2 ** (attempt - 1))) + random.uniform(0, 1)
+
+            retry_after = getattr(e.response, "headers", {}).get("Retry-After")
+            if retry_after:
+                try:
+                    delay = float(retry_after)
+                except ValueError:
+                    delay = None
+            else:
+                delay = None
+
+            if delay is None:
+                delay = min(60, (2 ** (attempt - 1)))
+
+            delay += random.uniform(0, 1)
             logging.warning(
                 f"OpenAI API call failed (attempt {attempt}/{OPENAI_MAX_RETRIES}). "
                 f"Retrying in {delay:.1f}s."
             )
             time.sleep(delay)
+
         except requests.RequestException as e:
             attempt += 1
             if attempt > OPENAI_MAX_RETRIES:
                 raise Exception(f"API Request Error: {e}") from e
+
             delay = min(60, (2 ** (attempt - 1))) + random.uniform(0, 1)
             logging.warning(
                 f"OpenAI API network error (attempt {attempt}/{OPENAI_MAX_RETRIES}). "
@@ -92,7 +111,8 @@ def generate_questions(
     practical: str,
     scenario_illustration_type: str,
     num_questions: int,
-    batch_size: int = 5
+    batch_size: int = 5,
+    use_text: bool = False
  ) -> dict:
     """
     Interroge l'API OpenAI pour générer des questions,
@@ -115,6 +135,7 @@ def generate_questions(
     logging.debug(f"domain: {domain}")
     logging.debug(f"description: {domain_descr}")
     logging.debug(f"level: {level}")
+    scope_phrase = "from the text provided" if use_text else "from the identified domains"
     
    # Always initialize text_for_diagram_type to ensure it's defined.
     text_for_diagram_type = ""
@@ -131,19 +152,19 @@ def generate_questions(
             )
         elif scenario_illustration_type == 'archi':
             specific_question_quality = (
-                "Based on a realistic technical design/architecture integrating concepts from the identified domains. The question aims to assess skills in understanding, design, diagnosis and/or improvement of infrastructure and architecture." 
+                "Based on a realistic technical design/architecture integrating concepts from the identified domains. The question aims to assess skills in understanding, design, diagnosis and/or improvement of infrastructure and architecture."
             )
         elif scenario_illustration_type == 'config':
             specific_question_quality = (
-                "Based on a described Configuration process integrating concepts from the identified domains. the question aims to assess skills in understanding, analysis, diagnosis and/or improvement of a configuration." 
-            )            
+                "Based on a described Configuration process integrating concepts from the identified domains. the question aims to assess skills in understanding, analysis, diagnosis and/or improvement of a configuration."
+            )
         elif scenario_illustration_type == 'console':
             specific_question_quality = (
-                "Based on a realistic console output integrating concepts from the identified domains. the question aims to assess skills in understanding, correction and/or execution of a task using command lines." 
+                "Based on a realistic console output integrating concepts from the identified domains. the question aims to assess skills in understanding, correction and/or execution of a task using command lines."
             )
         elif scenario_illustration_type == 'code':
             specific_question_quality = (
-                "The question aims to assess skills in understanding, correction and/or code writing. A code example may be present or not and integrate concepts from the identified domains." 
+                "The question aims to assess skills in understanding, correction and/or code writing. A code example may be present or not and integrate concepts from the identified domains."
             )
         else:
             specific_question_quality = (
@@ -157,7 +178,7 @@ def generate_questions(
         elif scenario_illustration_type == 'config':
             specific_question_quality = (
                 "Based on a described Configuration process integrating concepts from the identified domains. the question aims to assess skills in understanding, analysis, diagnosis and/or improvement of a configuration. Illustrate the context of the question with a diagram. To do so, provides a detailed textual description of the intended diagram in the 'diagram_descr' key, specifying components, relationships, connection links if it is a network, any relevant annotations. Set the value of 'diagram_type' json key to 'architecture'" #  The type of the diagram can be: architecture"
-            )            
+            )
         elif scenario_illustration_type == 'console':
             specific_question_quality = (
                 "Based on a realistic console output integrating concepts from the identified domains. the question aims to assess skills in understanding, correction and/or execution of a task using command lines. Illustrate the context of the question with a diagram. To do so, provides a detailed textual description of the intended diagram in the 'diagram_descr' key, specifying components, relationships, connection links if it is a network, any relevant annotations. Set the value of 'diagram_type' json key to 'architecture'" # the selected diagram type  The type of the diagram can be: architecture"
@@ -307,6 +328,8 @@ def generate_questions(
         )
         response_format = ""
     
+    specific_question_quality = specific_question_quality.replace("from the identified domains", scope_phrase)
+
     all_questions = []
     remaining = num_questions
 
@@ -314,12 +337,29 @@ def generate_questions(
         current = min(batch_size, remaining)
 
         # Construction du prompt pour ce batch
-        data = {
-            "model": OPENAI_MODEL,
-            "messages": [
-                {
-                    'role': 'user',
-                    'content': f"""
+        if use_text:
+            content_prompt = f"""
+TASK: Use the provided text to generate {current} questions on the {domain} topic of the {certification} course. 
+Provided text: {domain_descr}
+Questions: {question_type_text}
+Difficulty level: {level}: {level_explained}
+Practice: {practical}
+{scenario_illustration_type}
+Reference: Provided text.
+
+{specific_question_quality}
+
+Format your response as a decodable single-line JSON object.
+RESPONSE FORMAT (JSON only, no additional text):
+{response_format}
+
+RULES:
+1. If you want to present a line of code in your response, surround that portion with '[code]...[/code]'. This will help in formatting it.
+2. If you want to present a console command or result in your response, surround that portion with '[console]...[/console]'. This will help in formatting it.
+3. Strictly align questions to the content of the syllabus of the domain selected for the indicated certification.
+"""
+        else:
+            content_prompt = f"""
 TASK: Retrieve the official course content of the domain {domain} of {certification} certification exam and generate {current} questions for that specific domain.
 Main domain description: {domain_descr}
 Questions: {question_type_text}
@@ -339,6 +379,13 @@ RULES:
 2. If you want to present a console command or result in your response, surround that portion with '[console]...[/console]'. This will help in formatting it.
 3. Strictly align questions to the content of the syllabus of the domain selected for the indicated certification.
 """
+
+        data = {
+            "model": OPENAI_MODEL,
+            "messages": [
+                {
+                    'role': 'user',
+                    'content': content_prompt
                 }
             ]
         }

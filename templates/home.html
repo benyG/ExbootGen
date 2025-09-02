@@ -20,6 +20,7 @@
         <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('move.index') }}">Move Questions</a></li>
         <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('reloc.index') }}">Relocate</a></li>
         <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('pdf.index') }}">PDF Importer</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('pdf.generate_index') }}">PDF Generator</a></li>
         <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('quest.index') }}">Manual Import</a></li>
 
       </ul>
@@ -47,6 +48,10 @@
       <a class="block p-6 bg-white rounded shadow hover:shadow-lg" href="{{ url_for('pdf.index') }}">
         <h2 class="text-xl font-semibold mb-2">PDF Importer</h2>
         <p class="text-gray-600">Extract questions directly from PDF files.</p>
+      </a>
+      <a class="block p-6 bg-white rounded shadow hover:shadow-lg" href="{{ url_for('pdf.generate_index') }}">
+        <h2 class="text-xl font-semibold mb-2">PDF Question Generator</h2>
+        <p class="text-gray-600">Use a PDF as source to generate new questions.</p>
       </a>
       <a class="block p-6 bg-white rounded shadow hover:shadow-lg" href="{{ url_for('quest.index') }}">
         <h2 class="text-xl font-semibold mb-2">Manual Question Import</h2>

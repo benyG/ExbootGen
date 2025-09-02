@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Generate Questions from PDF</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    .brand-bg { background-color:#28a745; }
+    .brand-hover:hover { background-color:#218838; }
+    #loadingOverlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); display:none; align-items:center; justify-content:center; z-index:50; }
+    #loadingOverlay.show { display:flex; }
+    .loader { border:8px solid #f3f3f3; border-top:8px solid #28a745; border-radius:50%; width:60px; height:60px; animation:spin 1s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <nav class="brand-bg text-white">
+    <div class="container mx-auto px-4 py-4 flex flex-wrap items-center justify-between">
+      <a href="{{ url_for('home') }}" class="text-2xl font-semibold">ExBoot Laboratory</a>
+      <ul class="flex flex-wrap space-x-4 mt-4 sm:mt-0">
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('populate_index') }}">Populate</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('dom.index') }}">Import Modules</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('move.index') }}">Move Questions</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('reloc.index') }}">Relocate</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('pdf.index') }}">PDF Importer</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('pdf.generate_index') }}">PDF Generator</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('quest.index') }}">Manual Import</a></li>
+      </ul>
+    </div>
+  </nav>
+  <main class="container mx-auto px-4 mt-8">
+    <div class="max-w-3xl mx-auto bg-white p-8 shadow rounded">
+      <h2 class="text-2xl font-bold text-center mb-4">🤖 Generate Questions from PDF</h2>
+      <form id="generateForm" class="space-y-4 mb-4" enctype="multipart/form-data">
+        <div>
+          <label class="font-bold block mb-1">Provider:</label>
+          <select name="provider_id" id="providerSelect" class="w-full border rounded p-2" required></select>
+        </div>
+        <div>
+          <label class="font-bold block mb-1">Certification:</label>
+          <select name="cert_id" id="certSelect" class="w-full border rounded p-2" required></select>
+        </div>
+        <div>
+          <label class="font-bold block mb-1">Domain:</label>
+          <input type="text" id="domainSearch" placeholder="Rechercher..." class="w-full border rounded p-2 mb-2">
+          <select name="domain_id" id="domainSelect" class="w-full border rounded p-2" required></select>
+        </div>
+        <div>
+          <label class="font-bold block mb-1">PDF File:</label>
+          <input type="file" name="pdf_file" id="pdfFile" accept="application/pdf" class="w-full" required>
+        </div>
+        <div>
+          <label class="font-bold block mb-1">Number of questions:</label>
+          <input type="number" name="num_questions" id="numQuestions" min="1" value="5" class="w-full border rounded p-2" required>
+        </div>
+        <div>
+          <label class="font-bold block mb-1">Difficulty level:</label>
+          <select name="level" id="levelSelect" class="w-full border rounded p-2">
+            <option value="easy">Easy</option>
+            <option value="medium" selected>Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </div>
+        <div>
+          <label class="font-bold block mb-1">Scenario type:</label>
+          <select name="scenario" id="scenarioSelect" class="w-full border rounded p-2">
+            <option value="no">No Scenario</option>
+            <option value="scenario">Scenario</option>
+            <option value="scenario-illustrated">Scenario Illustrated</option>
+          </select>
+        </div>
+        <div>
+          <label class="font-bold block mb-1">Scenario illustration:</label>
+          <select name="scenario_illustration_type" id="scenarioIllustration" class="w-full border rounded p-2" disabled>
+            <option value="none">None</option>
+            <option value="case">Case Study</option>
+            <option value="archi">Architecture</option>
+            <option value="config">Configuration</option>
+            <option value="console">Console</option>
+            <option value="code">Code</option>
+          </select>
+        </div>
+        <div>
+          <label class="font-bold block mb-1">Question type:</label>
+          <select name="q_type" id="qType" class="w-full border rounded p-2">
+            <option value="qcm">QCM</option>
+            <option value="truefalse">True/False</option>
+            <option value="short-answer">Short Answer</option>
+            <option value="matching">Matching</option>
+            <option value="drag-n-drop">Drag & Drop</option>
+          </select>
+          <label class="inline-flex items-center mt-2"><input type="checkbox" id="useDistribution" name="use_distribution" class="mr-2">Appliquer la configuration de distribution</label>
+        </div>
+        <button type="submit" id="generateBtn" class="brand-bg text-white w-full py-2 rounded brand-hover">Générer les questions</button>
+      </form>
+      <div id="jsonContainer" class="hidden">
+        <h4 class="text-lg font-bold mb-2">📋 JSON généré</h4>
+        <textarea id="jsonPreview" class="w-full h-72 border rounded p-2 font-mono bg-gray-800 text-gray-100" readonly></textarea>
+        <button id="importBtn" class="brand-bg text-white w-full py-2 rounded mt-3 brand-hover">✅ Importer en BD</button>
+      </div>
+    </div>
+    <div id="loadingOverlay"><div class="loader"></div></div>
+  </main>
+<script>
+function option(text, value) {
+    const o = document.createElement("option");
+    o.textContent = text; o.value = value;
+    return o;
+}
+const base = '{{ url_for('pdf.index') }}';
+const genUrl = '{{ url_for('pdf.generate_questions_from_pdf') }}';
+let currentSession = null;
+
+// Providers -> Certifications -> Domains cascade
+fetch(base + "api/providers").then(r => r.json()).then(data => {
+    const providerSelect = document.getElementById("providerSelect");
+    providerSelect.innerHTML = "";
+    data.forEach(p => providerSelect.appendChild(option(p.name, p.id)));
+    if (data.length > 0) {
+        providerSelect.value = data[0].id;
+        providerSelect.dispatchEvent(new Event("change"));
+    }
+});
+
+document.getElementById("providerSelect").addEventListener("change", function(){
+    const prov_id = this.value;
+    const certSelect = document.getElementById("certSelect");
+    const domSelect = document.getElementById("domainSelect");
+    certSelect.innerHTML = ""; domSelect.innerHTML = "";
+    if (!prov_id) return;
+    fetch(`${base}api/certifications/${prov_id}`).then(r=>r.json()).then(data=>{
+        data.forEach(c => certSelect.appendChild(option(c.name, c.id)));
+        if (data.length>0){ certSelect.value = data[0].id; certSelect.dispatchEvent(new Event("change")); }
+    });
+});
+
+document.getElementById("certSelect").addEventListener("change", function(){
+    const cert_id = this.value;
+    const domSelect = document.getElementById("domainSelect");
+    domSelect.innerHTML = "";
+    if (!cert_id) return;
+    fetch(`${base}api/domains/${cert_id}`).then(r=>r.json()).then(data=>{
+        data.forEach(m => domSelect.appendChild(option(m.name, m.id)));
+    });
+});
+
+// Domain search filter
+const domSearch = document.getElementById('domainSearch');
+domSearch.addEventListener('input', function(){
+    const term = this.value.toLowerCase();
+    const sel = document.getElementById('domainSelect');
+    Array.from(sel.options).forEach(o => { o.hidden = term && !o.text.toLowerCase().includes(term); });
+});
+
+// Toggle inputs when distribution checkbox checked
+const useDist = document.getElementById('useDistribution');
+useDist.addEventListener('change', function(){
+    document.getElementById('qType').disabled = this.checked;
+    document.getElementById('levelSelect').disabled = this.checked;
+    document.getElementById('scenarioSelect').disabled = this.checked;
+    document.getElementById('scenarioIllustration').disabled = this.checked || document.getElementById('scenarioSelect').value === 'no';
+});
+
+// Enable/disable scenario illustration
+const scenarioSelect = document.getElementById('scenarioSelect');
+const scenIllu = document.getElementById('scenarioIllustration');
+scenarioSelect.addEventListener('change', function(){
+    if(this.value === 'no'){
+        scenIllu.value = 'none';
+        scenIllu.disabled = true;
+    } else {
+        scenIllu.disabled = useDist.checked ? true : false;
+    }
+});
+
+// Submit generation form
+document.getElementById("generateForm").addEventListener("submit", async function(e){
+    e.preventDefault();
+    const overlay = document.getElementById('loadingOverlay');
+    overlay.classList.add('show');
+    const formData = new FormData(this);
+    try {
+        const res = await fetch(genUrl, {method:'POST', body:formData});
+        const data = await res.json();
+        if (data.status === 'ok') {
+            currentSession = data.session_id;
+            document.getElementById('jsonPreview').value = JSON.stringify(data.json_data, null, 4);
+            document.getElementById('jsonContainer').classList.remove('hidden');
+        } else {
+            alert('Erreur: ' + (data.message || 'génération impossible'));
+        }
+    } catch(err){
+        alert('Erreur réseau');
+    } finally {
+        overlay.classList.remove('show');
+    }
+});
+
+// Import to DB
+ document.getElementById('importBtn').addEventListener('click', async function(){
+    if(!currentSession) return;
+    const form = new FormData();
+    form.append('session_id', currentSession);
+    const res = await fetch(base + 'import-questions', {method:'POST', body:form});
+    const data = await res.json();
+    alert(data.status === 'ok' ? 'Import réussi' : ('Erreur: ' + (data.message || 'import échoué')));
+ });
+</script>
+</body>
+</html>
