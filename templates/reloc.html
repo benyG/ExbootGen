@@ -73,12 +73,6 @@ async function initPanel(pref, hasModule, defProv=null, defCert=null){
   const s = hasModule && document.getElementById(pref+'-mod-search');
 
   const base = '{{ url_for('reloc.index') }}';
-
-  const provs = await loadJSON(base + 'api/providers');
-  fill(p, provs);
-  p.value = provs.find(x=>x.id===defProv)?.id || provs[0]?.id;
-  p.dispatchEvent(new Event('change'));
-
   p.addEventListener('change', async()=>{
     const cs = await loadJSON(`${base}api/certifications/${p.value}`);
     fill(c, cs);
@@ -91,59 +85,88 @@ async function initPanel(pref, hasModule, defProv=null, defCert=null){
     c.dispatchEvent(new Event('change'));
   });
 
-  if(!m) return;
-
-  s.addEventListener('input', function(){
-    const term = this.value.toLowerCase();
-    Array.from(m.options).forEach(o=>{
-      o.style.display = o.text.toLowerCase().includes(term) ? '' : 'none';
+  if(hasModule){
+    s.addEventListener('input', function(){
+      const term = this.value.toLowerCase();
+      Array.from(m.options).forEach(o=>{
+        o.style.display = o.text.toLowerCase().includes(term) ? '' : 'none';
+      });
     });
-  });
 
-  c.addEventListener('change', async()=>{
-    const ms = await loadJSON(`${base}api/modules/${c.value}`);
-    fill(m, ms);
-    s.value='';
-    s.dispatchEvent(new Event('input'));
-  });
+    c.addEventListener('change', async()=>{
+      const ms = await loadJSON(`${base}api/modules/${c.value}`);
+      fill(m, ms);
+      s.value='';
+      s.dispatchEvent(new Event('input'));
+    });
+  }
+
+  const provs = await loadJSON(base + 'api/providers');
+  fill(p, provs);
+  p.value = provs.find(x=>x.id===defProv)?.id || provs[0]?.id;
+  p.dispatchEvent(new Event('change'));
 }
 
 document.addEventListener('DOMContentLoaded', ()=>{
   initPanel('src', true, 169, 23);
-  initPanel('dst', false);
+  initPanel('dst', false, 169, 23);
 
-  document.getElementById('reloc-btn').onclick = ()=>{
-    const srcMod  = +document.getElementById('src-mod').value;
-    const dstCert = +document.getElementById('dst-cert').value;
-    if(!srcMod || !dstCert) return alert('Sélection manquante');
+  const base = '{{ url_for('reloc.index') }}';
+  const bar  = document.getElementById('bar');
+  const log  = document.getElementById('log');
 
+  async function checkAndRestart(srcMod, dstCert){
+    try{
+      const res = await fetch(`${base}api/question_count/${srcMod}`);
+      const {count} = await res.json();
+      if(count > 0){
+        log.textContent += `Relance automatique - questions restantes: ${count}\n`;
+        startReloc(srcMod, dstCert);
+      } else {
+        log.textContent += 'Relocalisation terminée\n';
+        bar.style.width = '100%';
+      }
+    }catch(e){
+      log.textContent += 'Erreur lors de la vérification du nombre de questions\n';
+    }
+  }
+
+  function startReloc(srcMod, dstCert){
     const params = new URLSearchParams({
       source_module_id:    srcMod,
       destination_cert_id: dstCert,
       batch_size:          10
     });
-    const base = '{{ url_for('reloc.index') }}';
+
     const evt = new EventSource(`${base}api/stream_relocate?${params}`);
-    const bar = document.getElementById('bar'),
-          log = document.getElementById('log');
     let batches = 0;
 
     evt.onmessage = e => {
       log.textContent += e.data + "\n";
-      if(e.data.startsWith('Batch offset')) {
+      if(e.data.startsWith('Batch')){
         batches++;
-        // Si vous connaissez le nombre total de batches, adaptez ici le %
         bar.style.width = Math.min(100, batches*10)+'%';
       }
-      if(e.data.startsWith('DONE') || e.data.startsWith('Aucun')) {
-        bar.style.width = '100%';
+      if(e.data.startsWith('DONE') || e.data.startsWith('Aucun')){
         evt.close();
+        checkAndRestart(srcMod, dstCert);
       }
     };
+
     evt.onerror = () => {
       log.textContent += 'Erreur de connexion SSE\n';
       evt.close();
+      checkAndRestart(srcMod, dstCert);
     };
+  }
+
+  document.getElementById('reloc-btn').onclick = ()=>{
+    const srcMod  = +document.getElementById('src-mod').value;
+    const dstCert = +document.getElementById('dst-cert').value;
+    if(!srcMod || !dstCert) return alert('Sélection manquante');
+    bar.style.width = '0%';
+    log.textContent = '';
+    startReloc(srcMod, dstCert);
   };
 });
 </script>
