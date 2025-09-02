@@ -53,32 +53,32 @@ def extract_text_from_pdf(pdf_path: str,
         return text
 
     # Extraction native via PyMuPDF
-    doc = fitz.open(pdf_path)
-    start_idx = 1 if (skip_first_page and doc.page_count > 0) else 0
-    for i in range(start_idx, doc.page_count):
-        page = doc[i]
-        h = page.rect.height
-        top_cut = h * header_ratio
-        bottom_cut = h * (1.0 - footer_ratio)
+    with fitz.open(pdf_path) as doc:
+        start_idx = 1 if (skip_first_page and doc.page_count > 0) else 0
+        for i in range(start_idx, doc.page_count):
+            page = doc[i]
+            h = page.rect.height
+            top_cut = h * header_ratio
+            bottom_cut = h * (1.0 - footer_ratio)
 
-        # Récupère les blocks et ne garde que ceux entièrement dans la zone "corps"
-        blocks = page.get_text("blocks")  # (x0,y0,x1,y1, text, ...)
-        page_txt_parts = []
-        for b in blocks:
-            if len(b) < 5:
-                continue
-            x0, y0, x1, y1, btxt = b[:5]
-            if y0 >= top_cut and y1 <= bottom_cut and btxt and btxt.strip():
-                page_txt_parts.append(btxt)
+            # Récupère les blocks et ne garde que ceux entièrement dans la zone "corps"
+            blocks = page.get_text("blocks")  # (x0,y0,x1,y1, text, ...)
+            page_txt_parts = []
+            for b in blocks:
+                if len(b) < 5:
+                    continue
+                x0, y0, x1, y1, btxt = b[:5]
+                if y0 >= top_cut and y1 <= bottom_cut and btxt and btxt.strip():
+                    page_txt_parts.append(btxt)
 
-        page_txt = "\n".join(page_txt_parts)
+            page_txt = "\n".join(page_txt_parts)
 
-        # Nettoyage : lignes "Page 3", "3/10", etc.
-        page_txt = re.sub(r"(?im)^\s*(page\s*)?\d+\s*(/\s*\d+)?\s*$", "", page_txt)
-        page_txt = re.sub(r"\n{3,}", "\n\n", page_txt).strip()
+            # Nettoyage : lignes "Page 3", "3/10", etc.
+            page_txt = re.sub(r"(?im)^\s*(page\s*)?\d+\s*(/\s*\d+)?\s*$", "", page_txt)
+            page_txt = re.sub(r"\n{3,}", "\n\n", page_txt).strip()
 
-        if page_txt:
-            text += page_txt + "\n"
+            if page_txt:
+                text += page_txt + "\n"
 
     return text
 
