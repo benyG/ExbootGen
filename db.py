@@ -181,7 +181,7 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
                 query_link = "INSERT INTO quest_ans (question, answer, isok) VALUES (%s, %s, %s)"
                 cursor.execute(query_link, (question_id, answer_id, isok))
         conn.commit()
-        logging.error(f"INSERTION COMPLETED")
+        logging.info("Insertion completed")
     except Exception as e:
         conn.rollback()
         logging.error("Error during insertion: " + str(e))
