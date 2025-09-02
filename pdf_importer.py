@@ -17,7 +17,10 @@ UPLOAD_DIR = BASE_DIR / "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Mémoire légère (session d’analyse)
-SESSIONS = {}  # { session_id: { "domain_id": int, "questions": [...] } }
+# Chaque session stocke l'identifiant du module/domaine sous la clé
+# ``domain_id`` (nouveau flux) ou ``module_id`` (ancien flux /upload-pdf).
+# On gère donc les deux pour rétrocompatibilité.
+SESSIONS = {}  # { session_id: { "domain_id"|"module_id": int, "questions": [...] } }
 
 # -------- Mappings (text -> code BD) --------
 LEVEL_MAP = {"easy": 0, "medium": 1, "hard": 2}
@@ -316,6 +319,16 @@ def import_questions():
     a_imported = 0
     a_reused = 0
 
+    # Récupère l'identifiant du module à utiliser. Anciennes sessions
+    # enregistrent "module_id" tandis que les nouvelles utilisent
+    # "domain_id". On vérifie donc les deux pour éviter les KeyError
+    # mentionnés lors de l'import.
+    module_id = data.get("domain_id")
+    if module_id is None:
+        module_id = data.get("module_id")
+    if module_id is None:
+        return jsonify({"status": "error", "message": "Aucun module/domaine dans la session"}), 400
+
     conn = db_conn()
     try:
         cur = conn.cursor()
@@ -338,13 +351,14 @@ def import_questions():
             maxr = max(2, min(15, len(answers))) if answers else 2
 
             # ----- INSERT question (skip si doublon via UNIQUE) -----
+
             try:
                 cur.execute(
                     """
                     INSERT INTO questions (text, level, descr, nature, ty, maxr, module)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (question_text, q_level_code, None, q_nature_code, q_scenario_code, maxr, data["domain_id"]),
+                    (question_text, q_level_code, None, q_nature_code, q_scenario_code, maxr, module_id),
                 )
                 question_id = cur.lastrowid
                 q_imported += 1
