@@ -27,6 +27,18 @@ app.register_blueprint(quest_bp, url_prefix='/quest')
 pause_event = threading.Event()
 pause_event.set()  # Par défaut, le processus n'est pas en pause.
 
+# Données partagées pour suivre l'état d'avancement de la population
+progress_data = {
+    "status": "idle",
+    "log": [],
+    "counters": {
+        "analysis": "",
+        "domainsProcessed": 0,
+        "totalDomains": 0,
+        "totalQuestions": 0,
+    },
+}
+
 # Définition de l'ordre des niveaux de difficulté
 DIFFICULTY_LEVELS = ["easy", "medium", "hard"]
 
@@ -68,18 +80,21 @@ def get_certifications():
     cert_list = [{"id": cert[0], "name": cert[1]} for cert in certs]
     return jsonify(cert_list)
 
-@app.route("/populate/process", methods=["POST"])
-def populate_process():
-    provider_id = int(request.form.get("provider_id"))
-    cert_id = int(request.form.get("cert_id"))
-    
-    # Récupération des noms provider et certification
+
+def run_population(provider_id, cert_id):
+    """Execute the population process and update ``progress_data`` in real time."""
+    global progress_data
+
     provider_name = next((p[1] for p in db.get_providers() if p[0] == provider_id), None)
     if not provider_name:
-        return jsonify({"status": "error", "log": [f"Provider with id {provider_id} not found."]})
+        progress_data["log"].append(f"Provider with id {provider_id} not found.")
+        progress_data["status"] = "error"
+        return
     cert_name = next((c[1] for c in db.get_certifications_by_provider(provider_id) if c[0] == cert_id), None)
     if not cert_name:
-        return jsonify({"status": "error", "log": [f"Certification with id {cert_id} not found."]})
+        progress_data["log"].append(f"Certification with id {cert_id} not found.")
+        progress_data["status"] = "error"
+        return
 
     # Certification analysis
     try:
@@ -89,75 +104,93 @@ def populate_process():
     except Exception as e:
         analysis = {}
         log_analysis = f"Certification analysis unavailable: {e}"
-    
-    progress_log = [log_analysis]
+
+    progress_data["log"].append(log_analysis)
+    progress_data["counters"]["analysis"] = log_analysis
 
     # Récupérer tous les domaines et leurs noms
     domains = db.get_domains_by_certification(cert_id)
     all_domain_names = [name for (_, name) in domains]
     total_domains = len(domains)
+    progress_data["counters"]["totalDomains"] = total_domains
     domains_processed = 0
 
     for domain_id, domain_name in domains:
         pause_event.wait()
-        progress_log.append(f"[{domain_name}] Domain processing started.")
+        progress_data["log"].append(f"[{domain_name}] Domain processing started.")
         current_total = db.count_total_questions(domain_id)
-        progress_log.append(f"[{domain_name}] Initial question count: {current_total}")
+        progress_data["log"].append(f"[{domain_name}] Initial question count: {current_total}")
 
         if current_total >= TARGET_PER_DOMAIN:
             domains_processed += 1
-            progress_log.append(f"[{domain_name}] Domain already complete (>= {TARGET_PER_DOMAIN} questions).")
+            progress_data["log"].append(
+                f"[{domain_name}] Domain already complete (>= {TARGET_PER_DOMAIN} questions)."
+            )
+            progress_data["counters"]["domainsProcessed"] = domains_processed
+            progress_data["counters"]["totalQuestions"] = sum(
+                db.count_total_questions(d[0]) for d in domains
+            )
             continue
 
-        progress_log.append(f"[{domain_name}] Needs {TARGET_PER_DOMAIN - current_total} additional questions to reach {TARGET_PER_DOMAIN}.")
-        
+        progress_data["log"].append(
+            f"[{domain_name}] Needs {TARGET_PER_DOMAIN - current_total} additional questions to reach {TARGET_PER_DOMAIN}."
+        )
+
         # --- Élaboration par niveau de difficulté ---
         # Traitement EASY si le domaine est vide
         if current_total == 0:
             pause_event.wait()
-            progress_log.append(f"[{domain_name}] Empty domain, using EASY distribution.")
+            progress_data["log"].append(f"[{domain_name}] Empty domain, using EASY distribution.")
             distribution = DISTRIBUTION.get("easy", {})
-            progress_log = process_domain_by_difficulty(
+            progress_data["log"] = process_domain_by_difficulty(
                 domain_id, domain_name, "easy", distribution,
-                provider_name, cert_id, cert_name, analysis, progress_log, all_domain_names
+                provider_name, cert_id, cert_name, analysis, progress_data["log"], all_domain_names
             )
             current_total = db.count_total_questions(domain_id)
-            progress_log.append(f"[{domain_name}] Total after EASY: {current_total}")
-        
+            progress_data["log"].append(f"[{domain_name}] Total after EASY: {current_total}")
+
         # Traitement MEDIUM si nécessaire
         if current_total < TARGET_PER_DOMAIN:
             pause_event.wait()
             needed_total = TARGET_PER_DOMAIN - current_total
-            progress_log.append(f"[{domain_name}] Needs {needed_total} additional questions via MEDIUM.")
+            progress_data["log"].append(
+                f"[{domain_name}] Needs {needed_total} additional questions via MEDIUM."
+            )
             distribution = DISTRIBUTION.get("medium", {})
-            progress_log = process_domain_by_difficulty(
+            progress_data["log"] = process_domain_by_difficulty(
                 domain_id, domain_name, "medium", distribution,
-                provider_name, cert_id, cert_name, analysis, progress_log, all_domain_names
+                provider_name, cert_id, cert_name, analysis, progress_data["log"], all_domain_names
             )
             current_total = db.count_total_questions(domain_id)
-            progress_log.append(f"[{domain_name}] Total after MEDIUM: {current_total}")
-        
+            progress_data["log"].append(f"[{domain_name}] Total after MEDIUM: {current_total}")
+
         # Traitement HARD si toujours nécessaire
         if current_total < TARGET_PER_DOMAIN:
             pause_event.wait()
             needed_total = TARGET_PER_DOMAIN - current_total
-            progress_log.append(f"[{domain_name}] Needs {needed_total} additional questions via HARD.")
+            progress_data["log"].append(
+                f"[{domain_name}] Needs {needed_total} additional questions via HARD."
+            )
             distribution = DISTRIBUTION.get("hard", {})
-            progress_log = process_domain_by_difficulty(
+            progress_data["log"] = process_domain_by_difficulty(
                 domain_id, domain_name, "hard", distribution,
-                provider_name, cert_id, cert_name, analysis, progress_log, all_domain_names
+                provider_name, cert_id, cert_name, analysis, progress_data["log"], all_domain_names
             )
             current_total = db.count_total_questions(domain_id)
-            progress_log.append(f"[{domain_name}] Total after HARD: {current_total}")
-        
+            progress_data["log"].append(f"[{domain_name}] Total after HARD: {current_total}")
+
         # Fallback transverse
         if current_total < TARGET_PER_DOMAIN:
             pause_event.wait()
             needed_total = TARGET_PER_DOMAIN - current_total
-            progress_log.append(f"[{domain_name}] After HARD = {current_total}. Fallback of {needed_total} questions.")
+            progress_data["log"].append(
+                f"[{domain_name}] After HARD = {current_total}. Fallback of {needed_total} questions."
+            )
             practical_val = random.choice(['no', 'scenario'])
             secondaries = pick_secondary_domains(all_domain_names, domain_name)
-            progress_log.append(f"[{domain_name} - FALLBACK] Practical: {practical_val}, Secondary domains: {secondaries}")
+            progress_data["log"].append(
+                f"[{domain_name} - FALLBACK] Practical: {practical_val}, Secondary domains: {secondaries}"
+            )
             if secondaries:
                 domain_arg = f"main domain :{domain_name}; includes context from domains: {', '.join(secondaries)}"
             else:
@@ -183,22 +216,50 @@ def populate_process():
                 )
                 time.sleep(API_REQUEST_DELAY)
                 db.insert_questions(domain_id, questions_data, practical_val)
-                progress_log.append(f"[{domain_name}] {needed_total} fallback questions inserted.")
+                progress_data["log"].append(
+                    f"[{domain_name}] {needed_total} fallback questions inserted."
+                )
             except Exception as e:
-                progress_log.append(f"[{domain_name}] Error during fallback generation: {e}")
-        
+                progress_data["log"].append(
+                    f"[{domain_name}] Error during fallback generation: {e}"
+                )
+
         domains_processed += 1
         final_total = db.count_total_questions(domain_id)
-        progress_log.append(f"[{domain_name}] Domain completed: final total = {final_total} ({domains_processed}/{total_domains}).")
+        progress_data["log"].append(
+            f"[{domain_name}] Domain completed: final total = {final_total} ({domains_processed}/{total_domains})."
+        )
+        progress_data["counters"]["domainsProcessed"] = domains_processed
+        progress_data["counters"]["totalQuestions"] = sum(
+            db.count_total_questions(d[0]) for d in domains
+        )
 
-    progress_log.append(f"Process finished: {domains_processed} domains processed out of {total_domains}.")
-    counters = {
-        "analysis": log_analysis,
-        "domainsProcessed": domains_processed,
-        "totalDomains": total_domains,
-        "totalQuestions": sum(db.count_total_questions(d[0]) for d in domains)
+    progress_data["log"].append(
+        f"Process finished: {domains_processed} domains processed out of {total_domains}."
+    )
+    progress_data["status"] = "completed"
+
+
+@app.route("/populate/process", methods=["POST"])
+def populate_process():
+    provider_id = int(request.form.get("provider_id"))
+    cert_id = int(request.form.get("cert_id"))
+    # Réinitialiser les données de progression
+    progress_data["status"] = "running"
+    progress_data["log"] = []
+    progress_data["counters"] = {
+        "analysis": "",
+        "domainsProcessed": 0,
+        "totalDomains": 0,
+        "totalQuestions": 0,
     }
-    return jsonify({"status": "completed", "log": progress_log, "counters": counters})
+    threading.Thread(target=run_population, args=(provider_id, cert_id), daemon=True).start()
+    return jsonify({"status": "started"})
+
+
+@app.route("/populate/status", methods=["GET"])
+def populate_status():
+    return jsonify(progress_data)
 
 
 def process_domain_by_difficulty(domain_id, domain_name, difficulty, distribution,
