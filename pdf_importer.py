@@ -285,23 +285,9 @@ def upload_pdf():
         file.save(str(save_path))
         pdf_to_read = str(save_path)
     elif file_path:
-        # Only allow paths within the upload directory to avoid arbitrary
-        # file access on the server.  Resolve the requested path and ensure it
-        # is a file located under ``UPLOAD_DIR``.
-        candidate = Path(file_path)
-        if not candidate.is_absolute():
-            candidate = (UPLOAD_DIR / candidate).resolve()
-        else:
-            candidate = candidate.resolve()
-
-        try:
-            candidate.relative_to(UPLOAD_DIR.resolve())
-        except ValueError:
+        if not os.path.isfile(file_path):
             return jsonify({"status": "error", "message": "Fichier introuvable"}), 400
-
-        if not candidate.is_file():
-            return jsonify({"status": "error", "message": "Fichier introuvable"}), 400
-        pdf_to_read = str(candidate)
+        pdf_to_read = file_path
     else:
         return jsonify({"status": "error", "message": "Aucun fichier fourni"}), 400
 
