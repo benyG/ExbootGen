@@ -2,7 +2,7 @@ import time
 import threading
 import random
 from flask import Flask, render_template, request, jsonify
-from config import DISTRIBUTION, API_REQUEST_DELAY
+from config import DISTRIBUTION, API_REQUEST_DELAY, GUI_PASSWORD
 from openai_api import generate_questions, analyze_certif
 from eraser_api import render_diagram
 import db
@@ -375,5 +375,77 @@ def resume_populate():
     pause_event.set()
     return jsonify({"status": "resumed"})
 
+
+def launch_gui():
+    """Display a simple GUI to control the Flask web service.
+
+    A password (configured via ``config.GUI_PASSWORD``) is required before
+    accessing the controls.  Once authenticated, the interface offers buttons to
+    start or stop the web service listening on port 5000.
+    """
+
+    import tkinter as tk
+    from tkinter import messagebox
+    from werkzeug.serving import make_server
+
+    class ServerThread(threading.Thread):
+        """Run the Flask application in a background thread."""
+
+        def __init__(self):
+            super().__init__(daemon=True)
+            self.server = make_server("0.0.0.0", 5000, app)
+
+        def run(self):
+            self.server.serve_forever()
+
+        def shutdown(self):
+            self.server.shutdown()
+
+    root = tk.Tk()
+    root.title("ExbootGen Service")
+
+    server_thread = None
+    status_var = tk.StringVar(value="Stopped")
+
+    def start_service():
+        nonlocal server_thread
+        if server_thread is None:
+            server_thread = ServerThread()
+            server_thread.start()
+            status_var.set("Running")
+        else:
+            messagebox.showinfo("Info", "Service already running")
+
+    def stop_service():
+        nonlocal server_thread
+        if server_thread:
+            server_thread.shutdown()
+            server_thread = None
+            status_var.set("Stopped")
+        else:
+            messagebox.showinfo("Info", "Service not running")
+
+    def authenticate():
+        if password_var.get() == GUI_PASSWORD:
+            login_frame.pack_forget()
+            control_frame.pack(padx=10, pady=10)
+        else:
+            messagebox.showerror("Error", "Invalid password")
+
+    login_frame = tk.Frame(root)
+    tk.Label(login_frame, text="Password:").pack(side="left")
+    password_var = tk.StringVar()
+    tk.Entry(login_frame, textvariable=password_var, show="*").pack(side="left")
+    tk.Button(login_frame, text="Login", command=authenticate).pack(side="left")
+    login_frame.pack(padx=10, pady=10)
+
+    control_frame = tk.Frame(root)
+    tk.Label(control_frame, textvariable=status_var).pack()
+    tk.Button(control_frame, text="Start Service", command=start_service).pack(fill="x")
+    tk.Button(control_frame, text="Stop Service", command=stop_service).pack(fill="x")
+
+    root.mainloop()
+
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    launch_gui()
