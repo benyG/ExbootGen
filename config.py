@@ -38,6 +38,14 @@ OPENAI_MAX_RETRIES = int(os.environ.get("OPENAI_MAX_RETRIES", "5"))
 API_REQUEST_DELAY = float(os.environ.get("API_REQUEST_DELAY", "1"))
 
 # ---------------------------------------------------------------------------
+# GUI authentication
+# ---------------------------------------------------------------------------
+# Password required by the local GUI before the web service can be started.
+# It defaults to ``admin`` but can be overridden via the ``GUI_PASSWORD``
+# environment variable to avoid hard-coding sensitive values in the codebase.
+GUI_PASSWORD = os.environ.get("GUI_PASSWORD", "admin")
+
+# ---------------------------------------------------------------------------
 # Question distribution
 # ---------------------------------------------------------------------------
 # ``DISTRIBUTION`` defines how many questions must be generated for each
