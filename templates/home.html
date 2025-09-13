@@ -22,6 +22,7 @@
         <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('pdf.index') }}">PDF Importer</a></li>
         <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('pdf.generate_index') }}">PDF Generator</a></li>
         <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('quest.index') }}">Manual Import</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('fix.index') }}">AI Fix</a></li>
 
       </ul>
     </div>
@@ -56,6 +57,10 @@
       <a class="block p-6 bg-white rounded shadow hover:shadow-lg" href="{{ url_for('quest.index') }}">
         <h2 class="text-xl font-semibold mb-2">Manual Question Import</h2>
         <p class="text-gray-600">Add questions one by one manually.</p>
+      </a>
+      <a class="block p-6 bg-white rounded shadow hover:shadow-lg" href="{{ url_for('fix.index') }}">
+        <h2 class="text-xl font-semibold mb-2">AI Fix Questions</h2>
+        <p class="text-gray-600">Use AI to complete or correct existing questions.</p>
       </a>
     </div>
   </main>

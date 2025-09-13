@@ -466,3 +466,52 @@ Certification: {certification}
     content = resp_json['choices'][0]['message']['content']
     decoded = clean_and_decode_json(content)
     return decoded
+
+
+def _call_json_api(prompt: str) -> dict:
+    """Helper to call OpenAI chat completion and decode JSON response."""
+    data = {
+        "model": OPENAI_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    response = _post_with_retry(data)
+    resp_json = response.json()
+    if 'choices' not in resp_json or not resp_json['choices']:
+        raise Exception(f"Unexpected API Response: {resp_json}")
+    content = resp_json['choices'][0]['message']['content']
+    return clean_and_decode_json(content)
+
+
+def assign_correct_answers(provider_name: str, certification: str, questions: list) -> dict:
+    """Ask OpenAI to identify correct answers for questions."""
+    prompt = f"""
+You are helping to correct exam questions for the certification {certification} provided by {provider_name}.
+Each question lists possible answers with an associated id. Determine which answers are correct.
+Reply strictly with JSON in the following format and nothing else:
+{{"responses":[{{"question_id":<id>,"answer_ids":[<answer_id>, ...]}}, ...]}}
+Questions:
+{json.dumps(questions, ensure_ascii=False)}
+"""
+    return _call_json_api(prompt)
+
+
+def generate_missing_answers(provider_name: str, certification: str, questions: list, q_type: str) -> dict:
+    """Ask OpenAI to generate answers for drag-n-drop or matching questions."""
+    if q_type == 'matching':
+        instructions = (
+            "For each question provide pairs to match. Each answer must include keys 'value', 'target' and 'isok' (always 1)."
+        )
+    else:
+        instructions = (
+            "For each question provide a list of answers with keys 'value', 'target' and 'isok'."
+            " Use isok=1 for correct items and 0 for distractors."
+        )
+    prompt = f"""
+You are completing {q_type} questions for the certification {certification} provided by {provider_name}.
+{instructions}
+Respond strictly with JSON in the following format and nothing else:
+{{"responses":[{{"question_id":<id>,"answers":[{{"value":"", "target":"", "isok":1}},...]}}]}}
+Questions:
+{json.dumps(questions, ensure_ascii=False)}
+"""
+    return _call_json_api(prompt)
