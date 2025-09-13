@@ -8,6 +8,7 @@ from werkzeug.utils import secure_filename
 from routes_pdf import detect_questions, extract_text_from_pdf, db_conn
 from openai_api import generate_questions
 from config import DISTRIBUTION, API_REQUEST_DELAY
+import db
 
 # -------- Blueprint / Templates --------
 pdf_bp = Blueprint('pdf', __name__)
@@ -288,6 +289,7 @@ def upload_pdf():
         if not os.path.isfile(file_path):
             return jsonify({"status": "error", "message": "Fichier introuvable"}), 400
         pdf_to_read = file_path
+        filename = os.path.basename(file_path)
     else:
         return jsonify({"status": "error", "message": "Aucun fichier fourni"}), 400
 
@@ -303,7 +305,7 @@ def upload_pdf():
     session_id = os.urandom(8).hex()
     SESSIONS[session_id] = data
 
-    return jsonify({"status": "ok", "session_id": session_id, "json_data": data})
+    return jsonify({"status": "ok", "session_id": session_id, "json_data": data, "filename": filename})
 
 # -------------------- Import BD --------------------
 
@@ -314,117 +316,23 @@ def import_questions():
         return jsonify({"status": "error", "message": "Session introuvable"}), 400
 
     data = SESSIONS[session_id]
-    q_imported = 0
-    q_skipped = 0
-    a_imported = 0
-    a_reused = 0
-
-    # Récupère l'identifiant du module à utiliser. Anciennes sessions
-    # enregistrent "module_id" tandis que les nouvelles utilisent
-    # "domain_id". On vérifie donc les deux pour éviter les KeyError
-    # mentionnés lors de l'import.
-    module_id = data.get("domain_id")
-    if module_id is None:
-        module_id = data.get("module_id")
+    module_id = data.get("domain_id") or data.get("module_id")
     if module_id is None:
         return jsonify({"status": "error", "message": "Aucun module/domaine dans la session"}), 400
 
-    conn = db_conn()
+    questions = data.get("questions", [])
+    future = db.execute_async(db.insert_questions, module_id, {"questions": questions}, "no")
     try:
-        cur = conn.cursor()
-
-        for q in data.get("questions", []):
-            # ----- Construire text (context + \n + text) -----
-            base_text = (q.get("text") or "").strip()
-            context   = (q.get("context") or "").strip()
-            question_text = f"{context}\n{base_text}".strip() if context else base_text
-
-            # ----- Convertir level/scenario/nature depuis CHAÎNES -> CODES BD -----
-            q_level_code    = to_level_code(q.get("level", "medium"))
-            q_scenario_code = to_scenario_code(q.get("scenario", "no"))  # 'ty' en BD
-            q_nature_code   = to_nature_code(q.get("nature", "qcm"))
-
-            # ----- Réponses (vider pour HOTSPOT/DRAG DROP) + maxr -----
-            answers = q.get("answers") or []
-            if q_nature_code in (4, 5):          # matching / drag-n-drop
-                answers = []                      # on ignore TOUTES les réponses
-            maxr = max(2, min(15, len(answers))) if answers else 2
-
-            # ----- INSERT question (skip si doublon via UNIQUE) -----
-
-            try:
-                cur.execute(
-                    """
-                    INSERT INTO questions (text, level, descr, nature, ty, maxr, module)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (question_text, q_level_code, None, q_nature_code, q_scenario_code, maxr, module_id),
-                )
-                question_id = cur.lastrowid
-                q_imported += 1
-            except Exception as e:
-                if getattr(e, "errno", None) == 1062:
-                    # ❌ NE PAS faire conn.rollback() ici : ça annule les inserts précédents
-                    q_skipped += 1
-                    continue  # on passe juste à la question suivante
-                raise
-
-            # ----- INSERT answers + quest_ans (réutiliser si doublon) -----
-            for ans in answers:
-                raw_val = (ans.get("value") or ans.get("text") or "").strip()
-                if not raw_val:
-                    continue
-
-                answer_data = {
-                    k: v for k, v in ans.items() if k not in ("isok", "value", "text")
-                }
-                answer_data["value"] = raw_val
-                a_json = json.dumps(answer_data, ensure_ascii=False)[:700]
-                isok = 1 if int(ans.get("isok") or 0) == 1 else 0
-
-                try:
-                    cur.execute("INSERT INTO answers (text) VALUES (%s)", (a_json,))
-                    answer_id = cur.lastrowid
-                    a_imported += 1
-                except Exception as e:
-                    if getattr(e, "errno", None) == 1062:
-                        # déjà présent -> récupérer l'id existant
-                        cur.execute("SELECT id FROM answers WHERE text=%s LIMIT 1", (a_json,))
-                        row = cur.fetchone()
-                        if not row:
-                            # cas pathologique : on saute cette réponse
-                            continue
-                        answer_id = row[0]
-                        a_reused += 1
-                    else:
-                        raise
-
-                # Lien quest_ans (ignore si déjà présent)
-                try:
-                    cur.execute(
-                        "INSERT INTO quest_ans (isok, question, answer) VALUES (%s, %s, %s)",
-                        (isok, question_id, answer_id),
-                    )
-                except Exception as e:
-                    if getattr(e, "errno", None) == 1062:
-                        pass  # paire déjà liée → on ignore
-                    else:
-                        raise
-
-        conn.commit()
+        future.result()
     except Exception as e:
-        conn.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
-    finally:
-        try: cur.close()
-        except Exception: pass
-        conn.close()
 
+    q_count = len(questions)
+    ans_count = sum(len(q.get("answers") or []) for q in questions)
     return jsonify({
         "status": "ok",
-        "imported_questions": q_imported,
-        "skipped_questions": q_skipped,
-        "imported_answers": a_imported,
-        "reused_answers": a_reused
+        "imported_questions": q_count,
+        "skipped_questions": 0,
+        "imported_answers": ans_count,
+        "reused_answers": 0,
     })
-

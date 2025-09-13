@@ -1,6 +1,7 @@
 import mysql.connector
 import logging
 import json
+from concurrent.futures import ThreadPoolExecutor
 from config import DB_CONFIG
 
 # Valeurs de niveau : easy→0, medium→1, hard→2
@@ -9,6 +10,14 @@ level_mapping = {"easy": 0, "medium": 1, "hard": 2}
 # Mapping de type de question et de scénario en codes numériques
 nature_mapping = {"qcm": 1, "truefalse": 2, "short-answer": 3, "matching": 4, "drag-n-drop": 5}
 ty_mapping = {"no": 1, "scenario": 2, "scenario-illustrated": 3}
+
+executor = ThreadPoolExecutor(max_workers=8)
+
+
+def execute_async(func, *args, **kwargs):
+    """Run a database function in a background thread."""
+    return executor.submit(func, *args, **kwargs)
+
 
 def get_connection():
     return mysql.connector.connect(
@@ -135,16 +144,23 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
                 INSERT INTO questions (text, descr, level, module, nature, ty, created_at)
                 VALUES (%s, %s, %s, %s, %s, %s, NOW())
             """
-            cursor.execute(query_question, (
-                question_text,
-                diagram_descr,
-                level_num,
-                domain_id,
-                nature_num,
-                ty_num
-            ))
-            question_id = cursor.lastrowid
-            logging.info(f"Inserted question ID: {question_id}")
+            try:
+                cursor.execute(query_question, (
+                    question_text,
+                    diagram_descr,
+                    level_num,
+                    domain_id,
+                    nature_num,
+                    ty_num
+                ))
+                question_id = cursor.lastrowid
+                logging.info(f"Inserted question ID: {question_id}")
+            except mysql.connector.Error as err:
+                if err.errno == 1062:
+                    logging.info("Duplicate question skipped")
+                    continue
+                else:
+                    raise
 
             # Insertion des réponses
             for answer in question.get("answers", []):
