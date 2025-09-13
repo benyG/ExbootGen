@@ -1,6 +1,7 @@
 import mysql.connector
 import logging
 import json
+from concurrent.futures import ThreadPoolExecutor
 from config import DB_CONFIG
 
 # Valeurs de niveau : easy→0, medium→1, hard→2
@@ -9,6 +10,14 @@ level_mapping = {"easy": 0, "medium": 1, "hard": 2}
 # Mapping de type de question et de scénario en codes numériques
 nature_mapping = {"qcm": 1, "truefalse": 2, "short-answer": 3, "matching": 4, "drag-n-drop": 5}
 ty_mapping = {"no": 1, "scenario": 2, "scenario-illustrated": 3}
+
+executor = ThreadPoolExecutor(max_workers=8)
+
+
+def execute_async(func, *args, **kwargs):
+    """Run a database function in a background thread."""
+    return executor.submit(func, *args, **kwargs)
+
 
 def get_connection():
     return mysql.connector.connect(

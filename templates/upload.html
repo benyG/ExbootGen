@@ -60,7 +60,7 @@
         <button type="submit" id="analyzeBtn" class="brand-bg text-white w-full py-2 rounded brand-hover">Analyser PDF</button>
       </form>
       <div id="jsonContainer" class="hidden">
-        <h4 class="text-lg font-bold mb-2">📋 JSON extrait</h4>
+        <h4 id="jsonTitle" class="text-lg font-bold mb-2">📋 JSON extrait</h4>
         <textarea id="jsonPreview" class="w-full h-72 border rounded p-2 font-mono bg-gray-800 text-gray-100" readonly></textarea>
         <button id="confirmImport" class="brand-bg text-white w-full py-2 rounded mt-3 brand-hover">✅ Confirmer Import</button>
       </div>
@@ -196,6 +196,7 @@ document.getElementById("uploadForm").addEventListener("submit", async function(
         if (data.status === "ok") {
             currentSession = data.session_id;
             document.getElementById("jsonPreview").value = JSON.stringify(data.json_data, null, 4);
+            document.getElementById("jsonTitle").textContent = `📋 JSON extrait (${data.filename})`;
             document.getElementById("jsonContainer").classList.remove("hidden");
         } else {
             alert("Erreur : " + (data.message || "analyse impossible"));
