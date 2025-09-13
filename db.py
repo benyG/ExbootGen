@@ -206,3 +206,123 @@ def get_domains_description_by_certif(cert_id):
     conn.close()
     # On renvoie sous forme de liste de dicts pour plus de clarté
     return [{"id": d[0], "name": d[1], "descr": d[2]} for d in domains]
+
+
+def get_provider_name(provider_id):
+    """Return provider name for given id."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM provs WHERE id=%s", (provider_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return row[0] if row else ""
+
+
+def get_certification_name(cert_id):
+    """Return certification name for given id."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM courses WHERE id=%s", (cert_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return row[0] if row else ""
+
+
+def get_questions_without_correct_answer(cert_id):
+    """Return questions with answers but none marked correct."""
+    conn = get_connection()
+    cur = conn.cursor(dictionary=True)
+    query = (
+        """
+        SELECT q.id AS question_id, q.text, a.id AS answer_id, a.text AS answer_text
+        FROM questions q
+        JOIN quest_ans qa ON qa.question = q.id
+        JOIN answers a ON a.id = qa.answer
+        WHERE q.module IN (SELECT id FROM modules WHERE course = %s)
+          AND NOT EXISTS (
+              SELECT 1 FROM quest_ans qa2 WHERE qa2.question = q.id AND qa2.isok = 1
+          )
+        ORDER BY q.id
+        """
+    )
+    cur.execute(query, (cert_id,))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    questions = {}
+    for r in rows:
+        qid = r["question_id"]
+        if qid not in questions:
+            questions[qid] = {"question_id": qid, "text": r["text"], "answers": []}
+        questions[qid]["answers"].append({"id": r["answer_id"], "text": r["answer_text"]})
+    return list(questions.values())
+
+
+def get_questions_without_answers(cert_id, q_type):
+    """Return questions of given type with no answers."""
+    nature_num = nature_mapping.get(q_type, 0)
+    conn = get_connection()
+    cur = conn.cursor(dictionary=True)
+    query = (
+        """
+        SELECT q.id AS question_id, q.text
+        FROM questions q
+        WHERE q.module IN (SELECT id FROM modules WHERE course = %s)
+          AND q.nature = %s
+          AND NOT EXISTS (SELECT 1 FROM quest_ans qa WHERE qa.question = q.id)
+        """
+    )
+    cur.execute(query, (cert_id, nature_num))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows
+
+
+def mark_correct_answers(question_id, answer_ids):
+    """Mark the provided answers as correct for the question."""
+    if not answer_ids:
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    for aid in answer_ids:
+        cur.execute(
+            "UPDATE quest_ans SET isok=1 WHERE question=%s AND answer=%s",
+            (question_id, aid),
+        )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def add_answers(question_id, answers):
+    """Insert generated answers for a question."""
+    if not answers:
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        for ans in answers:
+            value = (ans.get("value") or "").strip()
+            target = (ans.get("target") or "").strip()
+            answer_data = {"value": value}
+            if target:
+                answer_data["target"] = target
+            a_json = json.dumps(answer_data, ensure_ascii=False)[:700]
+            cur.execute(
+                "INSERT INTO answers (text, created_at) VALUES (%s,NOW())",
+                (a_json,),
+            )
+            ans_id = cur.lastrowid
+            isok = int(ans.get("isok", 0))
+            cur.execute(
+                "INSERT INTO quest_ans (question, answer, isok) VALUES (%s,%s,%s)",
+                (question_id, ans_id, isok),
+            )
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()

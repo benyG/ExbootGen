@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Fix - ExBoot</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    .brand-bg { background-color:#28a745; }
+    .brand-hover:hover { background-color:#218838; }
+  </style>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body class="bg-gray-100">
+  <nav class="brand-bg text-white">
+    <div class="container mx-auto px-4 py-4 flex flex-wrap items-center justify-between">
+      <a href="{{ url_for('home') }}" class="text-2xl font-semibold">ExBoot Laboratory</a>
+      <ul class="flex flex-wrap space-x-4 mt-4 sm:mt-0">
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('populate_index') }}">Populate</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('dom.index') }}">Import Modules</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('move.index') }}">Move Questions</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('reloc.index') }}">Relocate</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('pdf.index') }}">PDF Importer</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('pdf.generate_index') }}">PDF Generator</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('quest.index') }}">Manual Import</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('fix.index') }}">AI Fix</a></li>
+      </ul>
+    </div>
+  </nav>
+  <main class="container mx-auto px-4 mt-12">
+    <div class="max-w-3xl mx-auto p-8 bg-white shadow-xl rounded">
+      <h1 class="text-4xl font-bold text-center mb-8">AI Fix</h1>
+      {% if message %}
+        <p class="mb-4 text-green-700">{{ message }}</p>
+      {% endif %}
+      <form method="POST" class="space-y-6">
+        <div>
+          <label for="provider_id" class="block text-lg font-medium text-gray-700">Provider:</label>
+          <select name="provider_id" id="provider_id" class="mt-1 block w-full rounded border-gray-300 shadow-sm">
+            {% for provider in providers %}
+              <option value="{{ provider[0] }}">{{ provider[1] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="cert_id" class="block text-lg font-medium text-gray-700">Certification:</label>
+          <select name="cert_id" id="cert_id" class="mt-1 block w-full rounded border-gray-300 shadow-sm"></select>
+        </div>
+        <div>
+          <label for="action" class="block text-lg font-medium text-gray-700">Action:</label>
+          <select name="action" id="action" class="mt-1 block w-full rounded border-gray-300 shadow-sm">
+            <option value="assign">Attribuer Réponse juste</option>
+            <option value="drag">Compléter Drag-n-drop</option>
+            <option value="matching">Compléter matching</option>
+          </select>
+        </div>
+        <div>
+          <button type="submit" class="w-full py-3 brand-bg text-white rounded brand-hover transition">Valider</button>
+        </div>
+      </form>
+    </div>
+  </main>
+  <script>
+    $(document).ready(function(){
+      $("#provider_id").change(function(){
+        $.post("{{ url_for('get_certifications') }}", { provider_id: $(this).val() }, function(data){
+          $("#cert_id").empty();
+          $.each(data || [], function(i, item){
+            $("#cert_id").append($("<option>", { value: item.id, text: item.name }));
+          });
+        }, 'json');
+      }).change();
+    });
+  </script>
+</body>
+</html>
