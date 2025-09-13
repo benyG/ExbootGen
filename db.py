@@ -144,16 +144,23 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
                 INSERT INTO questions (text, descr, level, module, nature, ty, created_at)
                 VALUES (%s, %s, %s, %s, %s, %s, NOW())
             """
-            cursor.execute(query_question, (
-                question_text,
-                diagram_descr,
-                level_num,
-                domain_id,
-                nature_num,
-                ty_num
-            ))
-            question_id = cursor.lastrowid
-            logging.info(f"Inserted question ID: {question_id}")
+            try:
+                cursor.execute(query_question, (
+                    question_text,
+                    diagram_descr,
+                    level_num,
+                    domain_id,
+                    nature_num,
+                    ty_num
+                ))
+                question_id = cursor.lastrowid
+                logging.info(f"Inserted question ID: {question_id}")
+            except mysql.connector.Error as err:
+                if err.errno == 1062:
+                    logging.info("Duplicate question skipped")
+                    continue
+                else:
+                    raise
 
             # Insertion des réponses
             for answer in question.get("answers", []):
