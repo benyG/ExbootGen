@@ -323,16 +323,8 @@ def import_questions():
     questions = data.get("questions", [])
     future = db.execute_async(db.insert_questions, module_id, {"questions": questions}, "no")
     try:
-        future.result()
+        stats = future.result()
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-    q_count = len(questions)
-    ans_count = sum(len(q.get("answers") or []) for q in questions)
-    return jsonify({
-        "status": "ok",
-        "imported_questions": q_count,
-        "skipped_questions": 0,
-        "imported_answers": ans_count,
-        "reused_answers": 0,
-    })
+    return jsonify({"status": "ok", **stats})

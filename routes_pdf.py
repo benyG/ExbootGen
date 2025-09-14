@@ -88,7 +88,7 @@ def extract_text_from_pdf(pdf_path: str,
 
 _NEWQ_RE = re.compile(r'(?im)^\s*NEW\s+QUESTION\s+(\d+)\b')  # ancre prioritaire
 _OPT_RE  = re.compile(r'^\s*([A-Oa-o])[\.\)]\s*(.+)$')        # A. / B) / c. ...
-_ANS_RE  = re.compile(r'(?im)\bAnswer\s*:\s*([A-O]|True|False)\b')
+_ANS_RE  = re.compile(r'(?im)^\s*Answer\s*:\s*(.+)$')
 
 def _split_blocks(text: str) -> list[tuple[str, str]]:
     """
@@ -145,7 +145,16 @@ def detect_questions(text: str, module_id: int) -> dict:
     for qnum, raw_block in _split_blocks(text):
         block = _strip_after_explanation(raw_block)
 
-        # Retire toute ligne "Answer: X" (on l'ignore de toute façon)
+        # Extrait la/les réponses correctes (Answer: ...)
+        correct_tokens = set()
+        m_ans = _ANS_RE.search(block)
+        if m_ans:
+            ans_raw = m_ans.group(1)
+            correct_tokens = {
+                tok.strip().upper()
+                for tok in re.findall(r'[A-O]|True|False', ans_raw, re.I)
+            }
+        # Retire la ligne "Answer: ..." du bloc
         block = _ANS_RE.sub("", block).strip()
 
         # Lignes utiles
@@ -203,12 +212,12 @@ def detect_questions(text: str, module_id: int) -> dict:
         if first_opt_idx is None:
             # Heuristique True/False
             has_tf_hint = any(re.search(r'\b(True|False)\b', ln, re.I) for ln in lines)
-            if has_tf_hint:
+            if has_tf_hint or (correct_tokens and correct_tokens.issubset({"TRUE", "FALSE"})):
                 nature = "truefalse"
                 question_text = " ".join(lines).strip()
                 answers = [
-                    {"value": "True",  "target": None, "isok": 0},
-                    {"value": "False", "target": None, "isok": 0},
+                    {"value": "True",  "target": None, "isok": 1 if "TRUE" in correct_tokens else 0},
+                    {"value": "False", "target": None, "isok": 1 if "FALSE" in correct_tokens else 0},
                 ]
             else:
                 # pas exploitable → on ignore
@@ -229,7 +238,8 @@ def detect_questions(text: str, module_id: int) -> dict:
                 if not txt:
                     return
                 clean = txt.replace("*", "").replace("(Correct)", "").strip()
-                answers.append({"value": clean[:700], "target": None, "isok": 0})
+                isok = 1 if cur_letter in correct_tokens else 0
+                answers.append({"value": clean[:700], "target": None, "isok": isok})
                 cur_letter, cur_text_parts = None, []
 
             for l in lines[first_opt_idx:]:
