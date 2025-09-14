@@ -114,6 +114,7 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
 
     conn = get_connection()
     cursor = conn.cursor()
+    q_imported = q_skipped = a_imported = a_reused = 0
     try:
         num_questions = len(questions_json.get("questions", []))
         logging.info(f"Inserting {num_questions} questions into domain {domain_id}.")
@@ -154,10 +155,12 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
                     ty_num
                 ))
                 question_id = cursor.lastrowid
+                q_imported += 1
                 logging.info(f"Inserted question ID: {question_id}")
             except mysql.connector.Error as err:
                 if err.errno == 1062:
                     logging.info("Duplicate question skipped")
+                    q_skipped += 1
                     continue
                 else:
                     raise
@@ -180,6 +183,7 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
                     query_answer = "INSERT INTO answers (text, created_at) VALUES (%s, NOW())"
                     cursor.execute(query_answer, (answer_json,))
                     answer_id = cursor.lastrowid
+                    a_imported += 1
                     logging.info(f"  Inserted answer ID: {answer_id}")
                 except mysql.connector.Error as err:
                     if err.errno == 1062:
@@ -188,6 +192,7 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
                         result = cursor.fetchone()
                         if result:
                             answer_id = result[0]
+                            a_reused += 1
                             logging.info(f"  Duplicate found, using existing answer ID: {answer_id}")
                         else:
                             raise
@@ -198,6 +203,12 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
                 cursor.execute(query_link, (question_id, answer_id, isok))
         conn.commit()
         logging.info("Insertion completed")
+        return {
+            "imported_questions": q_imported,
+            "skipped_questions": q_skipped,
+            "imported_answers": a_imported,
+            "reused_answers": a_reused,
+        }
     except Exception as e:
         conn.rollback()
         logging.error("Error during insertion: " + str(e))
