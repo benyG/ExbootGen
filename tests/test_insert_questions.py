@@ -9,6 +9,7 @@ class FakeCursor:
         self.lastrowid = 0
         self.questions = set()
         self.answers = {}
+        self.quest_ans = set()
         self._select_res = None
     def execute(self, query, params):
         q = query.strip()
@@ -29,7 +30,10 @@ class FakeCursor:
             ans_id = self.answers.get(params[0])
             self._select_res = (ans_id,)
         elif q.startswith("INSERT INTO quest_ans"):
-            pass
+            pair = (params[0], params[1])
+            if pair in self.quest_ans:
+                raise mysql.connector.errors.IntegrityError(msg="dup", errno=1062, sqlstate="23000")
+            self.quest_ans.add(pair)
         else:
             raise NotImplementedError(query)
     def fetchone(self):
@@ -89,6 +93,37 @@ class InsertQuestionsDedupTest(unittest.TestCase):
         self.assertEqual(stats['imported_questions'], 2)
         self.assertEqual(stats['skipped_questions'], 1)
         self.assertEqual(stats['imported_answers'], 3)
+        self.assertEqual(stats['reused_answers'], 1)
+
+    def test_duplicate_answers_same_question(self):
+        questions_json = {
+            "questions": [
+                {
+                    "text": "Q1",
+                    "level": "medium",
+                    "nature": "qcm",
+                    "answers": [
+                        {"value": "A1", "isok": 1},
+                        {"value": "A1"}
+                    ]
+                },
+                {
+                    "text": "Q2",
+                    "level": "medium",
+                    "nature": "qcm",
+                    "answers": [
+                        {"value": "A2"}
+                    ]
+                }
+            ]
+        }
+
+        with patch('db.get_connection', return_value=FakeConnection()):
+            stats = db.insert_questions(1, questions_json, "no")
+
+        self.assertEqual(stats['imported_questions'], 2)
+        self.assertEqual(stats['skipped_questions'], 0)
+        self.assertEqual(stats['imported_answers'], 2)
         self.assertEqual(stats['reused_answers'], 1)
 
 if __name__ == '__main__':

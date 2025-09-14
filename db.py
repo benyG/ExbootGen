@@ -200,7 +200,13 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
                         raise
 
                 query_link = "INSERT INTO quest_ans (question, answer, isok) VALUES (%s, %s, %s)"
-                cursor.execute(query_link, (question_id, answer_id, isok))
+                try:
+                    cursor.execute(query_link, (question_id, answer_id, isok))
+                except mysql.connector.Error as err:
+                    if err.errno == 1062:
+                        logging.info("  Duplicate question-answer link skipped")
+                    else:
+                        raise
         conn.commit()
         logging.info("Insertion completed")
         return {
