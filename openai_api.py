@@ -466,3 +466,67 @@ Certification: {certification}
     content = resp_json['choices'][0]['message']['content']
     decoded = clean_and_decode_json(content)
     return decoded
+
+
+def correct_questions(provider_name: str, cert_name: str, questions: list, mode: str) -> list:
+    """Use OpenAI to correct or complete questions.
+
+    Parameters
+    ----------
+    provider_name: str
+        Name of the certification provider (e.g. "AWS").
+    cert_name: str
+        Name of the certification (e.g. "Solutions Architect").
+    questions: list
+        List of dictionaries describing questions. For ``mode=='assign'`` each
+        dict must contain ``id``, ``text`` and ``answers`` (list of dicts with
+        ``id`` and ``value``). For ``mode`` equal to ``'drag'`` or
+        ``'matching'`` each dict needs ``id`` and ``text``.
+    mode: str
+        One of ``'assign'``, ``'drag'`` or ``'matching'``.
+
+    Returns
+    -------
+    list
+        List of decoded JSON structures returned by the model for each
+        question.
+    """
+
+    results = []
+    for q in questions:
+        if mode == 'assign':
+            answers_desc = "\n".join(
+                f"{a['id']}: {a['value']}" for a in q.get('answers', [])
+            )
+            prompt = f"""You are validating exam questions for the {cert_name} certification from {provider_name}.
+Determine which answers are correct.
+Return JSON only using the following schema:
+{{"question_id": <int>, "answer_ids": [<int>, ...]}}
+
+Question ID: {q['id']}
+Text: {q['text']}
+Answers:\n{answers_desc}
+JSON:"""
+        else:
+            prompt = f"""You are completing exam questions for the {cert_name} certification from {provider_name}.
+Provide answer choices for this {mode} question.
+Return JSON only using the following schema:
+{{"question_id": <int>, "answers": [{{"value": "...", "target": "...", "isok": 1}}, ...]}}
+
+Question ID: {q['id']}
+Text: {q['text']}
+JSON:"""
+
+        payload = {
+            "model": OPENAI_MODEL,
+            "messages": [{"role": "user", "content": prompt}]
+        }
+        response = _post_with_retry(payload)
+        resp_json = response.json()
+        if 'choices' not in resp_json or not resp_json['choices']:
+            raise Exception(f"Unexpected API Response: {resp_json}")
+        message = resp_json['choices'][0].get('message', {})
+        content = message.get('content', '')
+        decoded = clean_and_decode_json(content)
+        results.append(decoded)
+    return results

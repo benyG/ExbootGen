@@ -222,3 +222,102 @@ def get_domains_description_by_certif(cert_id):
     conn.close()
     # On renvoie sous forme de liste de dicts pour plus de clarté
     return [{"id": d[0], "name": d[1], "descr": d[2]} for d in domains]
+
+
+def get_questions_without_correct_answer(cert_id):
+    """Return questions that have answers but none marked as correct."""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    query = """
+        SELECT q.id AS question_id, q.text AS qtext, a.id AS answer_id, a.text AS atext
+        FROM questions q
+        JOIN modules m ON q.module = m.id
+        JOIN quest_ans qa ON qa.question = q.id
+        JOIN answers a ON qa.answer = a.id
+        WHERE m.course = %s
+          AND q.id NOT IN (SELECT question FROM quest_ans WHERE isok = 1)
+        ORDER BY q.id
+    """
+    cursor.execute(query, (cert_id,))
+    rows = cursor.fetchall()
+    cursor.close(); conn.close()
+    questions = {}
+    for row in rows:
+        qid = row['question_id']
+        if qid not in questions:
+            questions[qid] = {"id": qid, "text": row['qtext'], "answers": []}
+        try:
+            ans_text = json.loads(row['atext']).get('value', '')
+        except Exception:
+            ans_text = row['atext']
+        questions[qid]['answers'].append({"id": row['answer_id'], "value": ans_text})
+    return list(questions.values())
+
+
+def get_questions_without_answers_by_nature(cert_id, nature_code):
+    """Return questions of a given nature that currently have no answers."""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    query = """
+        SELECT q.id AS question_id, q.text AS qtext
+        FROM questions q
+        JOIN modules m ON q.module = m.id
+        WHERE m.course = %s AND q.nature = %s
+          AND NOT EXISTS (SELECT 1 FROM quest_ans qa WHERE qa.question = q.id)
+    """
+    cursor.execute(query, (cert_id, nature_code))
+    rows = cursor.fetchall()
+    cursor.close(); conn.close()
+    return [{"id": r['question_id'], "text": r['qtext']} for r in rows]
+
+
+def mark_answers_correct(question_id, answer_ids):
+    """Mark given answers as correct for a question."""
+    if not answer_ids:
+        return
+    conn = get_connection()
+    cursor = conn.cursor()
+    for aid in answer_ids:
+        cursor.execute(
+            "UPDATE quest_ans SET isok = 1 WHERE question = %s AND answer = %s",
+            (question_id, aid),
+        )
+    conn.commit()
+    cursor.close(); conn.close()
+
+
+def add_answers(question_id, answers):
+    """Insert new answers for a question."""
+    if not answers:
+        return
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        for ans in answers:
+            ans_json = json.dumps(
+                {k: v for k, v in ans.items() if k != 'isok'}, ensure_ascii=False
+            )[:700]
+            isok = int(ans.get('isok', 0))
+            try:
+                cursor.execute(
+                    "INSERT INTO answers (text, created_at) VALUES (%s, NOW())",
+                    (ans_json,),
+                )
+                ans_id = cursor.lastrowid
+            except mysql.connector.Error as err:
+                if err.errno == 1062:
+                    cursor.execute(
+                        "SELECT id FROM answers WHERE text = %s", (ans_json,)
+                    )
+                    res = cursor.fetchone()
+                    ans_id = res[0] if res else None
+                else:
+                    raise
+            if ans_id:
+                cursor.execute(
+                    "INSERT INTO quest_ans (question, answer, isok) VALUES (%s,%s,%s)",
+                    (question_id, ans_id, isok),
+                )
+        conn.commit()
+    finally:
+        cursor.close(); conn.close()

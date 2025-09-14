@@ -3,7 +3,7 @@ import threading
 import random
 from flask import Flask, render_template, request, jsonify
 from config import DISTRIBUTION, API_REQUEST_DELAY, GUI_PASSWORD
-from openai_api import generate_questions, analyze_certif
+from openai_api import generate_questions, analyze_certif, correct_questions
 from eraser_api import render_diagram
 import db
 
@@ -75,6 +75,49 @@ def populate_index():
 
 @app.route("/populate/get_certifications", methods=["POST"])
 def get_certifications():
+    provider_id = int(request.form.get("provider_id"))
+    certs = db.get_certifications_by_provider(provider_id)
+    cert_list = [{"id": cert[0], "name": cert[1]} for cert in certs]
+    return jsonify(cert_list)
+
+
+@app.route("/fix", methods=["GET", "POST"])
+def fix_index():
+    if request.method == "POST":
+        provider_id = int(request.form.get("provider_id"))
+        cert_id = int(request.form.get("cert_id"))
+        action = request.form.get("action")
+        provider_name = next((p[1] for p in db.get_providers() if p[0] == provider_id), "")
+        cert_name = next((c[1] for c in db.get_certifications_by_provider(provider_id) if c[0] == cert_id), "")
+
+        if action == "assign":
+            questions = db.get_questions_without_correct_answer(cert_id)
+            results = correct_questions(provider_name, cert_name, questions, "assign")
+            for res in results:
+                db.mark_answers_correct(res.get("question_id"), res.get("answer_ids", []))
+            msg = "Attribuer Réponse juste effectué"
+        elif action == "drag":
+            qlist = db.get_questions_without_answers_by_nature(cert_id, db.nature_mapping['drag-n-drop'])
+            results = correct_questions(provider_name, cert_name, qlist, "drag")
+            for res in results:
+                db.add_answers(res.get("question_id"), res.get("answers", []))
+            msg = "Compléter Drag-n-drop effectué"
+        else:
+            qlist = db.get_questions_without_answers_by_nature(cert_id, db.nature_mapping['matching'])
+            results = correct_questions(provider_name, cert_name, qlist, "matching")
+            for res in results:
+                db.add_answers(res.get("question_id"), res.get("answers", []))
+            msg = "Compléter matching effectué"
+
+        providers = db.get_providers()
+        return render_template("fix.html", providers=providers, result=msg)
+
+    providers = db.get_providers()
+    return render_template("fix.html", providers=providers, result=None)
+
+
+@app.route("/fix/get_certifications", methods=["POST"])
+def fix_get_certifications():
     provider_id = int(request.form.get("provider_id"))
     certs = db.get_certifications_by_provider(provider_id)
     cert_list = [{"id": cert[0], "name": cert[1]} for cert in certs]
