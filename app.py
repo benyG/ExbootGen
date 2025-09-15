@@ -3,7 +3,7 @@ import threading
 import random
 from flask import Flask, render_template, request, jsonify
 from config import DISTRIBUTION, API_REQUEST_DELAY, GUI_PASSWORD
-from openai_api import generate_questions, analyze_certif
+from openai_api import generate_questions, analyze_certif, correct_questions
 from eraser_api import render_diagram
 import db
 
@@ -75,6 +75,137 @@ def populate_index():
 
 @app.route("/populate/get_certifications", methods=["POST"])
 def get_certifications():
+    provider_id = int(request.form.get("provider_id"))
+    certs = db.get_certifications_by_provider(provider_id)
+    cert_list = [{"id": cert[0], "name": cert[1]} for cert in certs]
+    return jsonify(cert_list)
+
+
+@app.route("/fix", methods=["GET", "POST"])
+def fix_index():
+    providers = db.get_providers()
+
+    if request.method == "POST":
+        provider_id = int(request.form.get("provider_id"))
+        cert_id = int(request.form.get("cert_id"))
+        action = request.form.get("action")
+        provider_name = next((p[1] for p in providers if p[0] == provider_id), "")
+        certs = db.get_certifications_by_provider(provider_id)
+        cert_name = next((c[1] for c in certs if c[0] == cert_id), "")
+
+        total_questions = 0
+        remaining_after = 0
+
+        if action == "assign":
+            questions = db.get_questions_without_correct_answer(cert_id)
+            question_ids = {int(q["id"]) for q in questions}
+            total_questions = len(question_ids)
+
+            if total_questions:
+                results = correct_questions(provider_name, cert_name, questions, "assign")
+                for res in results:
+                    try:
+                        qid = int(res.get("question_id"))
+                    except (TypeError, ValueError):
+                        continue
+                    if qid not in question_ids:
+                        continue
+                    answer_ids = res.get("answer_ids", []) or []
+                    try:
+                        normalized_ids = [int(aid) for aid in answer_ids]
+                    except (TypeError, ValueError):
+                        normalized_ids = answer_ids
+                    db.mark_answers_correct(qid, normalized_ids)
+
+                remaining_questions = db.get_questions_without_correct_answer(cert_id)
+                remaining_after = sum(
+                    1 for q in remaining_questions if int(q["id"]) in question_ids
+                )
+                msg = (
+                    "Attribuer Réponse juste effectué"
+                )
+            else:
+                msg = "Aucune question sans réponse correcte détectée"
+
+        elif action == "drag":
+            qlist = db.get_questions_without_answers_by_nature(
+                cert_id, db.nature_mapping['drag-n-drop']
+            )
+            question_ids = {int(q["id"]) for q in qlist}
+            total_questions = len(question_ids)
+
+            if total_questions:
+                results = correct_questions(provider_name, cert_name, qlist, "drag")
+                for res in results:
+                    try:
+                        qid = int(res.get("question_id"))
+                    except (TypeError, ValueError):
+                        continue
+                    if qid not in question_ids:
+                        continue
+                    answers = res.get("answers", []) or []
+                    db.add_answers(qid, answers)
+
+                remaining_questions = db.get_questions_without_answers_by_nature(
+                    cert_id, db.nature_mapping['drag-n-drop']
+                )
+                remaining_after = sum(
+                    1 for q in remaining_questions if int(q["id"]) in question_ids
+                )
+                msg = "Compléter Drag-n-drop effectué"
+            else:
+                msg = "Aucune question drag-n-drop à compléter"
+
+        else:
+            qlist = db.get_questions_without_answers_by_nature(
+                cert_id, db.nature_mapping['matching']
+            )
+            question_ids = {int(q["id"]) for q in qlist}
+            total_questions = len(question_ids)
+
+            if total_questions:
+                results = correct_questions(provider_name, cert_name, qlist, "matching")
+                for res in results:
+                    try:
+                        qid = int(res.get("question_id"))
+                    except (TypeError, ValueError):
+                        continue
+                    if qid not in question_ids:
+                        continue
+                    answers = res.get("answers", []) or []
+                    db.add_answers(qid, answers)
+
+                remaining_questions = db.get_questions_without_answers_by_nature(
+                    cert_id, db.nature_mapping['matching']
+                )
+                remaining_after = sum(
+                    1 for q in remaining_questions if int(q["id"]) in question_ids
+                )
+                msg = "Compléter matching effectué"
+            else:
+                msg = "Aucune question matching à compléter"
+
+        completed = total_questions - remaining_after if total_questions else 0
+        percentage = int(round((completed / total_questions) * 100)) if total_questions else 0
+        progress = {
+            "total": total_questions,
+            "completed": completed,
+            "remaining": remaining_after,
+            "percentage": min(max(percentage, 0), 100),
+        }
+
+        return render_template(
+            "fix.html",
+            providers=providers,
+            result=msg,
+            progress=progress,
+        )
+
+    return render_template("fix.html", providers=providers, result=None, progress=None)
+
+
+@app.route("/fix/get_certifications", methods=["POST"])
+def fix_get_certifications():
     provider_id = int(request.form.get("provider_id"))
     certs = db.get_certifications_by_provider(provider_id)
     cert_list = [{"id": cert[0], "name": cert[1]} for cert in certs]
