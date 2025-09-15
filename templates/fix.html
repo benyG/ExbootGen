@@ -38,39 +38,150 @@
           <label for="provider_id" class="block text-lg font-medium text-gray-700">Provider:</label>
           <select name="provider_id" id="provider_id" class="mt-1 block w-full rounded border-gray-300 shadow-sm">
             {% for provider in providers %}
-              <option value="{{ provider[0] }}">{{ provider[1] }}</option>
+              <option value="{{ provider[0] }}" {% if selected_provider_id == provider[0] %}selected{% endif %}>{{ provider[1] }}</option>
             {% endfor %}
           </select>
         </div>
         <div>
           <label for="cert_id" class="block text-lg font-medium text-gray-700">Certification:</label>
-          <select name="cert_id" id="cert_id" class="mt-1 block w-full rounded border-gray-300 shadow-sm"></select>
+          <select name="cert_id" id="cert_id" class="mt-1 block w-full rounded border-gray-300 shadow-sm" data-selected-cert="{{ selected_cert_id if selected_cert_id is not none else '' }}"></select>
         </div>
         <div>
           <label for="action" class="block text-lg font-medium text-gray-700">Type de traitement:</label>
           <select name="action" id="action" class="mt-1 block w-full rounded border-gray-300 shadow-sm">
-            <option value="assign">Attribuer Réponse juste</option>
-            <option value="drag">Compléter Drag-n-drop</option>
-            <option value="matching">Compléter matching</option>
+            <option value="assign" {% if selected_action == 'assign' %}selected{% endif %}>Attribuer Réponse juste</option>
+            <option value="drag" {% if selected_action == 'drag' %}selected{% endif %}>Compléter Drag-n-drop</option>
+            <option value="matching" {% if selected_action == 'matching' %}selected{% endif %}>Compléter matching</option>
           </select>
         </div>
         <div>
           <button type="submit" class="w-full py-3 brand-bg text-white rounded brand-hover transition">Lancer</button>
         </div>
       </form>
+      <div id="progress-section" class="mt-10 hidden">
+        <div class="flex items-center justify-between text-sm font-semibold text-gray-700 mb-2">
+          <span id="progress-label">Progression : 0%</span>
+          <span id="progress-count">0 corrigée(s) sur 0</span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+          <div id="progress-bar" class="brand-bg h-4 rounded-full transition-all duration-300" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width: 0%"></div>
+        </div>
+        <p id="progress-remaining" class="mt-2 text-sm text-gray-600">Sélectionnez une certification pour afficher la progression.</p>
+      </div>
     </div>
   </main>
 
   <script>
     $(document).ready(function(){
-      $("#provider_id").change(function(){
-        $.post("{{ url_for('fix_get_certifications') }}", { provider_id: $(this).val() }, function(data){
-          $("#cert_id").empty();
-          $.each(data || [], function(i,item){
-            $("#cert_id").append($("<option>", { value: item.id, text: item.name }));
-          });
-        }, "json");
-      }).trigger('change');
+      const $provider = $("#provider_id");
+      const $cert = $("#cert_id");
+      const $action = $("#action");
+      const $progressSection = $("#progress-section");
+      const $progressBar = $("#progress-bar");
+      const $progressLabel = $("#progress-label");
+      const $progressCount = $("#progress-count");
+      const $progressRemaining = $("#progress-remaining");
+      let initialProgress = {{ initial_progress|tojson }};
+
+      function parseValue(val){
+        const num = Number(val);
+        return Number.isFinite(num) ? num : 0;
+      }
+
+      function renderProgress(data){
+        const total = parseValue(data && data.total);
+        const corrected = parseValue(data && data.corrected);
+        const remaining = parseValue(data && data.remaining);
+        const safeCorrected = Math.max(Math.min(corrected, total), 0);
+        const percent = total > 0 ? Math.round((safeCorrected / total) * 100) : 0;
+
+        $progressBar.css("width", percent + "%");
+        $progressBar.attr("aria-valuenow", percent);
+        $progressLabel.text(`Progression : ${percent}%`);
+        $progressCount.text(`${safeCorrected} corrigée(s) sur ${total}`);
+        if (total === 0) {
+          $progressRemaining.text("Aucune question à traiter pour cette sélection.");
+        } else {
+          $progressRemaining.text(`${Math.max(remaining, 0)} question(s) restante(s) à traiter.`);
+        }
+        $progressSection.removeClass("hidden");
+      }
+
+      function clearProgress(){
+        $progressBar.css("width", "0%");
+        $progressBar.attr("aria-valuenow", 0);
+        $progressLabel.text("Progression : 0%");
+        $progressCount.text("0 corrigée(s) sur 0");
+        $progressRemaining.text("Sélectionnez une certification pour afficher la progression.");
+        $progressSection.addClass("hidden");
+      }
+
+      function updateProgress(){
+        const certId = $cert.val();
+        const action = $action.val();
+        if (!certId){
+          clearProgress();
+          return;
+        }
+        $.post("{{ url_for('fix_get_progress') }}", { cert_id: certId, action: action }, function(data){
+          renderProgress(data || {});
+        }, "json").fail(function(){
+          clearProgress();
+        });
+      }
+
+      function loadCertifications(prefillCertId){
+        const providerId = $provider.val();
+        if (!providerId){
+          $cert.empty();
+          clearProgress();
+          return;
+        }
+
+        $.post("{{ url_for('fix_get_certifications') }}", { provider_id: providerId }, function(data){
+          $cert.empty();
+          if (Array.isArray(data) && data.length){
+            $.each(data, function(_, item){
+              $cert.append($("<option>", { value: item.id, text: item.name }));
+            });
+            if (prefillCertId !== undefined && prefillCertId !== null && prefillCertId !== ""){
+              $cert.val(String(prefillCertId));
+            }
+            if (!$cert.val()){
+              $cert.prop("selectedIndex", 0);
+            }
+            const selectedCert = $cert.val();
+            if (initialProgress && prefillCertId && String(prefillCertId) === String(selectedCert)){
+              renderProgress(initialProgress);
+              initialProgress = null;
+            } else {
+              updateProgress();
+            }
+          } else {
+            clearProgress();
+          }
+        }, "json").fail(function(){
+          clearProgress();
+        });
+      }
+
+      $provider.on("change", function(){
+        initialProgress = null;
+        loadCertifications("");
+      });
+
+      $cert.on("change", function(){
+        initialProgress = null;
+        updateProgress();
+      });
+
+      $action.on("change", function(){
+        initialProgress = null;
+        updateProgress();
+      });
+
+      const initialCert = $cert.data("selected-cert");
+      loadCertifications(initialCert);
     });
   </script>
 </body>

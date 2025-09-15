@@ -271,6 +271,41 @@ def get_questions_without_correct_answer(cert_id):
     return list(questions.values())
 
 
+def count_questions_with_answers(cert_id):
+    """Count questions of a certification that already have at least one answer."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT COUNT(DISTINCT q.id)
+        FROM questions q
+        JOIN modules m ON q.module = m.id
+        JOIN quest_ans qa ON qa.question = q.id
+        WHERE m.course = %s
+    """
+    cursor.execute(query, (cert_id,))
+    total = cursor.fetchone()[0] or 0
+    cursor.close(); conn.close()
+    return int(total)
+
+
+def count_questions_missing_correct_answer(cert_id):
+    """Count questions that still have no correct answer assigned."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT COUNT(DISTINCT q.id)
+        FROM questions q
+        JOIN modules m ON q.module = m.id
+        JOIN quest_ans qa ON qa.question = q.id
+        WHERE m.course = %s
+          AND q.id NOT IN (SELECT question FROM quest_ans WHERE isok = 1)
+    """
+    cursor.execute(query, (cert_id,))
+    total = cursor.fetchone()[0] or 0
+    cursor.close(); conn.close()
+    return int(total)
+
+
 def get_questions_without_answers_by_nature(cert_id, nature_code):
     """Return questions of a given nature that currently have no answers."""
     conn = get_connection()
@@ -286,6 +321,39 @@ def get_questions_without_answers_by_nature(cert_id, nature_code):
     rows = cursor.fetchall()
     cursor.close(); conn.close()
     return [{"id": r['question_id'], "text": r['qtext']} for r in rows]
+
+
+def count_questions_by_nature(cert_id, nature_code):
+    """Count questions for a certification filtered by their nature."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT COUNT(*)
+        FROM questions q
+        JOIN modules m ON q.module = m.id
+        WHERE m.course = %s AND q.nature = %s
+    """
+    cursor.execute(query, (cert_id, nature_code))
+    total = cursor.fetchone()[0] or 0
+    cursor.close(); conn.close()
+    return int(total)
+
+
+def count_questions_without_answers_by_nature(cert_id, nature_code):
+    """Count questions of a given nature that still have no answers."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT COUNT(*)
+        FROM questions q
+        JOIN modules m ON q.module = m.id
+        WHERE m.course = %s AND q.nature = %s
+          AND NOT EXISTS (SELECT 1 FROM quest_ans qa WHERE qa.question = q.id)
+    """
+    cursor.execute(query, (cert_id, nature_code))
+    total = cursor.fetchone()[0] or 0
+    cursor.close(); conn.close()
+    return int(total)
 
 
 def mark_answers_correct(question_id, answer_ids):

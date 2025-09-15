@@ -81,39 +81,84 @@ def get_certifications():
     return jsonify(cert_list)
 
 
+def _compute_fix_progress(cert_id, action):
+    if not cert_id:
+        return {"total": 0, "corrected": 0, "remaining": 0}
+
+    if action == "assign":
+        total = db.count_questions_with_answers(cert_id)
+        remaining = db.count_questions_missing_correct_answer(cert_id)
+    elif action == "drag":
+        nature_code = db.nature_mapping['drag-n-drop']
+        total = db.count_questions_by_nature(cert_id, nature_code)
+        remaining = db.count_questions_without_answers_by_nature(cert_id, nature_code)
+    else:
+        nature_code = db.nature_mapping['matching']
+        total = db.count_questions_by_nature(cert_id, nature_code)
+        remaining = db.count_questions_without_answers_by_nature(cert_id, nature_code)
+
+    corrected = max(total - remaining, 0)
+    return {"total": total, "corrected": corrected, "remaining": remaining}
+
+
 @app.route("/fix", methods=["GET", "POST"])
 def fix_index():
+    providers = db.get_providers()
+    provider_lookup = {p[0]: p[1] for p in providers}
+
+    selected_provider_id = providers[0][0] if providers else None
+    selected_cert_id = None
+    selected_action = "assign"
+    result_message = None
+    initial_progress = None
+
     if request.method == "POST":
         provider_id = int(request.form.get("provider_id"))
         cert_id = int(request.form.get("cert_id"))
         action = request.form.get("action")
-        provider_name = next((p[1] for p in db.get_providers() if p[0] == provider_id), "")
-        cert_name = next((c[1] for c in db.get_certifications_by_provider(provider_id) if c[0] == cert_id), "")
+
+        selected_provider_id = provider_id
+        selected_cert_id = cert_id
+        selected_action = action
+
+        provider_name = provider_lookup.get(provider_id, "")
+        certs = db.get_certifications_by_provider(provider_id)
+        cert_lookup = {c[0]: c[1] for c in certs}
+        cert_name = cert_lookup.get(cert_id, "")
 
         if action == "assign":
             questions = db.get_questions_without_correct_answer(cert_id)
             results = correct_questions(provider_name, cert_name, questions, "assign")
             for res in results:
                 db.mark_answers_correct(res.get("question_id"), res.get("answer_ids", []))
-            msg = "Attribuer Réponse juste effectué"
+            result_message = "Attribuer Réponse juste effectué"
         elif action == "drag":
             qlist = db.get_questions_without_answers_by_nature(cert_id, db.nature_mapping['drag-n-drop'])
             results = correct_questions(provider_name, cert_name, qlist, "drag")
             for res in results:
                 db.add_answers(res.get("question_id"), res.get("answers", []))
-            msg = "Compléter Drag-n-drop effectué"
+            result_message = "Compléter Drag-n-drop effectué"
         else:
             qlist = db.get_questions_without_answers_by_nature(cert_id, db.nature_mapping['matching'])
             results = correct_questions(provider_name, cert_name, qlist, "matching")
             for res in results:
                 db.add_answers(res.get("question_id"), res.get("answers", []))
-            msg = "Compléter matching effectué"
+            result_message = "Compléter matching effectué"
 
-        providers = db.get_providers()
-        return render_template("fix.html", providers=providers, result=msg)
+        initial_progress = _compute_fix_progress(cert_id, action)
+    else:
+        if not selected_provider_id:
+            initial_progress = {"total": 0, "corrected": 0, "remaining": 0}
 
-    providers = db.get_providers()
-    return render_template("fix.html", providers=providers, result=None)
+    return render_template(
+        "fix.html",
+        providers=providers,
+        result=result_message,
+        selected_provider_id=selected_provider_id,
+        selected_cert_id=selected_cert_id,
+        selected_action=selected_action,
+        initial_progress=initial_progress,
+    )
 
 
 @app.route("/fix/get_certifications", methods=["POST"])
@@ -122,6 +167,14 @@ def fix_get_certifications():
     certs = db.get_certifications_by_provider(provider_id)
     cert_list = [{"id": cert[0], "name": cert[1]} for cert in certs]
     return jsonify(cert_list)
+
+
+@app.route("/fix/get_progress", methods=["POST"])
+def fix_get_progress():
+    cert_id = request.form.get("cert_id", type=int)
+    action = request.form.get("action", type=str) or "assign"
+    progress = _compute_fix_progress(cert_id, action)
+    return jsonify(progress)
 
 
 def run_population(provider_id, cert_id):
