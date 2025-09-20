@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Reports - ExBoot Laboratory</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    .brand-bg { background-color:#28a745; }
+    .brand-hover:hover { background-color:#218838; }
+    .card { transition: box-shadow 0.2s ease; }
+    .card:hover { box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+    .chevron { transition: transform 0.2s ease; }
+    .collapsed .chevron { transform: rotate(-90deg); }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <nav class="brand-bg text-white">
+    <div class="container mx-auto px-4 py-4 flex flex-wrap items-center justify-between">
+      <a href="{{ url_for('home') }}" class="text-2xl font-semibold">ExBoot Laboratory</a>
+      <ul class="flex flex-wrap space-x-4 mt-4 sm:mt-0">
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('populate_index') }}">Populate</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('dom.index') }}">Import Modules</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('move.index') }}">Move Questions</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('reloc.index') }}">Relocate</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('pdf.index') }}">PDF Importer</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('pdf.generate_index') }}">PDF Generator</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('quest.index') }}">Manual Import</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('fix_index') }}">Fix Questions</a></li>
+        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('reports') }}">Reports</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <main class="container mx-auto px-4 py-10 space-y-6">
+    <header class="text-center">
+      <h1 class="text-4xl font-bold mb-2">Rapports clés</h1>
+      <p class="text-gray-600">Suivez l'état des questions en un clin d'œil. Les données sont chargées en parallèle pour garantir une navigation fluide.</p>
+    </header>
+
+    <section class="bg-white rounded-lg shadow card" data-collapsible>
+      <button type="button" class="w-full flex items-center justify-between px-6 py-4 text-left font-semibold text-lg focus:outline-none">
+        <span>Questions par domaine &mdash; Certification {{ certification_id }}</span>
+        <svg class="chevron w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div class="px-6 pb-6 hidden" data-content>
+        {% if domain_counts %}
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Domaine</th>
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre de questions</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                {% for domain in domain_counts %}
+                <tr>
+                  <td class="px-4 py-2 text-sm text-gray-700">{{ domain.name }}</td>
+                  <td class="px-4 py-2 text-sm text-gray-900 font-semibold">{{ domain.total_questions }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="text-gray-600">Aucune question trouvée pour cette certification.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="bg-white rounded-lg shadow card" data-collapsible>
+      <button type="button" class="w-full flex items-center justify-between px-6 py-4 text-left font-semibold text-lg focus:outline-none">
+        <span>Certifications avec questions sans réponse correcte</span>
+        <svg class="chevron w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div class="px-6 pb-6 hidden" data-content>
+        {% if missing_correct %}
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Certification</th>
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Questions sans réponse correcte</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                {% for cert in missing_correct %}
+                <tr>
+                  <td class="px-4 py-2 text-sm text-gray-700">{{ cert.name }}</td>
+                  <td class="px-4 py-2 text-sm text-gray-900 font-semibold">{{ cert.missing_questions }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="text-gray-600">Toutes les certifications disposent d'au moins une réponse correcte par question.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="bg-white rounded-lg shadow card" data-collapsible>
+      <button type="button" class="w-full flex items-center justify-between px-6 py-4 text-left font-semibold text-lg focus:outline-none">
+        <span>Questions sans réponses par domaine et type</span>
+        <svg class="chevron w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div class="px-6 pb-6 hidden" data-content>
+        {% if missing_answers %}
+          {% set type_labels = {"qcm": "QCM", "drag-n-drop": "Drag & Drop", "matching": "Matching"} %}
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Domaine</th>
+                  {% for key, label in type_labels.items() %}
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{ label }}</th>
+                  {% endfor %}
+                  <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                {% for domain in missing_answers %}
+                <tr>
+                  <td class="px-4 py-2 text-sm text-gray-700">{{ domain.name }}</td>
+                  {% for key, label in type_labels.items() %}
+                  <td class="px-4 py-2 text-sm text-gray-900">{{ domain.counts[key] }}</td>
+                  {% endfor %}
+                  <td class="px-4 py-2 text-sm font-semibold text-gray-900">{{ domain.total }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="text-gray-600">Toutes les questions disposent déjà d'au moins une réponse.</p>
+        {% endif %}
+      </div>
+    </section>
+  </main>
+
+  <script>
+    document.querySelectorAll('[data-collapsible]').forEach(function(card) {
+      const button = card.querySelector('button');
+      const content = card.querySelector('[data-content]');
+      if (!button || !content) return;
+
+      button.addEventListener('click', function() {
+        document.querySelectorAll('[data-collapsible] [data-content]').forEach(function(otherContent) {
+          if (otherContent !== content) {
+            otherContent.classList.add('hidden');
+            otherContent.parentElement.classList.add('collapsed');
+          }
+        });
+        content.classList.toggle('hidden');
+        card.classList.toggle('collapsed', content.classList.contains('hidden'));
+      });
+
+      card.classList.add('collapsed');
+    });
+  </script>
+</body>
+</html>
