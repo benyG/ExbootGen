@@ -77,6 +77,7 @@ def get_domain_question_counts_for_cert(cert_id):
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
+
     results = []
     for row in rows:
         total = int(row[2] or 0)
@@ -84,7 +85,6 @@ def get_domain_question_counts_for_cert(cert_id):
             continue
         results.append({"id": row[0], "name": row[1], "total_questions": total})
     return results
-
 
 def get_certifications_missing_correct_answers():
     """Return certifications that still miss correct answers on questions."""
@@ -149,9 +149,11 @@ def get_domains_missing_answers_by_type():
     conn = get_connection()
     cursor = conn.cursor()
     query = """
+
         SELECT m.id, m.name, c.id, c.name, q.nature, COUNT(*) AS missing_count
         FROM modules m
         JOIN courses c ON c.id = m.course
+
         JOIN questions q ON q.module = m.id
         WHERE NOT EXISTS (
             SELECT 1 FROM quest_ans qa WHERE qa.question = q.id
@@ -170,6 +172,7 @@ def get_domains_missing_answers_by_type():
     conn.close()
 
     results = {}
+
     for domain_id, domain_name, course_id, course_name, nature_code, missing_count in rows:
         domain_entry = results.setdefault(
             domain_id,
