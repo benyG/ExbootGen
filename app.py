@@ -64,6 +64,35 @@ def pick_secondary_domains(all_domains, primary_domain):
 def home():
     return render_template("home.html")
 
+
+@app.route("/reports")
+def reports():
+    certification_id = 23
+
+    futures = {
+        "domain_counts": db.execute_async(db.get_domain_question_counts_for_cert, certification_id),
+        "missing_correct": db.execute_async(db.get_certifications_missing_correct_answers),
+        "missing_correct_domains": db.execute_async(
+            db.get_domains_missing_correct_answers, certification_id
+        ),
+        "missing_answers": db.execute_async(db.get_domains_missing_answers_by_type),
+    }
+
+    domain_counts = futures["domain_counts"].result()
+    missing_correct = futures["missing_correct"].result()
+    missing_correct_domains = futures["missing_correct_domains"].result()
+    missing_answers = futures["missing_answers"].result()
+
+    return render_template(
+        "reports.html",
+        certification_id=certification_id,
+        domain_counts=domain_counts,
+        missing_correct=missing_correct,
+        missing_correct_domains=missing_correct_domains,
+        missing_answers=missing_answers,
+    )
+
+
 @app.route("/populate", methods=["GET", "POST"])
 def populate_index():
     if request.method == "POST":
