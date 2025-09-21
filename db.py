@@ -77,11 +77,14 @@ def get_domain_question_counts_for_cert(cert_id):
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
-    return [
-        {"id": row[0], "name": row[1], "total_questions": int(row[2] or 0)}
-        for row in rows
-    ]
 
+    results = []
+    for row in rows:
+        total = int(row[2] or 0)
+        if total <= 0:
+            continue
+        results.append({"id": row[0], "name": row[1], "total_questions": total})
+    return results
 
 def get_certifications_missing_correct_answers():
     """Return certifications that still miss correct answers on questions."""
@@ -95,6 +98,9 @@ def get_certifications_missing_correct_answers():
         WHERE NOT EXISTS (
             SELECT 1 FROM quest_ans qa WHERE qa.question = q.id AND qa.isok = 1
         )
+          AND EXISTS (
+            SELECT 1 FROM quest_ans qa WHERE qa.question = q.id
+          )
         GROUP BY c.id, c.name
         HAVING missing_questions > 0
         ORDER BY missing_questions DESC, c.name
@@ -109,19 +115,51 @@ def get_certifications_missing_correct_answers():
     ]
 
 
+def get_domains_missing_correct_answers(cert_id):
+    """Return domains of a certification that miss a correct answer on questions."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT m.id, m.name, COUNT(DISTINCT q.id) AS missing_questions
+        FROM modules m
+        JOIN questions q ON q.module = m.id
+        WHERE m.course = %s
+          AND NOT EXISTS (
+            SELECT 1 FROM quest_ans qa WHERE qa.question = q.id AND qa.isok = 1
+          )
+          AND EXISTS (
+            SELECT 1 FROM quest_ans qa WHERE qa.question = q.id
+          )
+        GROUP BY m.id, m.name
+        HAVING missing_questions > 0
+        ORDER BY missing_questions DESC, m.name
+    """
+    cursor.execute(query, (cert_id,))
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [
+        {"id": row[0], "name": row[1], "missing_questions": int(row[2] or 0)}
+        for row in rows
+    ]
+
+
 def get_domains_missing_answers_by_type():
     """Return domains with counts of questions missing answers grouped by type."""
     conn = get_connection()
     cursor = conn.cursor()
     query = """
-        SELECT m.id, m.name, q.nature, COUNT(*) AS missing_count
+
+        SELECT m.id, m.name, c.id, c.name, q.nature, COUNT(*) AS missing_count
         FROM modules m
+        JOIN courses c ON c.id = m.course
+
         JOIN questions q ON q.module = m.id
         WHERE NOT EXISTS (
             SELECT 1 FROM quest_ans qa WHERE qa.question = q.id
         )
           AND q.nature IN (%s, %s, %s)
-        GROUP BY m.id, m.name, q.nature
+        GROUP BY m.id, m.name, c.id, c.name, q.nature
         ORDER BY m.name
     """
     cursor.execute(query, (
@@ -134,12 +172,15 @@ def get_domains_missing_answers_by_type():
     conn.close()
 
     results = {}
-    for domain_id, domain_name, nature_code, missing_count in rows:
+
+    for domain_id, domain_name, course_id, course_name, nature_code, missing_count in rows:
         domain_entry = results.setdefault(
             domain_id,
             {
                 "id": domain_id,
                 "name": domain_name,
+                "certification_id": course_id,
+                "certification_name": course_name,
                 "counts": {"qcm": 0, "matching": 0, "drag-n-drop": 0},
             },
         )
@@ -154,8 +195,10 @@ def get_domains_missing_answers_by_type():
     for domain_entry in results.values():
         domain_entry['total'] = sum(domain_entry['counts'].values())
 
-    # Sort domains by name for consistent display
-    return sorted(results.values(), key=lambda d: d['name'])
+    # Sort domains by certification then name for consistent display
+    return sorted(
+        results.values(), key=lambda d: (d['certification_name'], d['name'])
+    )
 
 
 def count_total_questions(domain_id):
