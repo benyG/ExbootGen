@@ -1,11 +1,57 @@
-import time
-import threading
+import os
 import random
-from flask import Flask, render_template, request, jsonify
-from config import DISTRIBUTION, API_REQUEST_DELAY, GUI_PASSWORD
-from openai_api import generate_questions, analyze_certif, correct_questions
-from eraser_api import render_diagram
+import threading
+import time
+import uuid
+from types import SimpleNamespace
+from typing import Dict, List
+
+try:  # pragma: no cover - optional runtime dependency
+    from celery import Celery  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover - fallback for environments without Celery
+    class _CeleryConfig(SimpleNamespace):
+        def update(self, *_, **kwargs):
+            self.__dict__.update(kwargs)
+
+    class Celery:  # type: ignore
+        def __init__(self, *_, **__):
+            self.conf = _CeleryConfig(task_always_eager=False, task_eager_propagates=True)
+
+        def task(self, bind: bool = False, name: str | None = None):
+            def decorator(func):
+                def apply_async(*, args=None, kwargs=None, task_id=None):
+                    if not getattr(self.conf, "task_always_eager", False):
+                        raise RuntimeError(
+                            "Celery n'est pas installé. Veuillez ajouter la dépendance 'celery' pour l'exécution asynchrone."
+                        )
+                    args = args or ()
+                    kwargs = kwargs or {}
+                    if bind:
+                        request_id = task_id or uuid.uuid4().hex
+                        bound_self = SimpleNamespace(request=SimpleNamespace(id=request_id))
+                        func(bound_self, *args, **kwargs)
+                        return SimpleNamespace(id=request_id, get=lambda: None)
+                    func(*args, **kwargs)
+                    return SimpleNamespace(id=task_id, get=lambda: None)
+
+                func.apply_async = lambda *, args=None, kwargs=None, task_id=None: apply_async(
+                    args=args, kwargs=kwargs, task_id=task_id
+                )
+                return func
+
+            return decorator
+
+        def conf_update(self, **kwargs):
+            self.conf.update(**kwargs)
+
+
+from flask import Flask, jsonify, render_template, request
+
+from config import API_REQUEST_DELAY, DISTRIBUTION, GUI_PASSWORD
 import db
+from eraser_api import render_diagram
+from jobs import JobContext, JobStoreError, create_job_store, initialise_job
+from openai_api import analyze_certif, correct_questions, generate_questions
 
 from dom import dom_bp
 from move import move_bp
@@ -14,30 +60,54 @@ from pdf_importer import pdf_bp
 from quest import quest_bp
 
 # Instanciation de l'application Flask
-app = Flask(__name__, template_folder='templates')
+app = Flask(__name__, template_folder="templates")
+
+
+def _env_flag(name: str, default: str = "0") -> bool:
+    value = os.getenv(name, default)
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def make_celery() -> Celery:
+    """Configure the Celery worker used for heavy workloads."""
+
+    eager = _env_flag("CELERY_TASK_ALWAYS_EAGER")
+
+    broker_url = os.getenv("CELERY_BROKER_URL")
+    result_backend = os.getenv("CELERY_RESULT_BACKEND")
+
+    if eager:
+        broker_url = broker_url or "memory://"
+        result_backend = result_backend or "cache+memory://"
+    else:
+        default_redis = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        broker_url = broker_url or default_redis
+        result_backend = result_backend or broker_url
+
+    celery_app = Celery("exbootgen", broker=broker_url, backend=result_backend)
+    celery_app.conf.update(
+        task_track_started=True,
+        task_serializer="json",
+        result_serializer="json",
+        accept_content=["json"],
+    )
+
+    if eager:
+        celery_app.conf.task_always_eager = True
+        celery_app.conf.task_eager_propagates = True
+
+    return celery_app
+
+
+celery_app = make_celery()
+job_store = create_job_store()
 
 # Enregistrement des blueprints
-app.register_blueprint(dom_bp, url_prefix='/modules')
-app.register_blueprint(move_bp, url_prefix='/move')
-app.register_blueprint(reloc_bp, url_prefix='/reloc')
-app.register_blueprint(pdf_bp, url_prefix='/pdf')
-app.register_blueprint(quest_bp, url_prefix='/quest')
-
-# Objet d'événement pour gérer la pause/reprise du processus.
-pause_event = threading.Event()
-pause_event.set()  # Par défaut, le processus n'est pas en pause.
-
-# Données partagées pour suivre l'état d'avancement de la population
-progress_data = {
-    "status": "idle",
-    "log": [],
-    "counters": {
-        "analysis": "",
-        "domainsProcessed": 0,
-        "totalDomains": 0,
-        "totalQuestions": 0,
-    },
-}
+app.register_blueprint(dom_bp, url_prefix="/modules")
+app.register_blueprint(move_bp, url_prefix="/move")
+app.register_blueprint(reloc_bp, url_prefix="/reloc")
+app.register_blueprint(pdf_bp, url_prefix="/pdf")
+app.register_blueprint(quest_bp, url_prefix="/quest")
 
 # Définition de l'ordre des niveaux de difficulté
 DIFFICULTY_LEVELS = ["easy", "medium", "hard"]
@@ -130,59 +200,24 @@ def _compute_fix_progress(cert_id, action):
     return {"total": total, "corrected": corrected, "remaining": remaining}
 
 
-@app.route("/fix", methods=["GET", "POST"])
+@app.route("/fix", methods=["GET"])
 def fix_index():
     providers = db.get_providers()
-    provider_lookup = {p[0]: p[1] for p in providers}
 
-    selected_provider_id = providers[0][0] if providers else None
-    selected_cert_id = None
-    selected_action = "assign"
-    result_message = None
+    selected_provider_id = request.args.get("provider_id", type=int)
+    selected_cert_id = request.args.get("cert_id", type=int)
+    selected_action = request.args.get("action", default="assign") or "assign"
+
+    if selected_provider_id is None and providers:
+        selected_provider_id = providers[0][0]
+
     initial_progress = None
-
-    if request.method == "POST":
-        provider_id = int(request.form.get("provider_id"))
-        cert_id = int(request.form.get("cert_id"))
-        action = request.form.get("action")
-
-        selected_provider_id = provider_id
-        selected_cert_id = cert_id
-        selected_action = action
-
-        provider_name = provider_lookup.get(provider_id, "")
-        certs = db.get_certifications_by_provider(provider_id)
-        cert_lookup = {c[0]: c[1] for c in certs}
-        cert_name = cert_lookup.get(cert_id, "")
-
-        if action == "assign":
-            questions = db.get_questions_without_correct_answer(cert_id)
-            results = correct_questions(provider_name, cert_name, questions, "assign")
-            for res in results:
-                db.mark_answers_correct(res.get("question_id"), res.get("answer_ids", []))
-            result_message = "Attribuer Réponse juste effectué"
-        elif action == "drag":
-            qlist = db.get_questions_without_answers_by_nature(cert_id, db.nature_mapping['drag-n-drop'])
-            results = correct_questions(provider_name, cert_name, qlist, "drag")
-            for res in results:
-                db.add_answers(res.get("question_id"), res.get("answers", []))
-            result_message = "Compléter Drag-n-drop effectué"
-        else:
-            qlist = db.get_questions_without_answers_by_nature(cert_id, db.nature_mapping['matching'])
-            results = correct_questions(provider_name, cert_name, qlist, "matching")
-            for res in results:
-                db.add_answers(res.get("question_id"), res.get("answers", []))
-            result_message = "Compléter matching effectué"
-
-        initial_progress = _compute_fix_progress(cert_id, action)
-    else:
-        if not selected_provider_id:
-            initial_progress = {"total": 0, "corrected": 0, "remaining": 0}
+    if selected_cert_id is not None:
+        initial_progress = _compute_fix_progress(selected_cert_id, selected_action)
 
     return render_template(
         "fix.html",
         providers=providers,
-        result=result_message,
         selected_provider_id=selected_provider_id,
         selected_cert_id=selected_cert_id,
         selected_action=selected_action,
@@ -206,118 +241,332 @@ def fix_get_progress():
     return jsonify(progress)
 
 
-def run_population(provider_id, cert_id):
-    """Execute the population process and update ``progress_data`` in real time."""
-    global progress_data
+def run_fix(context: JobContext, provider_id: int, cert_id: int, action: str) -> None:
+    """Correct or complete questions for a certification asynchronously."""
 
-    provider_name = next((p[1] for p in db.get_providers() if p[0] == provider_id), None)
+    providers = {pid: name for pid, name in db.get_providers()}
+    provider_name = providers.get(provider_id)
     if not provider_name:
-        progress_data["log"].append(f"Provider with id {provider_id} not found.")
-        progress_data["status"] = "error"
-        return
-    cert_name = next((c[1] for c in db.get_certifications_by_provider(provider_id) if c[0] == cert_id), None)
+        message = f"Provider with id {provider_id} not found."
+        context.log(message)
+        raise ValueError(message)
+
+    certifications = {cid: name for cid, name in db.get_certifications_by_provider(provider_id)}
+    cert_name = certifications.get(cert_id)
     if not cert_name:
-        progress_data["log"].append(f"Certification with id {cert_id} not found.")
-        progress_data["status"] = "error"
+        message = f"Certification with id {cert_id} not found."
+        context.log(message)
+        raise ValueError(message)
+
+    action = action or "assign"
+    context.log(
+        f"Starting fix workflow for provider '{provider_name}', certification '{cert_name}' (action={action})."
+    )
+
+    progress = _compute_fix_progress(cert_id, action)
+    total = progress.get("total", 0) or 0
+    corrected = progress.get("corrected", 0) or 0
+    remaining = progress.get("remaining", 0) or 0
+
+    context.update_counters(
+        total=total,
+        corrected=corrected,
+        remaining=remaining,
+        processed=0,
+        action=action,
+    )
+
+    if remaining <= 0:
+        context.log("Nothing to process for the selected certification.")
         return
+
+    if action == "assign":
+        questions = db.get_questions_without_correct_answer(cert_id)
+
+        def _apply_result(result):
+            answer_ids = result.get("answer_ids", [])
+            db.mark_answers_correct(result.get("question_id"), answer_ids)
+            return bool(answer_ids)
+
+        task_label = "Attribuer les réponses correctes"
+    elif action == "drag":
+        questions = db.get_questions_without_answers_by_nature(
+            cert_id, db.nature_mapping['drag-n-drop']
+        )
+
+        def _apply_result(result):
+            answers = result.get("answers", [])
+            db.add_answers(result.get("question_id"), answers)
+            return bool(answers)
+
+        task_label = "Compléter les questions drag-n-drop"
+    else:
+        questions = db.get_questions_without_answers_by_nature(
+            cert_id, db.nature_mapping['matching']
+        )
+
+        def _apply_result(result):
+            answers = result.get("answers", [])
+            db.add_answers(result.get("question_id"), answers)
+            return bool(answers)
+
+        task_label = "Compléter les questions matching"
+
+    total_to_process = len(questions)
+    context.log(f"{total_to_process} question(s) à traiter.")
+
+    processed = 0
+    for index, question in enumerate(questions, start=1):
+        context.wait_if_paused()
+        qid = question.get("id")
+        context.log(f"[{index}/{total_to_process}] Traitement de la question {qid}.")
+        try:
+            responses = correct_questions(provider_name, cert_name, [question], action)
+        except Exception as exc:  # pragma: no cover - propagated to Celery
+            context.log(f"Erreur lors de l'appel OpenAI pour la question {qid}: {exc}")
+            continue
+
+        if not responses:
+            context.log(f"Aucune réponse obtenue pour la question {qid}.")
+            continue
+
+        result = responses[0] or {}
+        try:
+            updated = _apply_result(result)
+        except Exception as exc:  # pragma: no cover - DB errors surfaced in logs
+            context.log(f"Erreur base de données pour la question {qid}: {exc}")
+            continue
+
+        processed += 1
+        if updated:
+            corrected = min(total, corrected + 1) if total else corrected + 1
+            remaining = max(remaining - 1, 0)
+            context.log(f"Question {qid} mise à jour.")
+        else:
+            context.log(f"Aucune modification enregistrée pour la question {qid}.")
+        context.update_counters(
+            total=total,
+            corrected=corrected,
+            remaining=remaining,
+            processed=processed,
+        )
+        time.sleep(API_REQUEST_DELAY)
+
+    context.log(f"{task_label} terminé : {processed} question(s) traitée(s).")
+
+
+@celery_app.task(bind=True, name="fix.run")
+def run_fix_job(self, provider_id: int, cert_id: int, action: str) -> None:
+    """Celery task wrapper for :func:`run_fix`."""
+
+    job_id = self.request.id
+    context = JobContext(job_store, job_id)
+
+    try:
+        job_store.set_status(job_id, "running")
+    except JobStoreError:
+        initialise_job(
+            job_store,
+            job_id=job_id,
+            description="fix-certification",
+            metadata={
+                "provider_id": provider_id,
+                "cert_id": cert_id,
+                "action": action,
+            },
+        )
+        job_store.set_status(job_id, "running")
+
+    try:
+        run_fix(context, provider_id, cert_id, action)
+    except Exception as exc:  # pragma: no cover - propagated to Celery
+        context.set_status("failed", error=str(exc))
+        raise
+    else:
+        context.set_status("completed")
+
+
+@app.route("/fix/process", methods=["POST"])
+def fix_process():
+    provider_id = request.form.get("provider_id", type=int)
+    cert_id = request.form.get("cert_id", type=int)
+    action = request.form.get("action", type=str) or "assign"
+
+    if provider_id is None or cert_id is None:
+        return jsonify({"error": "provider_id and cert_id are required"}), 400
+
+    job_id = initialise_job(
+        job_store,
+        job_id=uuid.uuid4().hex,
+        description="fix-certification",
+        metadata={"provider_id": provider_id, "cert_id": cert_id, "action": action},
+    )
+
+    run_fix_job.apply_async(args=(provider_id, cert_id, action), task_id=job_id)
+    return jsonify({"status": "queued", "job_id": job_id})
+
+
+@app.route("/fix/status/<job_id>", methods=["GET"])
+def fix_status(job_id):
+    data = job_store.get_status(job_id)
+    if data is None:
+        return jsonify({"error": "unknown job id"}), 404
+    return jsonify(data)
+
+
+def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
+    """Execute the population process for a certification."""
+
+    providers = {pid: name for pid, name in db.get_providers()}
+    provider_name = providers.get(provider_id)
+    if not provider_name:
+        message = f"Provider with id {provider_id} not found."
+        context.log(message)
+        raise ValueError(message)
+
+    certifications = {cid: name for cid, name in db.get_certifications_by_provider(provider_id)}
+    cert_name = certifications.get(cert_id)
+    if not cert_name:
+        message = f"Certification with id {cert_id} not found."
+        context.log(message)
+        raise ValueError(message)
+
+    context.update_counters(
+        analysis="",
+        domainsProcessed=0,
+        totalDomains=0,
+        totalQuestions=0,
+    )
 
     # Certification analysis
     try:
         analysis_result = analyze_certif(provider_name, cert_name)
         analysis = {k: str(v).strip('"') for d in analysis_result for k, v in d.items()}
         log_analysis = f"Certification analysis: {analysis}"
-    except Exception as e:
+    except Exception as exc:
         analysis = {}
-        log_analysis = f"Certification analysis unavailable: {e}"
+        log_analysis = f"Certification analysis unavailable: {exc}"
 
-    progress_data["log"].append(log_analysis)
-    progress_data["counters"]["analysis"] = log_analysis
+    context.log(log_analysis)
+    context.update_counters(analysis=log_analysis)
 
     # Récupérer tous les domaines et leurs noms
     domains = db.get_domains_by_certification(cert_id)
     all_domain_names = [name for (_, name) in domains]
     total_domains = len(domains)
-    progress_data["counters"]["totalDomains"] = total_domains
+    context.update_counters(totalDomains=total_domains)
+
+    domain_descriptions = {
+        item["id"]: item["descr"]
+        for item in db.get_domains_description_by_certif(cert_id)
+    }
+
     domains_processed = 0
 
     for domain_id, domain_name in domains:
-        pause_event.wait()
-        progress_data["log"].append(f"[{domain_name}] Domain processing started.")
+        context.wait_if_paused()
+        context.log(f"[{domain_name}] Domain processing started.")
         current_total = db.count_total_questions(domain_id)
-        progress_data["log"].append(f"[{domain_name}] Initial question count: {current_total}")
+        context.log(f"[{domain_name}] Initial question count: {current_total}")
 
         if current_total >= TARGET_PER_DOMAIN:
             domains_processed += 1
-            progress_data["log"].append(
+            context.log(
                 f"[{domain_name}] Domain already complete (>= {TARGET_PER_DOMAIN} questions)."
             )
-            progress_data["counters"]["domainsProcessed"] = domains_processed
-            progress_data["counters"]["totalQuestions"] = sum(
-                db.count_total_questions(d[0]) for d in domains
+            context.update_counters(
+                domainsProcessed=domains_processed,
+                totalQuestions=sum(db.count_total_questions(d[0]) for d in domains),
             )
             continue
 
-        progress_data["log"].append(
+        context.log(
             f"[{domain_name}] Needs {TARGET_PER_DOMAIN - current_total} additional questions to reach {TARGET_PER_DOMAIN}."
         )
 
         # --- Élaboration par niveau de difficulté ---
         # Traitement EASY si le domaine est vide
         if current_total == 0:
-            pause_event.wait()
-            progress_data["log"].append(f"[{domain_name}] Empty domain, using EASY distribution.")
+            context.wait_if_paused()
+            context.log(f"[{domain_name}] Empty domain, using EASY distribution.")
             distribution = DISTRIBUTION.get("easy", {})
-            progress_data["log"] = process_domain_by_difficulty(
-                domain_id, domain_name, "easy", distribution,
-                provider_name, cert_id, cert_name, analysis, progress_data["log"], all_domain_names
+            process_domain_by_difficulty(
+                context,
+                domain_id,
+                domain_name,
+                "easy",
+                distribution,
+                provider_name,
+                cert_name,
+                analysis,
+                all_domain_names,
+                domain_descriptions,
             )
             current_total = db.count_total_questions(domain_id)
-            progress_data["log"].append(f"[{domain_name}] Total after EASY: {current_total}")
+            context.log(f"[{domain_name}] Total after EASY: {current_total}")
 
         # Traitement MEDIUM si nécessaire
         if current_total < TARGET_PER_DOMAIN:
-            pause_event.wait()
+            context.wait_if_paused()
             needed_total = TARGET_PER_DOMAIN - current_total
-            progress_data["log"].append(
+            context.log(
                 f"[{domain_name}] Needs {needed_total} additional questions via MEDIUM."
             )
             distribution = DISTRIBUTION.get("medium", {})
-            progress_data["log"] = process_domain_by_difficulty(
-                domain_id, domain_name, "medium", distribution,
-                provider_name, cert_id, cert_name, analysis, progress_data["log"], all_domain_names
+            process_domain_by_difficulty(
+                context,
+                domain_id,
+                domain_name,
+                "medium",
+                distribution,
+                provider_name,
+                cert_name,
+                analysis,
+                all_domain_names,
+                domain_descriptions,
             )
             current_total = db.count_total_questions(domain_id)
-            progress_data["log"].append(f"[{domain_name}] Total after MEDIUM: {current_total}")
+            context.log(f"[{domain_name}] Total after MEDIUM: {current_total}")
 
         # Traitement HARD si toujours nécessaire
         if current_total < TARGET_PER_DOMAIN:
-            pause_event.wait()
+            context.wait_if_paused()
             needed_total = TARGET_PER_DOMAIN - current_total
-            progress_data["log"].append(
+            context.log(
                 f"[{domain_name}] Needs {needed_total} additional questions via HARD."
             )
             distribution = DISTRIBUTION.get("hard", {})
-            progress_data["log"] = process_domain_by_difficulty(
-                domain_id, domain_name, "hard", distribution,
-                provider_name, cert_id, cert_name, analysis, progress_data["log"], all_domain_names
+            process_domain_by_difficulty(
+                context,
+                domain_id,
+                domain_name,
+                "hard",
+                distribution,
+                provider_name,
+                cert_name,
+                analysis,
+                all_domain_names,
+                domain_descriptions,
             )
             current_total = db.count_total_questions(domain_id)
-            progress_data["log"].append(f"[{domain_name}] Total after HARD: {current_total}")
+            context.log(f"[{domain_name}] Total after HARD: {current_total}")
 
         # Fallback transverse
         if current_total < TARGET_PER_DOMAIN:
-            pause_event.wait()
+            context.wait_if_paused()
             needed_total = TARGET_PER_DOMAIN - current_total
-            progress_data["log"].append(
+            context.log(
                 f"[{domain_name}] After HARD = {current_total}. Fallback of {needed_total} questions."
             )
             practical_val = random.choice(['no', 'scenario'])
             secondaries = pick_secondary_domains(all_domain_names, domain_name)
-            progress_data["log"].append(
+            context.log(
                 f"[{domain_name} - FALLBACK] Practical: {practical_val}, Secondary domains: {secondaries}"
             )
             if secondaries:
-                domain_arg = f"main domain :{domain_name}; includes context from domains: {', '.join(secondaries)}"
+                domain_arg = (
+                    f"main domain :{domain_name}; includes context from domains: {', '.join(secondaries)}"
+                )
             else:
                 domain_arg = domain_name
             if practical_val == 'scenario':
@@ -326,8 +575,7 @@ def run_population(provider_id, cert_id):
             else:
                 scenario_illu_val = 'none'
             try:
-                domain_info = db.get_domains_description_by_certif(cert_id)
-                desc = next(d["descr"] for d in domain_info if d["id"] == domain_id)
+                desc = domain_descriptions.get(domain_id, "")
                 questions_data = generate_questions(
                     provider_name=provider_name,
                     certification=cert_name,
@@ -337,62 +585,98 @@ def run_population(provider_id, cert_id):
                     q_type="qcm",
                     practical=practical_val,
                     scenario_illustration_type=scenario_illu_val,
-                    num_questions=needed_total
+                    num_questions=needed_total,
                 )
                 time.sleep(API_REQUEST_DELAY)
                 db.insert_questions(domain_id, questions_data, practical_val)
-                progress_data["log"].append(
+                context.log(
                     f"[{domain_name}] {needed_total} fallback questions inserted."
                 )
-            except Exception as e:
-                progress_data["log"].append(
-                    f"[{domain_name}] Error during fallback generation: {e}"
+            except Exception as exc:
+                context.log(
+                    f"[{domain_name}] Error during fallback generation: {exc}"
                 )
 
         domains_processed += 1
         final_total = db.count_total_questions(domain_id)
-        progress_data["log"].append(
+        context.log(
             f"[{domain_name}] Domain completed: final total = {final_total} ({domains_processed}/{total_domains})."
         )
-        progress_data["counters"]["domainsProcessed"] = domains_processed
-        progress_data["counters"]["totalQuestions"] = sum(
-            db.count_total_questions(d[0]) for d in domains
+        context.update_counters(
+            domainsProcessed=domains_processed,
+            totalQuestions=sum(db.count_total_questions(d[0]) for d in domains),
         )
 
-    progress_data["log"].append(
+    context.log(
         f"Process finished: {domains_processed} domains processed out of {total_domains}."
     )
-    progress_data["status"] = "completed"
+
+
+@celery_app.task(bind=True, name="population.run")
+def run_population_job(self, provider_id: int, cert_id: int) -> None:
+    """Celery task wrapper for :func:`run_population`."""
+
+    job_id = self.request.id
+    context = JobContext(job_store, job_id)
+
+    try:
+        job_store.set_status(job_id, "running")
+    except JobStoreError:
+        initialise_job(
+            job_store,
+            job_id=job_id,
+            description="populate-certification",
+            metadata={"provider_id": provider_id, "cert_id": cert_id},
+        )
+        job_store.set_status(job_id, "running")
+
+    try:
+        run_population(context, provider_id, cert_id)
+    except Exception as exc:  # pragma: no cover - propagated to Celery
+        context.set_status("failed", error=str(exc))
+        raise
+    else:
+        context.set_status("completed")
 
 
 @app.route("/populate/process", methods=["POST"])
 def populate_process():
     provider_id = int(request.form.get("provider_id"))
     cert_id = int(request.form.get("cert_id"))
-    # Réinitialiser les données de progression
-    progress_data["status"] = "running"
-    progress_data["log"] = []
-    progress_data["counters"] = {
-        "analysis": "",
-        "domainsProcessed": 0,
-        "totalDomains": 0,
-        "totalQuestions": 0,
-    }
-    threading.Thread(target=run_population, args=(provider_id, cert_id), daemon=True).start()
-    return jsonify({"status": "started"})
+
+    job_id = initialise_job(
+        job_store,
+        job_id=uuid.uuid4().hex,
+        description="populate-certification",
+        metadata={"provider_id": provider_id, "cert_id": cert_id},
+    )
+
+    run_population_job.apply_async(args=(provider_id, cert_id), task_id=job_id)
+    return jsonify({"status": "queued", "job_id": job_id})
 
 
-@app.route("/populate/status", methods=["GET"])
-def populate_status():
-    return jsonify(progress_data)
+@app.route("/populate/status/<job_id>", methods=["GET"])
+def populate_status(job_id):
+    data = job_store.get_status(job_id)
+    if data is None:
+        return jsonify({"error": "unknown job id"}), 404
+    return jsonify(data)
 
 
-def process_domain_by_difficulty(domain_id, domain_name, difficulty, distribution,
-                                 provider_name, cert_id, cert_name, analysis, progress_log, all_domain_names):
-    """Generate and insert questions for a domain according to the distribution.
+def process_domain_by_difficulty(
+    context: JobContext,
+    domain_id: int,
+    domain_name: str,
+    difficulty: str,
+    distribution: Dict[str, Dict[str, int]],
+    provider_name: str,
+    cert_name: str,
+    analysis: Dict[str, str],
+    all_domain_names: List[str],
+    domain_descriptions: Dict[int, str],
+) -> None:
+    """Generate and insert questions for a domain according to the distribution."""
 
-    Secondary domains are randomly injected when ``practical`` is not "no".
-    """
     import json  # local import to avoid dependency at module import time
 
     for qtype, scenarios in distribution.items():
@@ -414,32 +698,32 @@ def process_domain_by_difficulty(domain_id, domain_name, difficulty, distributio
                 scenario_illu_val = "none"
 
             existing_count = db.count_questions_in_category(domain_id, difficulty, qtype, scenario_type)
-            progress_log.append(
+            context.log(
                 f"[{domain_name} - {difficulty.upper()}] {qtype} with scenario '{scenario_type}' existing: "
                 f"{existing_count} (target: {target_count})."
             )
             if existing_count < target_count:
-                pause_event.wait()
+                context.wait_if_paused()
                 needed = target_count - existing_count
-                progress_log.append(
+                context.log(
                     f"[{domain_name} - {difficulty.upper()}] Needs {needed} questions for "
                     f"{qtype} with scenario '{scenario_type}'."
                 )
                 if practical_val != 'no':
                     secondaries = pick_secondary_domains(all_domain_names, domain_name)
-                    progress_log.append(
+                    context.log(
                         f"[{domain_name} - {difficulty.upper()}] Secondary domains: {secondaries}"
                     )
                     domain_arg = (
                         f"main domain :{domain_name}; includes context from domains: {', '.join(secondaries)}"
-                        if secondaries else domain_name
+                        if secondaries
+                        else domain_name
                     )
                 else:
                     domain_arg = domain_name
 
                 try:
-                    domain_info = db.get_domains_description_by_certif(cert_id)
-                    desc = next(d["descr"] for d in domain_info if d["id"] == domain_id)
+                    desc = domain_descriptions.get(domain_id, "")
                     questions_data = generate_questions(
                         provider_name=provider_name,
                         certification=cert_name,
@@ -449,13 +733,13 @@ def process_domain_by_difficulty(domain_id, domain_name, difficulty, distributio
                         q_type=qtype,
                         practical=practical_val,
                         scenario_illustration_type=scenario_illu_val,
-                        num_questions=needed
+                        num_questions=needed,
                     )
                     time.sleep(API_REQUEST_DELAY)
-                except Exception as e:
-                    progress_log.append(
+                except Exception as exc:
+                    context.log(
                         f"[{domain_name} - {difficulty.upper()}] Generation error for {qtype} "
-                        f"with scenario '{scenario_type}': {e}"
+                        f"with scenario '{scenario_type}': {exc}"
                     )
                     continue
 
@@ -470,35 +754,37 @@ def process_domain_by_difficulty(domain_id, domain_name, difficulty, distributio
                             #     f'<img src="{diag_dict["imageUrl"]}" alt="Generated Diagram" '
                             #     f'width="75%" height="auto"><!-- {diag_dict["createEraserFileUrl"]} -->'
                             # )
-                        except Exception as e:
-                            progress_log.append(
+                        except Exception as exc:  # pragma: no cover - log only
+                            context.log(
                                 f"[{domain_name} - {difficulty.upper()}] Diagram error for {qtype} "
-                                f"with scenario '{scenario_type}' (desc: {diagram_description}, type: {diag_type}): {e}"
+                                f"with scenario '{scenario_type}' (desc: {diagram_description}, type: {diag_type}): {exc}"
                             )
                             question["image"] = ""
 
                 try:
                     db.insert_questions(domain_id, questions_data, scenario_type)
-                    progress_log.append(
+                    context.log(
                         f"[{domain_name} - {difficulty.upper()}] {needed} questions inserted for "
                         f"{qtype} with scenario '{scenario_type}'."
                     )
-                except Exception as e:
-                    progress_log.append(
+                except Exception as exc:
+                    context.log(
                         f"[{domain_name} - {difficulty.upper()}] Insert error for {qtype} "
-                        f"with scenario '{scenario_type}': {e}"
+                        f"with scenario '{scenario_type}': {exc}"
                     )
-    return progress_log
 
-@app.route("/populate/pause", methods=["POST"])
-def pause_populate():
-    pause_event.clear()
-    return jsonify({"status": "paused"})
+@app.route("/populate/pause/<job_id>", methods=["POST"])
+def pause_populate(job_id):
+    if job_store.pause(job_id):
+        return jsonify({"status": "paused"})
+    return jsonify({"error": "unknown job id"}), 404
 
-@app.route("/populate/resume", methods=["POST"])
-def resume_populate():
-    pause_event.set()
-    return jsonify({"status": "resumed"})
+
+@app.route("/populate/resume/<job_id>", methods=["POST"])
+def resume_populate(job_id):
+    if job_store.resume(job_id):
+        return jsonify({"status": "resumed"})
+    return jsonify({"error": "unknown job id"}), 404
 
 
 def launch_gui():

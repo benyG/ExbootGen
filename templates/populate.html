@@ -118,27 +118,69 @@
         let poller = null;
         let lastLogIndex = 0;
 
-        function fetchStatus(){
-            $.get("{{ url_for('populate_status') }}", function(resp){
-                if(resp && resp.log){
+        const statusUrlTemplate = "{{ url_for('populate_status', job_id='__JOB__') }}";
+        const pauseUrlTemplate = "{{ url_for('pause_populate', job_id='__JOB__') }}";
+        const resumeUrlTemplate = "{{ url_for('resume_populate', job_id='__JOB__') }}";
+        const processUrl = "{{ url_for('populate_process') }}";
+        let currentJobId = null;
+
+        function appendLog(message, cssClass){
+            const li = $("<li>").text(message);
+            if(cssClass){
+                li.addClass(cssClass);
+            }
+            $("#logList").append(li);
+        }
+
+        function fetchStatus(jobId){
+            if(!jobId){
+                return;
+            }
+            $.get(statusUrlTemplate.replace('__JOB__', jobId), function(resp){
+                if(resp && Array.isArray(resp.log)){
                     for(; lastLogIndex < resp.log.length; lastLogIndex++){
-                        $("#logList").append("<li>" + resp.log[lastLogIndex] + "</li>");
+                        appendLog(resp.log[lastLogIndex]);
                     }
                 }
                 if(resp && resp.counters){
-                    $("#analysisResult").text(resp.counters.analysis);
-                    $("#domainCounter").text(resp.counters.domainsProcessed + " / " + resp.counters.totalDomains);
-                    $("#questionCounter").text(resp.counters.totalQuestions);
+                    $("#analysisResult").text(resp.counters.analysis || "");
+                    $("#domainCounter").text((resp.counters.domainsProcessed || 0) + " / " + (resp.counters.totalDomains || 0));
+                    $("#questionCounter").text(resp.counters.totalQuestions || 0);
                     var percent = 0;
                     if(resp.counters.totalDomains){
                         percent = Math.round((resp.counters.domainsProcessed / resp.counters.totalDomains) * 100);
                     }
                     $("#progressBarFill").css("width", percent + "%").text(percent + "%");
                 }
-                if(resp && (resp.status === "completed" || resp.status === "error")){
-                    clearInterval(poller);
+                if(resp && resp.status){
+                    if(resp.status === "failed" && resp.error){
+                        appendLog("Erreur: " + resp.error, "text-red-600");
+                    }
+                    if(resp.status === "completed" || resp.status === "failed"){
+                        if(poller){
+                            clearInterval(poller);
+                            poller = null;
+                        }
+                        currentJobId = null;
+                    }
                 }
-            }, "json");
+            }, "json").fail(function(xhr){
+                if(poller){
+                    clearInterval(poller);
+                    poller = null;
+                }
+                if(xhr.status === 404){
+                    appendLog("Statut indisponible: job introuvable.", "text-red-600");
+                }
+            });
+        }
+
+        function startPolling(jobId){
+            if(poller){
+                clearInterval(poller);
+            }
+            poller = setInterval(function(){ fetchStatus(jobId); }, 1000);
+            fetchStatus(jobId);
         }
 
         $("#startPopulate").click(function(){
@@ -148,26 +190,45 @@
             $("#domainCounter").text("0 / 0");
             $("#questionCounter").text("0");
             lastLogIndex = 0;
-            $.post("{{ url_for('populate_process') }}", {
+            $.post(processUrl, {
                 provider_id: "{{ provider_id }}",
                 cert_id: "{{ cert_id }}"
-            }, function(){
-                poller = setInterval(fetchStatus, 1000);
-            }, "json");
+            }, function(resp){
+                if(resp && resp.job_id){
+                    currentJobId = resp.job_id;
+                    startPolling(currentJobId);
+                } else {
+                    appendLog("Impossible de démarrer le traitement.", "text-red-600");
+                }
+            }, "json").fail(function(xhr){
+                appendLog("Erreur au démarrage: " + xhr.responseText, "text-red-600");
+            });
         });
 
         // Bouton de pause
         $("#pausePopulate").click(function(){
-            $.post("{{ url_for('pause_populate') }}", {}, function(){
-                $("#logList").append("<li>Processus mis en pause.</li>");
-            }, "json");
+            if(!currentJobId){
+                appendLog("Aucun traitement en cours.", "text-yellow-700");
+                return;
+            }
+            $.post(pauseUrlTemplate.replace('__JOB__', currentJobId), {}, function(){
+                appendLog("Processus mis en pause.");
+            }, "json").fail(function(){
+                appendLog("Impossible de mettre en pause le traitement.", "text-red-600");
+            });
         });
 
         // Bouton de reprise
         $("#resumePopulate").click(function(){
-            $.post("{{ url_for('resume_populate') }}", {}, function(){
-                $("#logList").append("<li>Processus repris.</li>");
-            }, "json");
+            if(!currentJobId){
+                appendLog("Aucun traitement en cours.", "text-yellow-700");
+                return;
+            }
+            $.post(resumeUrlTemplate.replace('__JOB__', currentJobId), {}, function(){
+                appendLog("Processus repris.");
+            }, "json").fail(function(){
+                appendLog("Impossible de reprendre le traitement.", "text-red-600");
+            });
         });
     });
   </script>
