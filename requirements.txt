@@ -9,3 +9,7 @@ PyMuPDF==1.24.9
 pdf2image==1.17.0
 pytesseract==0.3.13
 Pillow==10.4.0
+celery==5.3.6
+redis==5.0.4
+gunicorn==21.2.0
+waitress==2.1.2
