@@ -81,39 +81,161 @@ def get_certifications():
     return jsonify(cert_list)
 
 
+def _compute_fix_progress(cert_id, action):
+    if not cert_id:
+        return {"total": 0, "corrected": 0, "remaining": 0}
+
+    if action == "assign":
+        total = db.count_questions_with_answers(cert_id)
+        remaining = db.count_questions_missing_correct_answer(cert_id)
+    elif action == "drag":
+        nature_code = db.nature_mapping['drag-n-drop']
+        total = db.count_questions_by_nature(cert_id, nature_code)
+        remaining = db.count_questions_without_answers_by_nature(cert_id, nature_code)
+    else:
+        nature_code = db.nature_mapping['matching']
+        total = db.count_questions_by_nature(cert_id, nature_code)
+        remaining = db.count_questions_without_answers_by_nature(cert_id, nature_code)
+
+    corrected = max(total - remaining, 0)
+    return {"total": total, "corrected": corrected, "remaining": remaining}
+
+
+def _resolve_provider_and_cert(provider_id, cert_id, provider_lookup=None, cert_lookup=None):
+    provider_name = None
+    if provider_lookup is not None:
+        provider_name = provider_lookup.get(provider_id)
+    if not provider_name:
+        providers = db.get_providers()
+        provider_name = next((p[1] for p in providers if p[0] == provider_id), None)
+    if not provider_name:
+        raise ValueError("Fournisseur introuvable.")
+
+    if cert_lookup is None or cert_id not in cert_lookup:
+        certs = db.get_certifications_by_provider(provider_id)
+        cert_lookup = {c[0]: c[1] for c in certs}
+    cert_name = cert_lookup.get(cert_id)
+    if not cert_name:
+        raise ValueError("Certification introuvable pour ce fournisseur.")
+
+    return provider_name, cert_name
+
+
+def _perform_fix_action(provider_id, cert_id, action, provider_lookup=None, cert_lookup=None):
+    provider_name, cert_name = _resolve_provider_and_cert(
+        provider_id, cert_id, provider_lookup, cert_lookup
+    )
+
+    updated_questions = 0
+
+    if action == "assign":
+        questions = db.get_questions_without_correct_answer(cert_id)
+        if not questions:
+            return {
+                "message": "Aucune question sans réponse correcte à attribuer.",
+                "updated_questions": 0,
+            }
+        results = correct_questions(provider_name, cert_name, questions, "assign")
+        for res in results:
+            question_id = res.get("question_id")
+            answer_ids = res.get("answer_ids", [])
+            if not question_id:
+                continue
+            db.mark_answers_correct(question_id, answer_ids)
+            updated_questions += 1
+        message = f"Attribuer Réponse juste effectué ({updated_questions} question(s) mise(s) à jour)."
+    elif action == "drag":
+        qlist = db.get_questions_without_answers_by_nature(
+            cert_id, db.nature_mapping['drag-n-drop']
+        )
+        if not qlist:
+            return {
+                "message": "Aucune question de type drag-n-drop à compléter.",
+                "updated_questions": 0,
+            }
+        results = correct_questions(provider_name, cert_name, qlist, "drag")
+        for res in results:
+            question_id = res.get("question_id")
+            answers = res.get("answers", [])
+            if not question_id:
+                continue
+            db.add_answers(question_id, answers)
+            updated_questions += 1
+        message = (
+            f"Compléter Drag-n-drop effectué ({updated_questions} question(s) mise(s) à jour)."
+        )
+    else:
+        qlist = db.get_questions_without_answers_by_nature(
+            cert_id, db.nature_mapping['matching']
+        )
+        if not qlist:
+            return {
+                "message": "Aucune question de type matching à compléter.",
+                "updated_questions": 0,
+            }
+        results = correct_questions(provider_name, cert_name, qlist, "matching")
+        for res in results:
+            question_id = res.get("question_id")
+            answers = res.get("answers", [])
+            if not question_id:
+                continue
+            db.add_answers(question_id, answers)
+            updated_questions += 1
+        message = (
+            f"Compléter matching effectué ({updated_questions} question(s) mise(s) à jour)."
+        )
+
+    return {"message": message, "updated_questions": updated_questions}
+
+
 @app.route("/fix", methods=["GET", "POST"])
 def fix_index():
+    providers = db.get_providers()
+    provider_lookup = {p[0]: p[1] for p in providers}
+
+    selected_provider_id = providers[0][0] if providers else None
+    selected_cert_id = None
+    selected_action = "assign"
+    result_message = None
+    initial_progress = None
+
     if request.method == "POST":
         provider_id = int(request.form.get("provider_id"))
         cert_id = int(request.form.get("cert_id"))
         action = request.form.get("action")
-        provider_name = next((p[1] for p in db.get_providers() if p[0] == provider_id), "")
-        cert_name = next((c[1] for c in db.get_certifications_by_provider(provider_id) if c[0] == cert_id), "")
 
-        if action == "assign":
-            questions = db.get_questions_without_correct_answer(cert_id)
-            results = correct_questions(provider_name, cert_name, questions, "assign")
-            for res in results:
-                db.mark_answers_correct(res.get("question_id"), res.get("answer_ids", []))
-            msg = "Attribuer Réponse juste effectué"
-        elif action == "drag":
-            qlist = db.get_questions_without_answers_by_nature(cert_id, db.nature_mapping['drag-n-drop'])
-            results = correct_questions(provider_name, cert_name, qlist, "drag")
-            for res in results:
-                db.add_answers(res.get("question_id"), res.get("answers", []))
-            msg = "Compléter Drag-n-drop effectué"
-        else:
-            qlist = db.get_questions_without_answers_by_nature(cert_id, db.nature_mapping['matching'])
-            results = correct_questions(provider_name, cert_name, qlist, "matching")
-            for res in results:
-                db.add_answers(res.get("question_id"), res.get("answers", []))
-            msg = "Compléter matching effectué"
+        selected_provider_id = provider_id
+        selected_cert_id = cert_id
+        selected_action = action
 
-        providers = db.get_providers()
-        return render_template("fix.html", providers=providers, result=msg)
+        certs = db.get_certifications_by_provider(provider_id)
+        cert_lookup = {c[0]: c[1] for c in certs}
 
-    providers = db.get_providers()
-    return render_template("fix.html", providers=providers, result=None)
+        try:
+            result = _perform_fix_action(
+                provider_id,
+                cert_id,
+                action,
+                provider_lookup=provider_lookup,
+                cert_lookup=cert_lookup,
+            )
+            result_message = result.get("message")
+        except ValueError as exc:
+            result_message = str(exc)
+        initial_progress = _compute_fix_progress(cert_id, action)
+    else:
+        if not selected_provider_id:
+            initial_progress = {"total": 0, "corrected": 0, "remaining": 0}
+
+    return render_template(
+        "fix.html",
+        providers=providers,
+        result=result_message,
+        selected_provider_id=selected_provider_id,
+        selected_cert_id=selected_cert_id,
+        selected_action=selected_action,
+        initial_progress=initial_progress,
+    )
 
 
 @app.route("/fix/get_certifications", methods=["POST"])
@@ -122,6 +244,34 @@ def fix_get_certifications():
     certs = db.get_certifications_by_provider(provider_id)
     cert_list = [{"id": cert[0], "name": cert[1]} for cert in certs]
     return jsonify(cert_list)
+
+
+@app.route("/fix/get_progress", methods=["POST"])
+def fix_get_progress():
+    cert_id = request.form.get("cert_id", type=int)
+    action = request.form.get("action", type=str) or "assign"
+    progress = _compute_fix_progress(cert_id, action)
+    return jsonify(progress)
+
+
+@app.route("/fix/run_action", methods=["POST"])
+def fix_run_action():
+    provider_id = request.form.get("provider_id", type=int)
+    cert_id = request.form.get("cert_id", type=int)
+    action = request.form.get("action", type=str) or "assign"
+
+    if not provider_id or not cert_id:
+        return jsonify({"success": False, "error": "Veuillez sélectionner un fournisseur et une certification."}), 400
+
+    try:
+        result = _perform_fix_action(provider_id, cert_id, action)
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except Exception as exc:  # pragma: no cover - log unexpected errors
+        app.logger.exception("Unexpected error during fix action", exc_info=exc)
+        return jsonify({"success": False, "error": "Une erreur inattendue est survenue."}), 500
+
+    return jsonify({"success": True, "message": result.get("message", "")})
 
 
 def run_population(provider_id, cert_id):

@@ -30,47 +30,275 @@
   <main class="container mx-auto px-4 mt-12">
     <div class="max-w-2xl mx-auto p-8 bg-white shadow-xl rounded">
       <h1 class="text-3xl font-bold text-center mb-8">Fix Questions</h1>
-      {% if result %}
-        <p class="mb-4 text-green-700">{{ result }}</p>
-      {% endif %}
-      <form method="POST" action="{{ url_for('fix_index') }}" class="space-y-6">
+      <div
+        id="status-message"
+        role="status"
+        class="mb-4 rounded border px-3 py-2 text-sm {% if result %}bg-green-50 text-green-700 border-green-200{% else %}hidden{% endif %}"
+      >
+        {{ result if result else "" }}
+      </div>
+      <form id="fix-form" method="POST" action="{{ url_for('fix_index') }}" class="space-y-6">
         <div>
           <label for="provider_id" class="block text-lg font-medium text-gray-700">Provider:</label>
           <select name="provider_id" id="provider_id" class="mt-1 block w-full rounded border-gray-300 shadow-sm">
             {% for provider in providers %}
-              <option value="{{ provider[0] }}">{{ provider[1] }}</option>
+              <option value="{{ provider[0] }}" {% if selected_provider_id == provider[0] %}selected{% endif %}>{{ provider[1] }}</option>
             {% endfor %}
           </select>
         </div>
         <div>
           <label for="cert_id" class="block text-lg font-medium text-gray-700">Certification:</label>
-          <select name="cert_id" id="cert_id" class="mt-1 block w-full rounded border-gray-300 shadow-sm"></select>
+          <select name="cert_id" id="cert_id" class="mt-1 block w-full rounded border-gray-300 shadow-sm" data-selected-cert="{{ selected_cert_id if selected_cert_id is not none else '' }}"></select>
         </div>
         <div>
           <label for="action" class="block text-lg font-medium text-gray-700">Type de traitement:</label>
           <select name="action" id="action" class="mt-1 block w-full rounded border-gray-300 shadow-sm">
-            <option value="assign">Attribuer Réponse juste</option>
-            <option value="drag">Compléter Drag-n-drop</option>
-            <option value="matching">Compléter matching</option>
+            <option value="assign" {% if selected_action == 'assign' %}selected{% endif %}>Attribuer Réponse juste</option>
+            <option value="drag" {% if selected_action == 'drag' %}selected{% endif %}>Compléter Drag-n-drop</option>
+            <option value="matching" {% if selected_action == 'matching' %}selected{% endif %}>Compléter matching</option>
           </select>
         </div>
         <div>
           <button type="submit" class="w-full py-3 brand-bg text-white rounded brand-hover transition">Lancer</button>
         </div>
       </form>
+      <div id="progress-section" class="mt-10 hidden">
+        <div class="flex items-center justify-between text-sm font-semibold text-gray-700 mb-2">
+          <span id="progress-label">Progression : 0%</span>
+          <span id="progress-count">0 corrigée(s) sur 0</span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+          <div id="progress-bar" class="brand-bg h-4 rounded-full transition-all duration-300" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width: 0%"></div>
+        </div>
+        <p id="progress-remaining" class="mt-2 text-sm text-gray-600">Sélectionnez une certification pour afficher la progression.</p>
+      </div>
     </div>
   </main>
 
   <script>
     $(document).ready(function(){
-      $("#provider_id").change(function(){
-        $.post("{{ url_for('fix_get_certifications') }}", { provider_id: $(this).val() }, function(data){
-          $("#cert_id").empty();
-          $.each(data || [], function(i,item){
-            $("#cert_id").append($("<option>", { value: item.id, text: item.name }));
-          });
-        }, "json");
-      }).trigger('change');
+      const $provider = $("#provider_id");
+      const $cert = $("#cert_id");
+      const $action = $("#action");
+      const $form = $("#fix-form");
+      const $submitBtn = $form.find("button[type='submit']");
+      const $status = $("#status-message");
+      const $progressSection = $("#progress-section");
+      const $progressBar = $("#progress-bar");
+      const $progressLabel = $("#progress-label");
+      const $progressCount = $("#progress-count");
+      const $progressRemaining = $("#progress-remaining");
+      let initialProgress = {{ initial_progress|tojson }};
+      let pollTimer = null;
+      let isProcessing = false;
+
+      const statusToneClasses = "bg-blue-50 text-blue-700 border-blue-200 bg-green-50 text-green-700 border-green-200 bg-red-50 text-red-700 border-red-200";
+
+      function getActionLabel(actionValue){
+        switch(actionValue){
+          case "assign":
+            return "Attribution des réponses correctes";
+          case "drag":
+            return "Complétion des questions drag-n-drop";
+          case "matching":
+            return "Complétion des questions matching";
+          default:
+            return "Traitement";
+        }
+      }
+
+      function setStatus(message, tone = "info"){
+        if (!message){
+          clearStatus();
+          return;
+        }
+        let toneClass = "bg-blue-50 text-blue-700 border-blue-200";
+        if (tone === "success"){
+          toneClass = "bg-green-50 text-green-700 border-green-200";
+        } else if (tone === "error"){
+          toneClass = "bg-red-50 text-red-700 border-red-200";
+        }
+        $status.removeClass(`hidden ${statusToneClasses}`);
+        $status.addClass(toneClass);
+        $status.text(message);
+      }
+
+      function clearStatus(){
+        $status.removeClass(statusToneClasses);
+        $status.addClass("hidden");
+        $status.text("");
+      }
+
+      function parseValue(val){
+        const num = Number(val);
+        return Number.isFinite(num) ? num : 0;
+      }
+
+      function renderProgress(data){
+        const total = parseValue(data && data.total);
+        const corrected = parseValue(data && data.corrected);
+        const remaining = parseValue(data && data.remaining);
+        const safeCorrected = Math.max(Math.min(corrected, total), 0);
+        const percent = total > 0 ? Math.round((safeCorrected / total) * 100) : 0;
+
+        $progressBar.css("width", percent + "%");
+        $progressBar.attr("aria-valuenow", percent);
+        $progressLabel.text(`Progression : ${percent}%`);
+        $progressCount.text(`${safeCorrected} corrigée(s) sur ${total}`);
+        if (total === 0) {
+          $progressRemaining.text("Aucune question à traiter pour cette sélection.");
+        } else {
+          $progressRemaining.text(`${Math.max(remaining, 0)} question(s) restante(s) à traiter.`);
+        }
+        $progressSection.removeClass("hidden");
+
+        if (isProcessing){
+          const actionLabel = getActionLabel($action.val());
+          if (remaining > 0){
+            setStatus(`Traitement en cours : ${actionLabel}… ${Math.max(remaining, 0)} question(s) restante(s).`, "info");
+          } else {
+            setStatus(`Finalisation du traitement : ${actionLabel}…`, "info");
+          }
+        }
+      }
+
+      function clearProgress(){
+        $progressBar.css("width", "0%");
+        $progressBar.attr("aria-valuenow", 0);
+        $progressLabel.text("Progression : 0%");
+        $progressCount.text("0 corrigée(s) sur 0");
+        $progressRemaining.text("Sélectionnez une certification pour afficher la progression.");
+        $progressSection.addClass("hidden");
+      }
+
+      function updateProgress(){
+        const certId = $cert.val();
+        const action = $action.val();
+        if (!certId){
+          clearProgress();
+          return;
+        }
+        $.post("{{ url_for('fix_get_progress') }}", { cert_id: certId, action: action }, function(data){
+          renderProgress(data || {});
+        }, "json").fail(function(){
+          clearProgress();
+        });
+      }
+
+      function loadCertifications(prefillCertId){
+        const providerId = $provider.val();
+        if (!providerId){
+          $cert.empty();
+          clearProgress();
+          return;
+        }
+
+        $.post("{{ url_for('fix_get_certifications') }}", { provider_id: providerId }, function(data){
+          $cert.empty();
+          if (Array.isArray(data) && data.length){
+            $.each(data, function(_, item){
+              $cert.append($("<option>", { value: item.id, text: item.name }));
+            });
+            if (prefillCertId !== undefined && prefillCertId !== null && prefillCertId !== ""){
+              $cert.val(String(prefillCertId));
+            }
+            if (!$cert.val()){
+              $cert.prop("selectedIndex", 0);
+            }
+            const selectedCert = $cert.val();
+            if (initialProgress && prefillCertId && String(prefillCertId) === String(selectedCert)){
+              renderProgress(initialProgress);
+              initialProgress = null;
+            } else {
+              updateProgress();
+            }
+          } else {
+            clearProgress();
+          }
+        }, "json").fail(function(){
+          clearProgress();
+        });
+      }
+
+      function startProgressPolling(){
+        if (pollTimer){
+          clearInterval(pollTimer);
+        }
+        pollTimer = setInterval(function(){
+          updateProgress();
+        }, 2000);
+      }
+
+      function stopProgressPolling(){
+        if (pollTimer){
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      }
+
+      $provider.on("change", function(){
+        initialProgress = null;
+        loadCertifications("");
+      });
+
+      $cert.on("change", function(){
+        initialProgress = null;
+        updateProgress();
+      });
+
+      $action.on("change", function(){
+        initialProgress = null;
+        updateProgress();
+      });
+
+      $form.on("submit", function(event){
+        event.preventDefault();
+        const providerId = $provider.val();
+        const certId = $cert.val();
+        const actionValue = $action.val();
+
+        if (!certId){
+          setStatus("Veuillez sélectionner une certification avant de lancer le traitement.", "error");
+          return;
+        }
+
+        const actionLabel = getActionLabel(actionValue);
+        initialProgress = null;
+        isProcessing = true;
+        setStatus(`Traitement en cours : ${actionLabel}…`, "info");
+        $submitBtn.prop("disabled", true).addClass("opacity-60 cursor-not-allowed");
+        $form.find("select").prop("disabled", true);
+        startProgressPolling();
+        updateProgress();
+
+        $.post(
+          "{{ url_for('fix_run_action') }}",
+          { provider_id: providerId, cert_id: certId, action: actionValue },
+          function(response){
+            if (response && response.success){
+              setStatus(response.message || "Traitement terminé.", "success");
+            } else {
+              const errorMessage = response && response.error ? response.error : "Le traitement n'a pas abouti.";
+              setStatus(errorMessage, "error");
+            }
+          },
+          "json"
+        ).fail(function(xhr){
+          const errorMessage = xhr.responseJSON && xhr.responseJSON.error
+            ? xhr.responseJSON.error
+            : "Une erreur est survenue pendant le traitement.";
+          setStatus(errorMessage, "error");
+        }).always(function(){
+          isProcessing = false;
+          stopProgressPolling();
+          $submitBtn.prop("disabled", false).removeClass("opacity-60 cursor-not-allowed");
+          $form.find("select").prop("disabled", false);
+          updateProgress();
+        });
+      });
+
+      const initialCert = $cert.data("selected-cert");
+      loadCertifications(initialCert);
     });
   </script>
 </body>
