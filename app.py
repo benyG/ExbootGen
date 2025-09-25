@@ -75,6 +75,7 @@ def make_celery() -> Celery:
 
     broker_url = os.getenv("CELERY_BROKER_URL")
     result_backend = os.getenv("CELERY_RESULT_BACKEND")
+    pool_limit = int(os.getenv("CELERY_POOL_LIMIT", "1"))
 
     if eager:
         broker_url = broker_url or "memory://"
@@ -85,11 +86,25 @@ def make_celery() -> Celery:
         result_backend = result_backend or broker_url
 
     celery_app = Celery("exbootgen", broker=broker_url, backend=result_backend)
+
+    broker_transport_options: Dict[str, object] = {}
+    result_transport_options: Dict[str, object] = {}
+
+    if broker_url and broker_url.startswith("redis://"):
+        max_connections = int(os.getenv("CELERY_MAX_CONNECTIONS", str(pool_limit)))
+        broker_transport_options["max_connections"] = max_connections
+
+    if result_backend and result_backend.startswith("redis://"):
+        max_connections = int(os.getenv("CELERY_RESULT_MAX_CONNECTIONS", str(pool_limit)))
+        result_transport_options["max_connections"] = max_connections
     celery_app.conf.update(
         task_track_started=True,
         task_serializer="json",
         result_serializer="json",
         accept_content=["json"],
+        broker_pool_limit=pool_limit,
+        broker_transport_options=broker_transport_options,
+        result_backend_transport_options=result_transport_options,
     )
 
     if eager:
