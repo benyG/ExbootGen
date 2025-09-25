@@ -46,7 +46,6 @@ class RedisSettings:
         # vos besoins.
         return f"redis://:{self.password}@{self.host}/0"
 
-
 @dataclass(frozen=True)
 class OpenAISettings:
     api_key: str

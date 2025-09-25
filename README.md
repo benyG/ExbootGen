@@ -141,6 +141,7 @@ L'application lit plusieurs variables d'environnement pour configurer l'accès �
 - `JOB_STORE_URL` : URL du stockage d'état des jobs (Redis recommandé)
 -   *Exemple :* `JOB_STORE_URL=redis://localhost:6379/0` (Redis Cloud n'autorise
     que la base « 0 ») ou `JOB_STORE_URL=sqlite:///job_state.db`
+
 - `CELERY_TASK_ALWAYS_EAGER` : définir à `1` pour exécuter les tâches localement sans worker (tests)
 
 ### Sous Windows – PowerShell
@@ -203,6 +204,7 @@ Après avoir défini les variables avec `setx`, redémarrez votre terminal pour 
 
 Les tâches longues et l'état des jobs sont persistés dans Redis lorsque la
 variable `JOB_STORE_URL` pointe vers une instance Redis (ex. `redis://localhost:6379/0`).
+
 Vous pouvez utiliser une instance locale ou un service managé.
 
 ### Démarrer Redis rapidement
@@ -242,6 +244,7 @@ la même base entre plusieurs usages. Si vous ne définissez pas explicitement
 ces variables, l'application tente d'utiliser `redis://localhost:6379/0` pour
 le broker, le backend **et** le job store.
 
+
 ### Exemple avec Redis Cloud
 
 Pour une instance gérée, les URLs doivent inclure l'hôte, le port et le mot de
@@ -249,6 +252,7 @@ passe fournis par le service. Par exemple, avec une instance Redis Cloud :
 
 ```bash
 export REDIS_PASSWORD="yACmUW5fjfEFG3MVcKrGJw0s0HNDLIt2"
+
 export JOB_STORE_URL="redis://:${REDIS_PASSWORD}@redis-25453.crce197.us-east-2-1.ec2.redns.redis-cloud.com:15453/0"
 export CELERY_BROKER_URL="redis://:${REDIS_PASSWORD}@redis-25453.crce197.us-east-2-1.ec2.redns.redis-cloud.com:15453/0"
 export CELERY_RESULT_BACKEND="redis://:${REDIS_PASSWORD}@redis-25453.crce197.us-east-2-1.ec2.redns.redis-cloud.com:15453/0"
