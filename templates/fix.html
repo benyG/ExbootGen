@@ -31,10 +31,7 @@
   <main class="container mx-auto px-4 mt-12">
     <div class="max-w-2xl mx-auto p-8 bg-white shadow-xl rounded">
       <h1 class="text-3xl font-bold text-center mb-8">Fix Questions</h1>
-      {% if result %}
-        <p class="mb-4 text-green-700">{{ result }}</p>
-      {% endif %}
-      <form method="POST" action="{{ url_for('fix_index') }}" class="space-y-6">
+      <form id="fix-form" method="POST" action="{{ url_for('fix_process') }}" class="space-y-6">
         <div>
           <label for="provider_id" class="block text-lg font-medium text-gray-700">Provider:</label>
           <select name="provider_id" id="provider_id" class="mt-1 block w-full rounded border-gray-300 shadow-sm">
@@ -56,7 +53,7 @@
           </select>
         </div>
         <div>
-          <button type="submit" class="w-full py-3 brand-bg text-white rounded brand-hover transition">Lancer</button>
+          <button type="submit" id="startFix" class="w-full py-3 brand-bg text-white rounded brand-hover transition">Lancer</button>
         </div>
       </form>
       <div id="progress-section" class="mt-10 hidden">
@@ -68,6 +65,15 @@
           <div id="progress-bar" class="brand-bg h-4 rounded-full transition-all duration-300" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width: 0%"></div>
         </div>
         <p id="progress-remaining" class="mt-2 text-sm text-gray-600">Sélectionnez une certification pour afficher la progression.</p>
+      </div>
+      <div id="job-section" class="mt-10 hidden">
+        <div class="flex items-center justify-between text-sm font-semibold text-gray-700 mb-2">
+          <span id="job-status">En attente…</span>
+          <span id="job-id-label" class="text-xs text-gray-500"></span>
+        </div>
+        <div class="border border-gray-300 rounded bg-gray-50 p-4 h-48 overflow-y-auto">
+          <ul id="job-log-list" class="space-y-1 text-sm text-gray-700"></ul>
+        </div>
       </div>
     </div>
   </main>
@@ -82,7 +88,17 @@
       const $progressLabel = $("#progress-label");
       const $progressCount = $("#progress-count");
       const $progressRemaining = $("#progress-remaining");
+      const $jobSection = $("#job-section");
+      const $jobStatus = $("#job-status");
+      const $jobIdLabel = $("#job-id-label");
+      const $jobLogList = $("#job-log-list");
+
       let initialProgress = {{ initial_progress|tojson }};
+      const statusUrlTemplate = "{{ url_for('fix_status', job_id='__JOB__') }}";
+      const processUrl = "{{ url_for('fix_process') }}";
+      let poller = null;
+      let currentJobId = null;
+      let lastLogIndex = 0;
 
       function parseValue(val){
         const num = Number(val);
@@ -117,6 +133,92 @@
         $progressSection.addClass("hidden");
       }
 
+      function resetJobSection(){
+        if(poller){
+          clearInterval(poller);
+          poller = null;
+        }
+        currentJobId = null;
+        lastLogIndex = 0;
+        $jobStatus.text("En attente…");
+        $jobIdLabel.text("");
+        $jobLogList.empty();
+        $jobSection.addClass("hidden");
+      }
+
+      function appendJobLog(message, cssClass){
+        const li = $("<li>").text(message);
+        if(cssClass){
+          li.addClass(cssClass);
+        }
+        $jobLogList.append(li);
+      }
+
+      function fetchJobStatus(jobId){
+        if(!jobId){
+          return;
+        }
+        $.get(statusUrlTemplate.replace('__JOB__', jobId), function(data){
+          if(data && Array.isArray(data.log)){
+            for(; lastLogIndex < data.log.length; lastLogIndex++){
+              appendJobLog(data.log[lastLogIndex]);
+            }
+          }
+          if(data && data.counters){
+            renderProgress(data.counters);
+          }
+          if(data && data.status){
+            const status = data.status;
+            if(status === "queued"){
+              $jobStatus.text("En attente d'un worker…");
+            } else if(status === "running"){
+              $jobStatus.text("Traitement en cours…");
+            } else if(status === "paused"){
+              $jobStatus.text("Traitement en pause.");
+            } else if(status === "completed"){
+              $jobStatus.text("Traitement terminé.");
+            } else if(status === "failed"){
+              $jobStatus.text("Erreur pendant le traitement.");
+            } else {
+              $jobStatus.text(status);
+            }
+
+            if(status === "completed" || status === "failed"){
+              if(poller){
+                clearInterval(poller);
+                poller = null;
+              }
+              currentJobId = null;
+              updateProgress();
+              if(status === "failed" && data.error){
+                appendJobLog("Erreur: " + data.error, "text-red-600");
+              }
+            }
+          }
+        }, "json").fail(function(xhr){
+          if(poller){
+            clearInterval(poller);
+            poller = null;
+          }
+          currentJobId = null;
+          if(xhr.status === 404){
+            appendJobLog("Statut indisponible : job introuvable.", "text-red-600");
+            $jobStatus.text("Statut inconnu.");
+          } else {
+            appendJobLog("Impossible de récupérer le statut du job.", "text-red-600");
+            $jobStatus.text("Erreur de suivi.");
+          }
+        });
+      }
+
+      function startPolling(jobId){
+        if(poller){
+          clearInterval(poller);
+        }
+        poller = setInterval(function(){ fetchJobStatus(jobId); }, 1000);
+        fetchJobStatus(jobId);
+      }
+
       function updateProgress(){
         const certId = $cert.val();
         const action = $action.val();
@@ -136,6 +238,7 @@
         if (!providerId){
           $cert.empty();
           clearProgress();
+          resetJobSection();
           return;
         }
 
@@ -160,24 +263,67 @@
             }
           } else {
             clearProgress();
+            resetJobSection();
           }
         }, "json").fail(function(){
           clearProgress();
+          resetJobSection();
         });
       }
 
+      $("#fix-form").on("submit", function(evt){
+        evt.preventDefault();
+        const providerId = $provider.val();
+        const certId = $cert.val();
+        const action = $action.val();
+
+        if(!providerId || !certId){
+          resetJobSection();
+          $jobSection.removeClass("hidden");
+          $jobStatus.text("Sélection incomplète.");
+          appendJobLog("Veuillez sélectionner un provider et une certification.", "text-red-600");
+          return;
+        }
+
+        resetJobSection();
+        $jobSection.removeClass("hidden");
+        $jobStatus.text("Démarrage du traitement…");
+        $.post(processUrl, { provider_id: providerId, cert_id: certId, action: action }, function(resp){
+          if(resp && resp.job_id){
+            currentJobId = resp.job_id;
+            lastLogIndex = 0;
+            $jobIdLabel.text("Job ID: " + resp.job_id);
+            $jobStatus.text("Traitement en cours…");
+            startPolling(currentJobId);
+          } else {
+            $jobStatus.text("Impossible de démarrer le traitement.");
+            appendJobLog("Réponse inattendue du serveur.", "text-red-600");
+          }
+        }, "json").fail(function(xhr){
+          $jobStatus.text("Impossible de démarrer le traitement.");
+          let message = "Erreur serveur.";
+          if(xhr.responseJSON && xhr.responseJSON.error){
+            message = xhr.responseJSON.error;
+          }
+          appendJobLog(message, "text-red-600");
+        });
+      });
+
       $provider.on("change", function(){
         initialProgress = null;
+        resetJobSection();
         loadCertifications("");
       });
 
       $cert.on("change", function(){
         initialProgress = null;
+        resetJobSection();
         updateProgress();
       });
 
       $action.on("change", function(){
         initialProgress = null;
+        resetJobSection();
         updateProgress();
       });
 

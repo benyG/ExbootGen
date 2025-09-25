@@ -7,8 +7,27 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 # Ensure API key env var before importing app
 os.environ.setdefault("OPENAI_API_KEY", "test")
+os.environ.setdefault("CELERY_TASK_ALWAYS_EAGER", "1")
+os.environ.setdefault("CELERY_BROKER_URL", "memory://")
+os.environ.setdefault("CELERY_RESULT_BACKEND", "cache+memory://")
+os.environ.setdefault("JOB_STORE_URL", "sqlite:///:memory:")
 
 import app
+
+
+class DummyContext:
+    def __init__(self):
+        self.logs = []
+        self.counters = {}
+
+    def log(self, message):
+        self.logs.append(message)
+
+    def update_counters(self, **kwargs):  # pragma: no cover - helper for completeness
+        self.counters.update(kwargs)
+
+    def wait_if_paused(self):
+        return
 
 
 class ProcessDomainByDifficultyTest(unittest.TestCase):
@@ -19,9 +38,6 @@ class ProcessDomainByDifficultyTest(unittest.TestCase):
         def fake_count_questions_in_category(domain_id, level, qtype, scenario_type):
             return 0
 
-        def fake_get_domains_description_by_certif(cert_id):
-            return [{"id": 1, "descr": "desc"}]
-
         def fake_generate_questions(**kwargs):
             generated_args.update(kwargs)
             return {"questions": [{"text": "q"}]}
@@ -30,29 +46,28 @@ class ProcessDomainByDifficultyTest(unittest.TestCase):
             inserted.append((domain_id, scenario_type, questions))
 
         with patch('app.db.count_questions_in_category', side_effect=fake_count_questions_in_category), \
-             patch('app.db.get_domains_description_by_certif', side_effect=fake_get_domains_description_by_certif), \
              patch('app.generate_questions', side_effect=fake_generate_questions), \
              patch('app.db.insert_questions', side_effect=fake_insert_questions), \
              patch('app.pick_secondary_domains', return_value=['Sec']), \
-             patch('app.pause_event.wait', return_value=True), \
              patch('app.time.sleep', return_value=None):
-            log = app.process_domain_by_difficulty(
+            context = DummyContext()
+            app.process_domain_by_difficulty(
+                context,
                 domain_id=1,
                 domain_name='Dom',
                 difficulty='easy',
                 distribution={'qcm': {'scenario': 1}},
                 provider_name='Prov',
-                cert_id=10,
                 cert_name='Cert',
                 analysis={'case': '1'},
-                progress_log=[],
-                all_domain_names=['Dom', 'Sec']
+                all_domain_names=['Dom', 'Sec'],
+                domain_descriptions={1: 'desc'}
             )
 
         self.assertEqual(generated_args['domain'], 'main domain :Dom; includes context from domains: Sec')
         self.assertEqual(inserted[0][0], 1)
         self.assertEqual(inserted[0][1], 'scenario')
-        self.assertTrue(any('Secondary domains' in entry for entry in log))
+        self.assertTrue(any('Secondary domains' in entry for entry in context.logs))
 
 
 if __name__ == '__main__':
