@@ -20,10 +20,13 @@ fonctionner l'application :
 
    ```bash
    export REDIS_PASSWORD="yACmUW5fjfEFG3MVcKrGJw0s0HNDLIt2"
-   export JOB_STORE_URL="redis://:${REDIS_PASSWORD}@redis-15453.crce197.us-east-2-1.ec2.redns.redis-cloud.com:15453/1"
+   export JOB_STORE_URL="redis://:${REDIS_PASSWORD}@redis-15453.crce197.us-east-2-1.ec2.redns.redis-cloud.com:15453/0"
    export CELERY_BROKER_URL="redis://:${REDIS_PASSWORD}@redis-15453.crce197.us-east-2-1.ec2.redns.redis-cloud.com:15453/0"
    export CELERY_RESULT_BACKEND="redis://:${REDIS_PASSWORD}@redis-15453.crce197.us-east-2-1.ec2.redns.redis-cloud.com:15453/0"
    ```
+
+   > ℹ️ Redis Cloud n'autorise que la base numéro `0`. L'usage est séparé du
+   > broker Celery grâce aux préfixes de clés utilisés par l'application.
 
    Ajoutez également vos paramètres MySQL (`DB_HOST`, `DB_USER`, `DB_PASSWORD`,
    `DB_NAME`) et votre clé OpenAI (`OPENAI_API_KEY`). Le module `config.py`
@@ -136,7 +139,9 @@ L'application lit plusieurs variables d'environnement pour configurer l'accès �
 - `CELERY_BROKER_URL` : URL du broker de tâches Celery (par défaut `redis://localhost:6379/0`)
 - `CELERY_RESULT_BACKEND` : backend de résultats Celery (par défaut identique au broker)
 - `JOB_STORE_URL` : URL du stockage d'état des jobs (Redis recommandé)
--   *Exemple :* `JOB_STORE_URL=redis://localhost:6379/1` ou `JOB_STORE_URL=sqlite:///job_state.db`
+-   *Exemple :* `JOB_STORE_URL=redis://localhost:6379/0` (Redis Cloud n'autorise
+    que la base « 0 ») ou `JOB_STORE_URL=sqlite:///job_state.db`
+
 - `CELERY_TASK_ALWAYS_EAGER` : définir à `1` pour exécuter les tâches localement sans worker (tests)
 
 ### Sous Windows – PowerShell
@@ -198,7 +203,8 @@ Après avoir défini les variables avec `setx`, redémarrez votre terminal pour 
 ## Configuration de Redis
 
 Les tâches longues et l'état des jobs sont persistés dans Redis lorsque la
-variable `JOB_STORE_URL` pointe vers une instance Redis (ex. `redis://localhost:6379/1`).
+variable `JOB_STORE_URL` pointe vers une instance Redis (ex. `redis://localhost:6379/0`).
+
 Vous pouvez utiliser une instance locale ou un service managé.
 
 ### Démarrer Redis rapidement
@@ -226,15 +232,18 @@ sudo service redis-server start
 ### Variables d'environnement à définir
 
 ```
-JOB_STORE_URL=redis://localhost:6379/1
+JOB_STORE_URL=redis://localhost:6379/0
 CELERY_BROKER_URL=redis://localhost:6379/0
 CELERY_RESULT_BACKEND=redis://localhost:6379/0
 ```
 
-En production, ajustez les numéros de base (0/1) selon votre configuration
-Redis. Si vous ne définissez pas explicitement ces variables, l'application
-tente d'utiliser `redis://localhost:6379/0` pour le broker et le backend ainsi
-que `redis://localhost:6379/1` pour le job store.
+En production, ajustez les numéros de base selon votre configuration Redis.
+Certaines offres managées (dont Redis Cloud) n'autorisent **que** la base `0` :
+utilisez simplement des préfixes de clés différents si vous devez partager
+la même base entre plusieurs usages. Si vous ne définissez pas explicitement
+ces variables, l'application tente d'utiliser `redis://localhost:6379/0` pour
+le broker, le backend **et** le job store.
+
 
 ### Exemple avec Redis Cloud
 
@@ -243,7 +252,8 @@ passe fournis par le service. Par exemple, avec une instance Redis Cloud :
 
 ```bash
 export REDIS_PASSWORD="yACmUW5fjfEFG3MVcKrGJw0s0HNDLIt2"
-export JOB_STORE_URL="redis://:${REDIS_PASSWORD}@redis-25453.crce197.us-east-2-1.ec2.redns.redis-cloud.com:15453/1"
+
+export JOB_STORE_URL="redis://:${REDIS_PASSWORD}@redis-25453.crce197.us-east-2-1.ec2.redns.redis-cloud.com:15453/0"
 export CELERY_BROKER_URL="redis://:${REDIS_PASSWORD}@redis-25453.crce197.us-east-2-1.ec2.redns.redis-cloud.com:15453/0"
 export CELERY_RESULT_BACKEND="redis://:${REDIS_PASSWORD}@redis-25453.crce197.us-east-2-1.ec2.redns.redis-cloud.com:15453/0"
 ```

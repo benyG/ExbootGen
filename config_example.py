@@ -39,8 +39,12 @@ class RedisSettings:
 
     @property
     def job_store_url(self) -> str:
-        return f"redis://:{self.password}@{self.host}/1"
+        """URL utilisée par le stockage d'état des jobs."""
 
+        # Redis Cloud impose l'utilisation de la base « 0 ». Si vous exploitez
+        # une instance Redis auto-hébergée, vous pouvez changer ce numéro selon
+        # vos besoins.
+        return f"redis://:{self.password}@{self.host}/0"
 
 @dataclass(frozen=True)
 class OpenAISettings:

@@ -175,8 +175,18 @@ class RedisJobStore(BaseJobStore):
         except ImportError as exc:  # pragma: no cover - validated in create_job_store
             raise JobStoreError("redis package is required for RedisJobStore") from exc
 
+        self._redis_module = redis
         self._redis = redis.Redis.from_url(url, decode_responses=True)
         self._ns = namespace
+
+        try:
+            self._redis.ping()
+        except redis.exceptions.ResponseError as exc:
+            raise JobStoreError(
+                "Redis a rejeté l'index de base sélectionné. La plupart des services "
+                "managés (Redis Cloud inclus) n'exposent que la base 0 ; mettez à jour "
+                "JOB_STORE_URL/CELERY_* pour utiliser '/0'."
+            ) from exc
 
     def _job_key(self, job_id: str) -> str:
         return f"{self._ns}:job:{job_id}"
@@ -208,7 +218,13 @@ class RedisJobStore(BaseJobStore):
         pipe.hset(self._job_key(job_id), mapping=mapping)
         pipe.delete(self._log_key(job_id))
         pipe.set(self._pause_key(job_id), "0")
-        pipe.execute()
+        try:
+            pipe.execute()
+        except self._redis_module.exceptions.ResponseError as exc:
+            raise JobStoreError(
+                "Impossible d'enregistrer le job dans Redis : vérifiez que l'URL utilise "
+                "une base autorisée (souvent '/0' sur Redis Cloud)."
+            ) from exc
 
     def append_log(self, job_id: str, message: str) -> None:
         if not self._redis.exists(self._job_key(job_id)):
