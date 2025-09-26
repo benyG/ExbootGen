@@ -50,6 +50,26 @@ def get_certifications_by_provider(provider_id):
     return certifications
 
 
+def get_certifications_without_domains():
+    """Return certifications that do not have any associated domains."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT c.id, c.name
+        FROM courses c
+        LEFT JOIN modules m ON m.course = c.id
+        GROUP BY c.id, c.name
+        HAVING COUNT(m.id) = 0
+        ORDER BY c.name
+    """
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [{"id": row[0], "name": row[1]} for row in rows]
+
+
 def get_domains_by_certification(cert_id):
     conn = get_connection()
     cursor = conn.cursor()
