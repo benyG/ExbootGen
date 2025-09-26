@@ -8,7 +8,11 @@ from typing import Dict, List
 
 try:  # pragma: no cover - optional runtime dependency
     from celery import Celery  # type: ignore
+    from celery.exceptions import CeleryError  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover - fallback for environments without Celery
+    class CeleryError(Exception):
+        """Fallback CeleryError used when the dependency is unavailable."""
+
     class _CeleryConfig(SimpleNamespace):
         def update(self, *_, **kwargs):
             self.__dict__.update(kwargs)
@@ -119,6 +123,8 @@ def make_celery() -> Celery:
 
 celery_app = make_celery()
 job_store = create_job_store()
+
+QUEUE_EXCEPTIONS = (CeleryError, ConnectionError, OSError, RuntimeError)
 
 # Enregistrement des blueprints
 app.register_blueprint(dom_bp, url_prefix="/modules")
@@ -422,7 +428,7 @@ def fix_process():
 
     try:
         run_fix_job.apply_async(args=(provider_id, cert_id, action), task_id=job_id)
-    except Exception as exc:  # pragma: no cover - defensive, surfaced to client
+    except QUEUE_EXCEPTIONS as exc:  # pragma: no cover - defensive, surfaced to client
         app.logger.exception("Unable to enqueue fix job: provider_id=%s cert_id=%s", provider_id, cert_id)
         job_store.set_status(job_id, "failed", error=str(exc))
         return (
@@ -685,7 +691,7 @@ def populate_process():
 
     try:
         run_population_job.apply_async(args=(provider_id, cert_id), task_id=job_id)
-    except Exception as exc:  # pragma: no cover - defensive, surfaced to client
+    except QUEUE_EXCEPTIONS as exc:  # pragma: no cover - defensive, surfaced to client
         app.logger.exception(
             "Unable to enqueue population job: provider_id=%s cert_id=%s", provider_id, cert_id
         )
