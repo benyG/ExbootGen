@@ -54,6 +54,12 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for environments with
 
 from flask import Flask, jsonify, render_template, request
 
+try:  # pragma: no cover - optional runtime dependency
+    from kombu.exceptions import OperationalError  # type: ignore
+except (ModuleNotFoundError, ImportError):  # pragma: no cover - fallback when kombu is absent
+    class OperationalError(Exception):
+        """Fallback OperationalError used when kombu is unavailable."""
+
 from config import API_REQUEST_DELAY, DISTRIBUTION, GUI_PASSWORD
 import db
 from eraser_api import render_diagram
@@ -124,7 +130,7 @@ def make_celery() -> Celery:
 celery_app = make_celery()
 job_store = create_job_store()
 
-QUEUE_EXCEPTIONS = (CeleryError, ConnectionError, OSError, RuntimeError)
+QUEUE_EXCEPTIONS = (CeleryError, OperationalError, ConnectionError, OSError, RuntimeError)
 
 # Enregistrement des blueprints
 app.register_blueprint(dom_bp, url_prefix="/modules")
