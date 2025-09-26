@@ -102,14 +102,26 @@ def make_celery() -> Celery:
 
     broker_transport_options: Dict[str, object] = {}
     result_transport_options: Dict[str, object] = {}
+    redis_max_connections_setting = os.getenv("CELERY_REDIS_MAX_CONNECTIONS")
+    redis_max_connections: int | None = None
+    if redis_max_connections_setting:
+        redis_max_connections = max(int(redis_max_connections_setting), 0)
 
     if broker_url and broker_url.startswith("redis://"):
-        max_connections = int(os.getenv("CELERY_MAX_CONNECTIONS", str(pool_limit)))
-        broker_transport_options["max_connections"] = max_connections
+        broker_max_connections = int(os.getenv("CELERY_MAX_CONNECTIONS", str(pool_limit)))
+        broker_transport_options["max_connections"] = broker_max_connections
+        if redis_max_connections is None:
+            redis_max_connections = max(broker_max_connections, 0)
+        else:
+            redis_max_connections = max(redis_max_connections, broker_max_connections)
 
     if result_backend and result_backend.startswith("redis://"):
-        max_connections = int(os.getenv("CELERY_RESULT_MAX_CONNECTIONS", str(pool_limit)))
-        result_transport_options["max_connections"] = max_connections
+        result_max_connections = int(os.getenv("CELERY_RESULT_MAX_CONNECTIONS", str(pool_limit)))
+        result_transport_options["max_connections"] = result_max_connections
+        if redis_max_connections is None:
+            redis_max_connections = max(result_max_connections, 0)
+        else:
+            redis_max_connections = max(redis_max_connections, result_max_connections)
     celery_app.conf.update(
         task_track_started=True,
         task_serializer="json",
@@ -119,6 +131,9 @@ def make_celery() -> Celery:
         broker_transport_options=broker_transport_options,
         result_backend_transport_options=result_transport_options,
     )
+
+    if redis_max_connections is not None and redis_max_connections > 0:
+        celery_app.conf.redis_max_connections = redis_max_connections
 
     if eager:
         celery_app.conf.task_always_eager = True

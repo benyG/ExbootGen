@@ -176,7 +176,20 @@ class RedisJobStore(BaseJobStore):
             raise JobStoreError("redis package is required for RedisJobStore") from exc
 
         self._redis_module = redis
-        self._redis = redis.Redis.from_url(url, decode_responses=True)
+
+        max_connections_env = os.getenv("JOB_STORE_MAX_CONNECTIONS")
+        connection_kwargs = {"decode_responses": True}
+        if max_connections_env:
+            try:
+                max_connections = int(max_connections_env)
+            except ValueError as exc:
+                raise JobStoreError(
+                    "JOB_STORE_MAX_CONNECTIONS doit être un entier positif."
+                ) from exc
+            if max_connections > 0:
+                connection_kwargs["max_connections"] = max_connections
+
+        self._redis = redis.Redis.from_url(url, **connection_kwargs)
         self._ns = namespace
 
         try:
