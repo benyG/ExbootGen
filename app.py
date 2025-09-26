@@ -450,17 +450,46 @@ def fix_process():
     try:
         run_fix_job.apply_async(args=(provider_id, cert_id, action), task_id=job_id)
     except QUEUE_EXCEPTIONS as exc:  # pragma: no cover - defensive, surfaced to client
-        app.logger.exception("Unable to enqueue fix job: provider_id=%s cert_id=%s", provider_id, cert_id)
-        job_store.set_status(job_id, "failed", error=str(exc))
-        return (
-            jsonify(
-                {
-                    "error": "Impossible de démarrer le traitement : "
-                    "la file d'attente des tâches est indisponible."
-                }
-            ),
-            500,
+        app.logger.exception(
+            "Unable to enqueue fix job: provider_id=%s cert_id=%s; falling back to inline execution",
+            provider_id,
+            cert_id,
         )
+
+        def _run_inline() -> None:
+            context = JobContext(job_store, job_id)
+            try:
+                job_store.set_status(job_id, "running")
+            except JobStoreError:
+                initialise_job(
+                    job_store,
+                    job_id=job_id,
+                    description="fix-certification",
+                    metadata={
+                        "provider_id": provider_id,
+                        "cert_id": cert_id,
+                        "action": action,
+                    },
+                )
+                job_store.set_status(job_id, "running")
+
+            try:
+                run_fix(context, provider_id, cert_id, action)
+            except Exception as inline_exc:  # pragma: no cover - surfaced via job status
+                app.logger.exception(
+                    "Inline fix job failed: provider_id=%s cert_id=%s", provider_id, cert_id
+                )
+                context.set_status("failed", error=str(inline_exc))
+            else:
+                context.set_status("completed")
+
+        threading.Thread(
+            target=_run_inline,
+            name=f"fix-inline-{job_id}",
+            daemon=True,
+        ).start()
+
+        return jsonify({"status": "queued", "job_id": job_id, "mode": "inline"})
     except Exception as exc:
         if getattr(celery_app.conf, "task_always_eager", False):
             app.logger.exception(
