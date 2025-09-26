@@ -28,7 +28,7 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for environments with
             def decorator(func):
                 def apply_async(*, args=None, kwargs=None, task_id=None):
                     if not getattr(self.conf, "task_always_eager", False):
-                        raise RuntimeError(
+                        raise CeleryError(
                             "Celery n'est pas installé. Veuillez ajouter la dépendance 'celery' pour l'exécution asynchrone."
                         )
                     args = args or ()
@@ -130,7 +130,7 @@ def make_celery() -> Celery:
 celery_app = make_celery()
 job_store = create_job_store()
 
-QUEUE_EXCEPTIONS = (CeleryError, OperationalError, ConnectionError, OSError, RuntimeError)
+QUEUE_EXCEPTIONS = (CeleryError, OperationalError, ConnectionError, OSError)
 
 # Enregistrement des blueprints
 app.register_blueprint(dom_bp, url_prefix="/modules")
@@ -446,6 +446,20 @@ def fix_process():
             ),
             500,
         )
+    except Exception as exc:
+        if getattr(celery_app.conf, "task_always_eager", False):
+            app.logger.exception(
+                "Fix job failed during eager execution: provider_id=%s cert_id=%s",
+                provider_id,
+                cert_id,
+            )
+            status = job_store.get_status(job_id) or {}
+            payload = {"status": status.get("status", "failed"), "job_id": job_id}
+            error = status.get("error") or str(exc)
+            if error:
+                payload["error"] = error
+            return jsonify(payload)
+        raise
 
     return jsonify({"status": "queued", "job_id": job_id})
 
@@ -711,6 +725,20 @@ def populate_process():
             ),
             500,
         )
+    except Exception as exc:
+        if getattr(celery_app.conf, "task_always_eager", False):
+            app.logger.exception(
+                "Population job failed during eager execution: provider_id=%s cert_id=%s",
+                provider_id,
+                cert_id,
+            )
+            status = job_store.get_status(job_id) or {}
+            payload = {"status": status.get("status", "failed"), "job_id": job_id}
+            error = status.get("error") or str(exc)
+            if error:
+                payload["error"] = error
+            return jsonify(payload)
+        raise
 
     return jsonify({"status": "queued", "job_id": job_id})
 
