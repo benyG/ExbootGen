@@ -102,14 +102,26 @@ def make_celery() -> Celery:
 
     broker_transport_options: Dict[str, object] = {}
     result_transport_options: Dict[str, object] = {}
+    redis_max_connections_setting = os.getenv("CELERY_REDIS_MAX_CONNECTIONS")
+    redis_max_connections: int | None = None
+    if redis_max_connections_setting:
+        redis_max_connections = max(int(redis_max_connections_setting), 0)
 
     if broker_url and broker_url.startswith("redis://"):
-        max_connections = int(os.getenv("CELERY_MAX_CONNECTIONS", str(pool_limit)))
-        broker_transport_options["max_connections"] = max_connections
+        broker_max_connections = int(os.getenv("CELERY_MAX_CONNECTIONS", str(pool_limit)))
+        broker_transport_options["max_connections"] = broker_max_connections
+        if redis_max_connections is None:
+            redis_max_connections = max(broker_max_connections, 0)
+        else:
+            redis_max_connections = max(redis_max_connections, broker_max_connections)
 
     if result_backend and result_backend.startswith("redis://"):
-        max_connections = int(os.getenv("CELERY_RESULT_MAX_CONNECTIONS", str(pool_limit)))
-        result_transport_options["max_connections"] = max_connections
+        result_max_connections = int(os.getenv("CELERY_RESULT_MAX_CONNECTIONS", str(pool_limit)))
+        result_transport_options["max_connections"] = result_max_connections
+        if redis_max_connections is None:
+            redis_max_connections = max(result_max_connections, 0)
+        else:
+            redis_max_connections = max(redis_max_connections, result_max_connections)
     celery_app.conf.update(
         task_track_started=True,
         task_serializer="json",
@@ -119,6 +131,9 @@ def make_celery() -> Celery:
         broker_transport_options=broker_transport_options,
         result_backend_transport_options=result_transport_options,
     )
+
+    if redis_max_connections is not None and redis_max_connections > 0:
+        celery_app.conf.redis_max_connections = redis_max_connections
 
     if eager:
         celery_app.conf.task_always_eager = True
@@ -435,17 +450,46 @@ def fix_process():
     try:
         run_fix_job.apply_async(args=(provider_id, cert_id, action), task_id=job_id)
     except QUEUE_EXCEPTIONS as exc:  # pragma: no cover - defensive, surfaced to client
-        app.logger.exception("Unable to enqueue fix job: provider_id=%s cert_id=%s", provider_id, cert_id)
-        job_store.set_status(job_id, "failed", error=str(exc))
-        return (
-            jsonify(
-                {
-                    "error": "Impossible de démarrer le traitement : "
-                    "la file d'attente des tâches est indisponible."
-                }
-            ),
-            500,
+        app.logger.exception(
+            "Unable to enqueue fix job: provider_id=%s cert_id=%s; falling back to inline execution",
+            provider_id,
+            cert_id,
         )
+
+        def _run_inline() -> None:
+            context = JobContext(job_store, job_id)
+            try:
+                job_store.set_status(job_id, "running")
+            except JobStoreError:
+                initialise_job(
+                    job_store,
+                    job_id=job_id,
+                    description="fix-certification",
+                    metadata={
+                        "provider_id": provider_id,
+                        "cert_id": cert_id,
+                        "action": action,
+                    },
+                )
+                job_store.set_status(job_id, "running")
+
+            try:
+                run_fix(context, provider_id, cert_id, action)
+            except Exception as inline_exc:  # pragma: no cover - surfaced via job status
+                app.logger.exception(
+                    "Inline fix job failed: provider_id=%s cert_id=%s", provider_id, cert_id
+                )
+                context.set_status("failed", error=str(inline_exc))
+            else:
+                context.set_status("completed")
+
+        threading.Thread(
+            target=_run_inline,
+            name=f"fix-inline-{job_id}",
+            daemon=True,
+        ).start()
+
+        return jsonify({"status": "queued", "job_id": job_id, "mode": "inline"})
     except Exception as exc:
         if getattr(celery_app.conf, "task_always_eager", False):
             app.logger.exception(
