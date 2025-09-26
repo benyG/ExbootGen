@@ -301,6 +301,96 @@
       color: var(--text-muted);
     }
 
+    .module-inventory {
+      margin-top: 1.6rem;
+      padding-top: 1.4rem;
+      border-top: 1px solid rgba(148, 163, 184, 0.16);
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+    }
+
+    .module-inventory h3 {
+      margin: 0;
+      font-size: 1rem;
+      font-family: 'Space Grotesk', sans-serif;
+      letter-spacing: 0.05em;
+    }
+
+    .module-inventory p {
+      margin: 0;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+
+    .module-inventory ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .module-chip {
+      padding: 0.85rem 1rem;
+      border-radius: 14px;
+      background: rgba(8, 12, 24, 0.6);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      box-shadow: inset 0 0 0 1px rgba(148,163,184,0.04);
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .module-chip strong {
+      font-weight: 600;
+    }
+
+    .module-chip span {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    .button-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin: 1.2rem 0 0;
+    }
+
+    .secondary-button {
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      background: rgba(10, 15, 28, 0.72);
+      color: var(--text-primary);
+      font-weight: 500;
+      border-radius: 14px;
+      padding: 0.75rem 1.1rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.3s var(--transition), border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .secondary-button:hover {
+      transform: translateY(-2px);
+      border-color: rgba(71, 245, 192, 0.45);
+      box-shadow: 0 12px 30px rgba(4, 7, 17, 0.45);
+    }
+
+    .secondary-button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .status-note {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      min-height: 1.2rem;
+    }
+
     #progress {
       width: 100%;
       background: rgba(8, 12, 24, 0.72);
@@ -409,6 +499,11 @@
           <span>Provider & certification sélectionnés</span>
           <span id="selectionLabel">—</span>
         </div>
+        <div class="module-inventory">
+          <h3>Domaines existants</h3>
+          <p id="modulesEmpty">Sélectionnez une certification pour afficher ses domaines.</p>
+          <ul id="modulesList"></ul>
+        </div>
       </div>
 
       <div class="panel">
@@ -421,6 +516,10 @@
         <div class="json-stats">
           <span id="jsonCount">0 caractère</span>
           <span id="jsonPreviewStatus">En attente de validation…</span>
+        </div>
+        <div class="button-stack">
+          <button type="button" id="generate-json-btn" class="secondary-button">Générer la structure avec OpenAI</button>
+          <span id="generationStatus" class="status-note"></span>
         </div>
         <button id="import-btn">Lancer l'importation</button>
         <div id="progress"><div id="bar"></div></div>
@@ -466,6 +565,10 @@
     const jsonCount = document.getElementById('jsonCount');
     const jsonPreviewStatus = document.getElementById('jsonPreviewStatus');
     const selectionLabel = document.getElementById('selectionLabel');
+    const modulesList = document.getElementById('modulesList');
+    const modulesEmpty = document.getElementById('modulesEmpty');
+    const generateBtn = document.getElementById('generate-json-btn');
+    const generationStatus = document.getElementById('generationStatus');
 
     function updateStats() {
       const length = jsonInput.value.length;
@@ -486,12 +589,18 @@
     }
 
     jsonInput.addEventListener('input', updateStats);
+    updateStats();
 
     const base = '{{ url_for('dom.index') }}';
 
-    async function loadJSON(url) {
-      const res = await fetch(url);
-      return res.json();
+    async function loadJSON(url, options = {}) {
+      const res = await fetch(url, options);
+      const data = await res.json();
+      if (!res.ok) {
+        const message = (data && data.error) ? data.error : `HTTP ${res.status}`;
+        throw new Error(message);
+      }
+      return data;
     }
 
     function fill(select, items) {
@@ -504,78 +613,198 @@
       });
     }
 
+    function setGenerationStatus(message, tone = 'muted') {
+      generationStatus.textContent = message;
+      if (tone === 'error') {
+        generationStatus.style.color = '#f87171';
+      } else if (tone === 'success') {
+        generationStatus.style.color = 'var(--accent)';
+      } else {
+        generationStatus.style.color = 'var(--text-muted)';
+      }
+    }
+
+    function renderModules(modules) {
+      modulesList.innerHTML = '';
+      if (!Array.isArray(modules) || modules.length === 0) {
+        modulesEmpty.textContent = 'Aucun domaine enregistré pour cette certification.';
+        modulesEmpty.style.display = 'block';
+        return;
+      }
+
+      modulesEmpty.style.display = 'none';
+      modules.forEach(module => {
+        const li = document.createElement('li');
+        li.className = 'module-chip';
+        const title = document.createElement('strong');
+        title.textContent = module.name || module.module_name || 'Domaine';
+        li.appendChild(title);
+        const descr = module.descr || module.module_descr;
+        if (descr) {
+          const span = document.createElement('span');
+          span.textContent = descr;
+          li.appendChild(span);
+        }
+        modulesList.appendChild(li);
+      });
+    }
+
+    async function refreshModules(certId) {
+      if (!certId) {
+        modulesList.innerHTML = '';
+        modulesEmpty.textContent = 'Sélectionnez une certification pour afficher ses domaines.';
+        modulesEmpty.style.display = 'block';
+        return;
+      }
+
+      modulesList.innerHTML = '';
+      modulesEmpty.textContent = 'Chargement des domaines…';
+      modulesEmpty.style.display = 'block';
+      try {
+        const modules = await loadJSON(`${base}api/certifications/${certId}/modules`);
+        renderModules(modules);
+      } catch (err) {
+        modulesList.innerHTML = '';
+        modulesEmpty.textContent = err.message || 'Impossible de récupérer les domaines actuels.';
+        modulesEmpty.style.display = 'block';
+      }
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
       const provSel = document.getElementById('prov');
       const certSel = document.getElementById('cert');
 
-      const providers = await loadJSON(base + 'api/providers');
-      fill(provSel, providers);
-      if (providers.length) {
-        provSel.value = providers[0].id;
-        provSel.dispatchEvent(new Event('change'));
+      function updateSelectionLabel() {
+        selectionLabel.textContent = `${provSel.options[provSel.selectedIndex]?.text || ''} → ${certSel.options[certSel.selectedIndex]?.text || '—'}`;
       }
 
-      provSel.addEventListener('change', async () => {
-        const certs = await loadJSON(`${base}api/certifications/${provSel.value}`);
-        fill(certSel, certs);
-        if (certs.length) {
-          certSel.value = certs[0].id;
+      async function refreshProviderCertifications() {
+        try {
+          const certs = await loadJSON(`${base}api/certifications/${provSel.value}`);
+          fill(certSel, certs);
+          if (certs.length) {
+            certSel.value = certs[0].id;
+            updateSelectionLabel();
+            refreshModules(certSel.value);
+          } else {
+            updateSelectionLabel();
+            refreshModules(null);
+          }
+        } catch (err) {
+          updateSelectionLabel();
+          modulesList.innerHTML = '';
+          modulesEmpty.textContent = err.message || 'Impossible de charger les certifications.';
+          modulesEmpty.style.display = 'block';
         }
-        selectionLabel.textContent = `${provSel.options[provSel.selectedIndex]?.text || ''} → ${certSel.options[certSel.selectedIndex]?.text || '—'}`;
-      });
+      }
+
+      try {
+        const providers = await loadJSON(base + 'api/providers');
+        fill(provSel, providers);
+        if (providers.length) {
+          provSel.value = providers[0].id;
+          await refreshProviderCertifications();
+        } else {
+          updateSelectionLabel();
+          refreshModules(null);
+        }
+      } catch (err) {
+        selectionLabel.textContent = '—';
+        modulesEmpty.textContent = err.message || 'Impossible de charger les providers.';
+        modulesEmpty.style.display = 'block';
+      }
+
+      provSel.addEventListener('change', refreshProviderCertifications);
 
       certSel.addEventListener('change', () => {
-        selectionLabel.textContent = `${provSel.options[provSel.selectedIndex]?.text || ''} → ${certSel.options[certSel.selectedIndex]?.text || '—'}`;
+        updateSelectionLabel();
+        refreshModules(certSel.value);
       });
     });
 
-    document.getElementById('import-btn').onclick = async () => {
-      const certId = +document.getElementById('cert').value;
-      let domains;
-      try {
-        domains = JSON.parse(jsonInput.value);
-        if (!Array.isArray(domains)) throw new Error();
-      } catch (err) {
-        alert('JSON invalide : attendez un tableau d’objets.');
-        return;
-      }
-
-      const log = document.getElementById('log');
-      const bar = document.getElementById('bar');
-      const total = domains.length;
-      log.textContent = '';
-      bar.style.width = '0%';
-
-      for (let i = 0; i < total; i++) {
-        const dom = domains[i];
-        if (!dom.name) {
-          log.textContent += `⚠️ Ignoré (pas de name): ${JSON.stringify(dom)}\n`;
-          continue;
+    if (generateBtn) {
+      const originalLabel = generateBtn.textContent;
+      generateBtn.addEventListener('click', async () => {
+        const certId = document.getElementById('cert').value;
+        if (!certId) {
+          setGenerationStatus('Choisissez une certification avant de générer.', 'error');
+          return;
         }
+
+        setGenerationStatus('Génération en cours…');
+        generateBtn.disabled = true;
+        generateBtn.textContent = 'Génération…';
         try {
-          const res = await fetch(base + 'api/modules', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              certification_id: certId,
-              name: dom.name,
-              descr: dom.descr || null
-            })
-          });
-          const j = await res.json();
-          if (res.ok) {
-            log.textContent += `✅ [${j.id}] ${j.name}\n`;
-          } else {
-            log.textContent += `⛔ Erreur: ${j.error}\n`;
+          const payload = await loadJSON(`${base}api/certifications/${certId}/generate-domains`, { method: 'POST' });
+          if (!Array.isArray(payload.modules)) {
+            throw new Error('Réponse inattendue de l’API.');
           }
-        } catch (e) {
-          log.textContent += `⛔ Erreur réseau: ${e}\n`;
+          jsonInput.value = JSON.stringify(payload.modules, null, 2);
+          updateStats();
+          setGenerationStatus(`Proposition générée pour ${payload.certification}.`, 'success');
+        } catch (err) {
+          setGenerationStatus(err.message || 'Erreur lors de la génération.', 'error');
+        } finally {
+          generateBtn.disabled = false;
+          generateBtn.textContent = originalLabel;
         }
-        bar.style.width = `${Math.round((i + 1) / total * 100)}%`;
-      }
+      });
+    }
 
-      alert(`Import terminé : ${total} item(s) traité(s).`);
-    };
+    const importBtn = document.getElementById('import-btn');
+    if (importBtn) {
+      importBtn.addEventListener('click', async () => {
+        const certId = +document.getElementById('cert').value;
+        let domains;
+        try {
+          domains = JSON.parse(jsonInput.value);
+          if (!Array.isArray(domains)) throw new Error();
+        } catch (err) {
+          alert('JSON invalide : attendez un tableau d’objets.');
+          return;
+        }
+
+        const log = document.getElementById('log');
+        const bar = document.getElementById('bar');
+        const total = domains.length;
+        log.textContent = '';
+        bar.style.width = '0%';
+
+        for (let i = 0; i < total; i++) {
+          const dom = domains[i] || {};
+          const name = dom.name || dom.module_name;
+          const descr = dom.descr !== undefined ? dom.descr : dom.module_descr;
+
+          if (!name) {
+            log.textContent += `⚠️ Ignoré (pas de nom): ${JSON.stringify(dom)}\n`;
+            continue;
+          }
+          try {
+            const res = await fetch(base + 'api/modules', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                certification_id: certId,
+                name,
+                descr: descr || null
+              })
+            });
+            const j = await res.json();
+            if (res.ok) {
+              log.textContent += `✅ [${j.id}] ${j.name}\n`;
+            } else {
+              log.textContent += `⛔ Erreur: ${j.error}\n`;
+            }
+          } catch (e) {
+            log.textContent += `⛔ Erreur réseau: ${e}\n`;
+          }
+          bar.style.width = `${Math.round((i + 1) / total * 100)}%`;
+        }
+
+        alert(`Import terminé : ${total} item(s) traité(s).`);
+        refreshModules(certId);
+      });
+    }
   </script>
 </body>
 </html>

@@ -161,6 +161,40 @@
       <article class="report-panel" data-panel>
         <div class="panel-header" role="button" aria-expanded="false">
           <div>
+            <span>Inventaire</span>
+            <h2>Certifications sans domaines associés</h2>
+          </div>
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="panel-content">
+          {% if missing_domains %}
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Certification</th>
+                  <th>Identifiant</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for cert in missing_domains %}
+                <tr>
+                  <td>{{ cert.name }}</td>
+                  <td>{{ cert.id }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p style="color: var(--text-muted);">Chaque certification dispose déjà d'au moins un domaine.</p>
+          {% endif %}
+        </div>
+      </article>
+
+      <article class="report-panel" data-panel>
+        <div class="panel-header" role="button" aria-expanded="false">
+          <div>
             <span>Vue globale</span>
             <h2>Questions par domaine — Certification {{ certification_id }}</h2>
           </div>

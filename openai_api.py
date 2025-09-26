@@ -13,6 +13,26 @@ from config import (
     OPENAI_MAX_RETRIES,
 )
 
+DOMAIN_PROMPT_TEMPLATE = (
+    "Retrieve the official domains of the exam outline course for the certification "
+    "{{NAME_OF_CERTIFICATION}} along with their descriptions.\n"
+    "Reference Sources: only from official website of the specified certification vendor.\n"
+    "Format your response as a decodable JSON object in a single line without line breaks.\n"
+    "Your answer MUST only be the requested JSON, nothing else.\n"
+    "EXPECTED RESPONSE FORMAT (JSON only, no additional text):\n"
+    "{ \n"
+    "  modules: [\n"
+    "       {\n"
+    "        module_name: Domain Name A,\n"
+    "        module_descr: Domain Name A description\n"
+    "       {\n"
+    "       module_name: Domain Name B,\n"
+    "       module_descr: Domain Name B description\n"
+    "      }\n"
+    "  ]\n"
+    "}"
+)
+
 def clean_and_decode_json(content: str) -> dict:
     """
     Nettoie le contenu (retire les balises ```json) et décode le JSON.
@@ -100,6 +120,36 @@ def _post_with_retry(payload: dict) -> requests.Response:
                 f"Retrying in {delay:.1f}s."
             )
             time.sleep(delay)
+
+
+def generate_domains_outline(certification: str) -> dict:
+    """Retrieve official domains for a certification via the OpenAI API."""
+
+    prompt = DOMAIN_PROMPT_TEMPLATE.replace("{{NAME_OF_CERTIFICATION}}", certification)
+    payload = {
+        "model": OPENAI_MODEL,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        ],
+    }
+
+    response = _post_with_retry(payload)
+    resp_json = response.json()
+    if "choices" not in resp_json or not resp_json["choices"]:
+        raise Exception(f"Unexpected API Response in generate_domains_outline: {resp_json}")
+
+    message = resp_json["choices"][0].get("message", {})
+    if "content" not in message:
+        raise Exception(
+            f"Unexpected API Response structure in generate_domains_outline: {resp_json}"
+        )
+
+    content = message["content"]
+    return clean_and_decode_json(content)
+
 
 def generate_questions(
     provider_name: str,

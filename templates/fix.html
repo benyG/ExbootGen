@@ -411,22 +411,19 @@
       }
 
       function updateProgress(){
-        const providerId = $provider.val();
         const certId = $cert.val();
         const action = $action.val() || "assign";
+
         if(!certId){
           clearProgress();
           return;
         }
-
 
         if(initialProgress && String(certId) === String(preloadedCertId) && String(action) === String(preloadedAction)){
           renderProgress(initialProgress);
           initialProgress = null;
           return;
         }
-      }
-
 
         $.post("{{ url_for('fix_get_progress') }}", { cert_id: certId, action: action }, function(data){
           if(data){
