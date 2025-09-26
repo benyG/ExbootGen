@@ -355,6 +355,80 @@
       box-shadow: 0 20px 48px rgba(71, 245, 192, 0.28);
     }
 
+
+    .halo-card .card-icon {
+      width: 3.2rem;
+      height: 3.2rem;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08), 0 12px 26px rgba(4, 7, 17, 0.45);
+      transition: transform 0.35s var(--transition), box-shadow 0.35s var(--transition);
+    }
+
+    .halo-card:hover .card-icon {
+      transform: translateY(-2px) scale(1.05);
+      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12), 0 18px 38px rgba(4, 7, 17, 0.55);
+    }
+
+    .halo-card .card-icon svg {
+      width: 70%;
+      height: 70%;
+      stroke: currentColor;
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+    }
+
+    .card-icon-populate {
+      background: linear-gradient(135deg, rgba(71, 245, 192, 0.26), rgba(124, 247, 255, 0.18));
+      color: #86f7ff;
+    }
+
+    .card-icon-modules {
+      background: linear-gradient(135deg, rgba(165, 180, 252, 0.28), rgba(129, 140, 248, 0.2));
+      color: #c7d2fe;
+    }
+
+    .card-icon-move {
+      background: linear-gradient(135deg, rgba(74, 222, 128, 0.24), rgba(34, 197, 94, 0.18));
+      color: #bbf7d0;
+    }
+
+    .card-icon-importer {
+      background: linear-gradient(135deg, rgba(244, 114, 182, 0.28), rgba(251, 191, 36, 0.16));
+      color: #fbcfe8;
+    }
+
+    .card-icon-generator {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.28), rgba(129, 230, 217, 0.18));
+      color: #bfdbfe;
+    }
+
+    .card-icon-manual {
+      background: linear-gradient(135deg, rgba(236, 72, 153, 0.28), rgba(190, 24, 93, 0.18));
+      color: #f9a8d4;
+    }
+
+    .card-icon-relocate {
+      background: linear-gradient(135deg, rgba(45, 212, 191, 0.3), rgba(14, 165, 233, 0.2));
+      color: #99f6e4;
+    }
+
+    .card-icon-fix {
+      background: linear-gradient(135deg, rgba(248, 113, 113, 0.28), rgba(248, 150, 30, 0.2));
+      color: #fecdd3;
+    }
+
+    .card-icon-reports {
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.3), rgba(99, 102, 241, 0.2));
+      color: #bae6fd;
+    }
+
+
     .halo-card h3 {
       margin: 0;
       font-family: 'Space Grotesk', sans-serif;
@@ -612,46 +686,138 @@
     <section class="halo-grid" data-animate>
       <article class="halo-card active" data-destination="{{ url_for('populate_index') }}" data-title="Populate" data-description="Analyse la structure d'une certification et importe massivement les questions synchronisées depuis nos providers." data-highlight="Ingestion orchestrée" data-subtext="Analyse automatique & suivi live de progression.">
         <span>01</span>
+        <div class="card-icon card-icon-populate" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <rect x="3.5" y="4.5" width="7" height="7" rx="2"></rect>
+            <rect x="13.5" y="12.5" width="7" height="7" rx="2"></rect>
+            <path d="M10.5 8h5a2.5 2.5 0 0 1 2.5 2.5v4.5"></path>
+            <path d="M10.5 8l2.7 2.7"></path>
+          </svg>
+        </div>
+
         <h3>Populate</h3>
         <p>Orchestrez des importations massives tout en gardant un contrôle granulaire sur chaque domaine.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('dom.index') }}" data-title="Import Modules" data-description="Créez ou mettez à jour des domaines en série à partir d'un simple JSON, avec validations instantanées." data-highlight="Domaines express" data-subtext="Validation automatique & feedback en temps réel.">
         <span>02</span>
+
+        <div class="card-icon card-icon-modules" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M5 5.5h9.5v4.5H5z"></path>
+            <path d="M9.5 5.5V3.5"></path>
+            <path d="M9.5 10v10.5"></path>
+            <path d="M13.5 13H19a2 2 0 0 1 2 2v5.5H9.5"></path>
+            <path d="M13.5 13l2.5-2.5"></path>
+          </svg>
+        </div>
+
         <h3>Import Modules</h3>
         <p>Déployez une structure pédagogique en quelques secondes, connectée à vos providers.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('move.index') }}" data-title="Move Questions" data-description="Réaffectez vos questions en masse entre domaines et certifications en toute sécurité." data-highlight="Transfert sécurisé" data-subtext="Filtrage avancé & confirmation instantanée.">
         <span>03</span>
+
+        <div class="card-icon card-icon-move" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M5 8h9"></path>
+            <path d="M10 3.5 14.5 8 10 12.5"></path>
+            <path d="M19 16h-9"></path>
+            <path d="M14 11.5 9.5 16 14 20.5"></path>
+          </svg>
+        </div>
+
         <h3>Move Questions</h3>
         <p>Rééquilibrez vos banques en déplaçant les contenus exactement là où ils sont nécessaires.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('pdf.index') }}" data-title="PDF Importer" data-description="Analysez un PDF, détectez automatiquement les questions et préparez un JSON prêt à importer." data-highlight="Extraction IA" data-subtext="Détection assistée & matching automatique des réponses.">
         <span>04</span>
+
+        <div class="card-icon card-icon-importer" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M6.5 4.5h7l4 4v6.5A2.5 2.5 0 0 1 15 17.5H6.5z"></path>
+            <path d="M13.5 4.5v4h4"></path>
+            <circle cx="17.5" cy="18.5" r="2.5"></circle>
+            <path d="m19.2 20.2 1.8 1.8"></path>
+          </svg>
+        </div>
+
         <h3>PDF Importer</h3>
         <p>Transformez vos supports statiques en questions exploitables, boostées par l'IA.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('pdf.generate_index') }}" data-title="PDF Generator" data-description="Générez de nouvelles questions à partir d'un PDF référent, avec distribution intelligente." data-highlight="Création générative" data-subtext="Multi-natures, scénarios et illustrations.">
         <span>05</span>
+
+        <div class="card-icon card-icon-generator" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M6 5h7.5l3 3V19a2 2 0 0 1-2 2H6z"></path>
+            <path d="M13.5 5v4h4"></path>
+            <path d="M11 13.5 12 15"></path>
+            <path d="M14.5 12l.5 1.5"></path>
+            <path d="M9 16.5 10 18"></path>
+            <path d="M12.5 18.5 14 19"></path>
+          </svg>
+        </div>
+
         <h3>PDF Generator</h3>
         <p>Propulsez la création d'exercices avec des scénarios riches et équilibrés.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('quest.index') }}" data-title="Manual Import" data-description="Ajoutez ou corrigez manuellement une question en gardant l'historique aligné." data-highlight="Micro-édition" data-subtext="Formulaires dynamiques & validations immédiates.">
         <span>06</span>
+
+        <div class="card-icon card-icon-manual" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M5 5.5h9.5v4.5H5z"></path>
+            <path d="M9.5 5.5V3.5"></path>
+            <path d="m12 14.5 4.8-4.8a1.4 1.4 0 0 1 2 0l1.5 1.5a1.4 1.4 0 0 1 0 2L15.5 18"></path>
+            <path d="M12 14.5v3.5h3.5"></path>
+          </svg>
+        </div>
+
         <h3>Manual Import</h3>
         <p>Affinez les détails question par question grâce à une interface rapide et tactile.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('reloc.index') }}" data-title="Relocate" data-description="Relocalisez intelligemment grâce à l'IA et relancez automatiquement les traitements si nécessaire." data-highlight="Boucle auto-corrective" data-subtext="Streaming SSE & reprise automatique.">
         <span>07</span>
+
+        <div class="card-icon card-icon-relocate" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="5"></circle>
+            <path d="M11 6V3.5"></path>
+            <path d="m14.5 13.5 3 3"></path>
+            <path d="M16 9.5 20.5 5"></path>
+            <path d="M20.5 5v4.5"></path>
+          </svg>
+        </div>
+
         <h3>Relocate</h3>
         <p>Redistribuez vos questions selon les besoins du moment sans perdre en cohérence.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('fix_index') }}" data-title="Fix Questions" data-description="Corrigez les réponses manquantes, drag & drop et matching en batch avec pilotage temps réel." data-highlight="Qualité garantie" data-subtext="Jobs suivis & reprise automatique.">
         <span>08</span>
+
+        <div class="card-icon card-icon-fix" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M6.5 19.5h4.5l7-7a2 2 0 0 0 0-2.8l-1.7-1.7a2 2 0 0 0-2.8 0l-7 7z"></path>
+            <path d="M5 15.5 8.5 19"></path>
+            <path d="M14.5 7 17 9.5"></path>
+          </svg>
+        </div>
+
         <h3>Fix Questions</h3>
         <p>Verrouillez la qualité de vos banques grâce à des scripts de correction dirigés.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('reports') }}" data-title="Reports" data-description="Visualisez vos métriques clés, identifiez les anomalies et déclenchez les bonnes actions." data-highlight="Clarté analytique" data-subtext="Cartes dynamiques & collapsibles interactifs.">
         <span>09</span>
+
+        <div class="card-icon card-icon-reports" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M5 18.5h14"></path>
+            <rect x="6.5" y="11" width="2.5" height="5.5" rx="0.6"></rect>
+            <rect x="11" y="8.5" width="2.5" height="8" rx="0.6"></rect>
+            <rect x="15.5" y="6" width="2.5" height="10.5" rx="0.6"></rect>
+            <path d="M6.5 6.5 11 4.5 15.5 6"></path>
+          </svg>
+        </div>
         <h3>Reports</h3>
         <p>Gardez la main sur vos indicateurs via des tableaux lumineux et réactifs.</p>
       </article>
