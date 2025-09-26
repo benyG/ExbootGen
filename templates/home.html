@@ -355,6 +355,7 @@
       box-shadow: 0 20px 48px rgba(71, 245, 192, 0.28);
     }
 
+
     .halo-card .card-icon {
       width: 3.2rem;
       height: 3.2rem;
@@ -426,6 +427,7 @@
       background: linear-gradient(135deg, rgba(14, 165, 233, 0.3), rgba(99, 102, 241, 0.2));
       color: #bae6fd;
     }
+
 
     .halo-card h3 {
       margin: 0;
@@ -692,11 +694,13 @@
             <path d="M10.5 8l2.7 2.7"></path>
           </svg>
         </div>
+
         <h3>Populate</h3>
         <p>Orchestrez des importations massives tout en gardant un contrôle granulaire sur chaque domaine.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('dom.index') }}" data-title="Import Modules" data-description="Créez ou mettez à jour des domaines en série à partir d'un simple JSON, avec validations instantanées." data-highlight="Domaines express" data-subtext="Validation automatique & feedback en temps réel.">
         <span>02</span>
+
         <div class="card-icon card-icon-modules" aria-hidden="true">
           <svg viewBox="0 0 24 24">
             <path d="M5 5.5h9.5v4.5H5z"></path>
@@ -706,11 +710,13 @@
             <path d="M13.5 13l2.5-2.5"></path>
           </svg>
         </div>
+
         <h3>Import Modules</h3>
         <p>Déployez une structure pédagogique en quelques secondes, connectée à vos providers.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('move.index') }}" data-title="Move Questions" data-description="Réaffectez vos questions en masse entre domaines et certifications en toute sécurité." data-highlight="Transfert sécurisé" data-subtext="Filtrage avancé & confirmation instantanée.">
         <span>03</span>
+
         <div class="card-icon card-icon-move" aria-hidden="true">
           <svg viewBox="0 0 24 24">
             <path d="M5 8h9"></path>
@@ -719,11 +725,13 @@
             <path d="M14 11.5 9.5 16 14 20.5"></path>
           </svg>
         </div>
+
         <h3>Move Questions</h3>
         <p>Rééquilibrez vos banques en déplaçant les contenus exactement là où ils sont nécessaires.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('pdf.index') }}" data-title="PDF Importer" data-description="Analysez un PDF, détectez automatiquement les questions et préparez un JSON prêt à importer." data-highlight="Extraction IA" data-subtext="Détection assistée & matching automatique des réponses.">
         <span>04</span>
+
         <div class="card-icon card-icon-importer" aria-hidden="true">
           <svg viewBox="0 0 24 24">
             <path d="M6.5 4.5h7l4 4v6.5A2.5 2.5 0 0 1 15 17.5H6.5z"></path>
@@ -732,11 +740,13 @@
             <path d="m19.2 20.2 1.8 1.8"></path>
           </svg>
         </div>
+
         <h3>PDF Importer</h3>
         <p>Transformez vos supports statiques en questions exploitables, boostées par l'IA.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('pdf.generate_index') }}" data-title="PDF Generator" data-description="Générez de nouvelles questions à partir d'un PDF référent, avec distribution intelligente." data-highlight="Création générative" data-subtext="Multi-natures, scénarios et illustrations.">
         <span>05</span>
+
         <div class="card-icon card-icon-generator" aria-hidden="true">
           <svg viewBox="0 0 24 24">
             <path d="M6 5h7.5l3 3V19a2 2 0 0 1-2 2H6z"></path>
@@ -747,11 +757,13 @@
             <path d="M12.5 18.5 14 19"></path>
           </svg>
         </div>
+
         <h3>PDF Generator</h3>
         <p>Propulsez la création d'exercices avec des scénarios riches et équilibrés.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('quest.index') }}" data-title="Manual Import" data-description="Ajoutez ou corrigez manuellement une question en gardant l'historique aligné." data-highlight="Micro-édition" data-subtext="Formulaires dynamiques & validations immédiates.">
         <span>06</span>
+
         <div class="card-icon card-icon-manual" aria-hidden="true">
           <svg viewBox="0 0 24 24">
             <path d="M5 5.5h9.5v4.5H5z"></path>
@@ -760,11 +772,13 @@
             <path d="M12 14.5v3.5h3.5"></path>
           </svg>
         </div>
+
         <h3>Manual Import</h3>
         <p>Affinez les détails question par question grâce à une interface rapide et tactile.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('reloc.index') }}" data-title="Relocate" data-description="Relocalisez intelligemment grâce à l'IA et relancez automatiquement les traitements si nécessaire." data-highlight="Boucle auto-corrective" data-subtext="Streaming SSE & reprise automatique.">
         <span>07</span>
+
         <div class="card-icon card-icon-relocate" aria-hidden="true">
           <svg viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="5"></circle>
@@ -774,11 +788,13 @@
             <path d="M20.5 5v4.5"></path>
           </svg>
         </div>
+
         <h3>Relocate</h3>
         <p>Redistribuez vos questions selon les besoins du moment sans perdre en cohérence.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('fix_index') }}" data-title="Fix Questions" data-description="Corrigez les réponses manquantes, drag & drop et matching en batch avec pilotage temps réel." data-highlight="Qualité garantie" data-subtext="Jobs suivis & reprise automatique.">
         <span>08</span>
+
         <div class="card-icon card-icon-fix" aria-hidden="true">
           <svg viewBox="0 0 24 24">
             <path d="M6.5 19.5h4.5l7-7a2 2 0 0 0 0-2.8l-1.7-1.7a2 2 0 0 0-2.8 0l-7 7z"></path>
@@ -786,11 +802,13 @@
             <path d="M14.5 7 17 9.5"></path>
           </svg>
         </div>
+
         <h3>Fix Questions</h3>
         <p>Verrouillez la qualité de vos banques grâce à des scripts de correction dirigés.</p>
       </article>
       <article class="halo-card" data-destination="{{ url_for('reports') }}" data-title="Reports" data-description="Visualisez vos métriques clés, identifiez les anomalies et déclenchez les bonnes actions." data-highlight="Clarté analytique" data-subtext="Cartes dynamiques & collapsibles interactifs.">
         <span>09</span>
+
         <div class="card-icon card-icon-reports" aria-hidden="true">
           <svg viewBox="0 0 24 24">
             <path d="M5 18.5h14"></path>
