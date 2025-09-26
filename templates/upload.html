@@ -1,252 +1,440 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Import PDF Questions</title>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Importer un PDF de questions · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
-    .brand-bg { background-color:#28a745; }
-    .brand-hover:hover { background-color:#218838; }
-    #loadingOverlay { position:fixed; top:0; left:0; width:100%; height:100%;
-                      background:rgba(0,0,0,0.4); display:none; align-items:center;
-                      justify-content:center; z-index:50; }
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 20% 20%, rgba(76,201,240,0.15), transparent 55%),
+                     radial-gradient(circle at 80% 30%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.22), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --glass-soft: rgba(15, 19, 32, 0.82);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb {
+      position: fixed;
+      width: 32rem;
+      height: 32rem;
+      border-radius: 50%;
+      opacity: 0.45;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      background: radial-gradient(circle, rgba(71,245,192,0.32) 0%, rgba(4,7,17,0) 70%);
+      animation: drift 22s ease-in-out infinite;
+      z-index: 0;
+    }
+
+    .orb-1 { top: -12rem; left: -6rem; }
+    .orb-2 { bottom: -10rem; right: -4rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.25) 0%, rgba(4,7,17,0) 70%); }
+    .orb-3 { top: 45vh; right: 50%; transform: translateX(50%); animation-delay: -14s; background: radial-gradient(circle, rgba(244,114,182,0.28) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift {
+      0%, 100% { transform: translate3d(0,0,0) scale(1); }
+      45% { transform: translate3d(40px, -30px, 0) scale(1.05); }
+      75% { transform: translate3d(-30px, 25px, 0) scale(0.95); }
+    }
+
+    .stellar-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(4, 7, 17, 0.72);
+      backdrop-filter: saturate(180%) blur(18px);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .stellar-container { width: min(1200px, 92vw); margin: 0 auto; padding: 1.2rem 0 1.6rem; }
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 18px; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25)); border: 1px solid rgba(148, 163, 184, 0.2); color: var(--accent-strong); font-weight: 600; letter-spacing: 0.05em; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28); }
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .nav-toggle { display: none; width: 2.8rem; height: 2.8rem; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 19, 32, 0.68); color: var(--text-primary); align-items: center; justify-content: center; cursor: pointer; transition: transform 0.35s var(--transition), background 0.35s var(--transition); }
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+    .nav-toggle span, .nav-toggle span::before, .nav-toggle span::after { display: block; width: 18px; height: 2px; background: currentColor; border-radius: 999px; position: relative; transition: transform 0.35s ease, opacity 0.3s ease; }
+    .nav-toggle span::before, .nav-toggle span::after { content: ''; position: absolute; left: 0; }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.4rem; border-radius: var(--radius-lg); padding: 0.35rem; background: rgba(8, 12, 24, 0.55); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
+    .stellar-nav a { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.05rem; border-radius: 14px; text-decoration: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition); }
+    .stellar-nav a::after { content: ''; position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14)); opacity: 0; transition: opacity 0.35s var(--transition); z-index: -1; }
+    .stellar-nav a:hover { color: var(--text-primary); transform: translateY(-2px); }
+    .stellar-nav a:hover::after { opacity: 1; }
+    .stellar-nav a.active { color: var(--text-primary); }
+    .stellar-nav a.active::after { opacity: 1; box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18); }
+
+    .stellar-main { flex: 1; width: min(1200px, 92vw); margin: 0 auto; padding: 4.2rem 0 5.6rem; display: flex; flex-direction: column; gap: 2.8rem; position: relative; z-index: 1; }
+
+    .glass-card { background: var(--glass); border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-strong); padding: clamp(2rem, 3vw, 3rem); backdrop-filter: blur(26px); position: relative; overflow: hidden; }
+    .glass-card::before { content: ''; position: absolute; inset: 1px; border-radius: calc(var(--radius-xl) - 2px); border: 1px solid rgba(148, 163, 184, 0.12); pointer-events: none; }
+
+    .hero-intro h1 { margin: 0 0 1rem; font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.2rem, 4vw, 2.9rem); letter-spacing: -0.01em; }
+    .hero-intro p { margin: 0; color: var(--text-muted); line-height: 1.7; }
+
+    label { font-weight: 500; font-size: 0.95rem; color: var(--text-primary); display: block; margin-bottom: 0.35rem; }
+    select, input, textarea, button { width: 100%; border-radius: 14px; border: 1px solid rgba(148, 163, 184, 0.22); padding: 0.75rem 0.95rem; background: rgba(10, 15, 28, 0.85); color: var(--text-primary); font-family: inherit; font-size: 0.95rem; transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease; }
+    select:focus, input:focus, textarea:focus, button:focus { outline: none; border-color: rgba(71, 245, 192, 0.6); box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.22); }
+
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.4rem; margin-top: 1.6rem; }
+    .form-grid textarea { grid-column: 1 / -1; }
+
+    .stellar-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 0.85rem 1.6rem; border-radius: 999px; background: linear-gradient(135deg, rgba(71,245,192,0.9), rgba(124,247,255,0.85)); color: #020617; font-weight: 600; text-decoration: none; border: none; cursor: pointer; box-shadow: 0 14px 35px rgba(71, 245, 192, 0.3); transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition); }
+    .stellar-button:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 18px 42px rgba(71, 245, 192, 0.38); }
+    .stellar-button.secondary { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.32); color: var(--text-primary); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.08); }
+
+    .json-preview { margin-top: 2rem; display: none; flex-direction: column; gap: 1rem; }
+    .json-preview.active { display: flex; }
+    .json-preview textarea { min-height: 320px; background: rgba(15, 23, 42, 0.75); font-family: 'JetBrains Mono', 'Fira Code', monospace; color: rgba(226, 232, 240, 0.85); border: 1px solid rgba(148,163,184,0.2); }
+
+    #loadingOverlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(4,7,17,0.72); backdrop-filter: blur(10px); display:none; align-items:center; justify-content:center; z-index:50; }
     #loadingOverlay.show { display:flex; }
-    .loader { border:8px solid #f3f3f3; border-top:8px solid #28a745; border-radius:50%;
-              width:60px; height:60px; animation:spin 1s linear infinite; }
+    .loader { border:6px solid rgba(148,163,184,0.2); border-top:6px solid rgba(71,245,192,0.8); border-radius:50%; width:70px; height:70px; animation:spin 1s linear infinite; }
     @keyframes spin { to { transform:rotate(360deg); } }
+
+    [data-animate] { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    [data-animate].is-visible { opacity: 1; transform: translateY(0); }
+
+    footer { color: rgba(226, 232, 240, 0.55); text-align: center; padding: 2.4rem 0 3rem; font-size: 0.85rem; }
+
+    @media (max-width: 960px) {
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 1.2rem; }
+      .stellar-nav { flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
   </style>
 </head>
-<body class="bg-gray-100">
-  <nav class="brand-bg text-white">
-    <div class="container mx-auto px-4 py-4 flex flex-wrap items-center justify-between">
-      <a href="{{ url_for('home') }}" class="text-2xl font-semibold">ExBoot Laboratory</a>
-      <ul class="flex flex-wrap space-x-4 mt-4 sm:mt-0">
-        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('populate_index') }}">Populate</a></li>
-        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('dom.index') }}">Import Modules</a></li>
-        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('move.index') }}">Move Questions</a></li>
-        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('reloc.index') }}">Relocate</a></li>
-        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('pdf.index') }}">PDF Importer</a></li>
-        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('pdf.generate_index') }}">PDF Generator</a></li>
-        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('quest.index') }}">Manual Import</a></li>
-        <li><a class="px-3 py-2 rounded brand-hover" href="{{ url_for('reports') }}">Reports</a></li>
-      </ul>
+<body>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+  <div class="stellar-orb orb-3"></div>
+
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <span class="brand-mark">EX</span>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Console d'orchestration pédagogique</span>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
+        </button>
+      </div>
+      <nav class="stellar-nav" id="stellarNav">
+        <a href="{{ url_for('home') }}" data-route="{{ url_for('home') }}">Accueil</a>
+        <a href="{{ url_for('populate_index') }}" data-route="{{ url_for('populate_index') }}">Populate</a>
+        <a href="{{ url_for('dom.index') }}" data-route="{{ url_for('dom.index') }}">Import Modules</a>
+        <a href="{{ url_for('move.index') }}" data-route="{{ url_for('move.index') }}">Move Questions</a>
+        <a href="{{ url_for('reloc.index') }}" data-route="{{ url_for('reloc.index') }}">Relocate</a>
+        <a href="{{ url_for('pdf.index') }}" data-route="{{ url_for('pdf.index') }}">PDF Importer</a>
+        <a href="{{ url_for('pdf.generate_index') }}" data-route="{{ url_for('pdf.generate_index') }}">PDF Generator</a>
+        <a href="{{ url_for('quest.index') }}" data-route="{{ url_for('quest.index') }}">Manual Import</a>
+        <a href="{{ url_for('fix_index') }}" data-route="{{ url_for('fix_index') }}">Fix Questions</a>
+        <a href="{{ url_for('reports') }}" data-route="{{ url_for('reports') }}">Reports</a>
+      </nav>
     </div>
-  </nav>
-  <main class="container mx-auto px-4 mt-8">
-    <div class="max-w-3xl mx-auto bg-white p-8 shadow rounded">
-      <h2 class="text-2xl font-bold text-center mb-4">📄 Import PDF Questions</h2>
-      <form id="uploadForm" class="space-y-4 mb-4">
+  </header>
+
+  <main class="stellar-main">
+    <section class="glass-card hero-intro" data-animate>
+      <h1>Analysez vos PDF et extrayez le JSON idéal</h1>
+      <p>Sélectionnez votre cible, indiquez le fichier à analyser et obtenez un JSON prêt à être importé dans la base ExBoot.</p>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <form id="uploadForm" class="form-grid">
         <div>
-          <label class="font-bold block mb-1">Provider:</label>
-          <select name="provider_id" id="providerSelect" class="w-full border rounded p-2" required></select>
+          <label>Provider</label>
+          <select name="provider_id" id="providerSelect" required></select>
         </div>
         <div>
-          <label class="font-bold block mb-1">Certification:</label>
-          <select name="cert_id" id="certSelect" class="w-full border rounded p-2" required></select>
+          <label>Certification</label>
+          <select name="cert_id" id="certSelect" required></select>
         </div>
         <div>
-          <label class="font-bold block mb-1">Module:</label>
-          <input type="text" id="moduleSearch" placeholder="Rechercher..." class="w-full border rounded p-2 mb-2">
-          <select name="module_id" id="moduleSelect" class="w-full border rounded p-2" required></select>
+          <label>Module</label>
+          <input type="text" id="moduleSearch" placeholder="Rechercher...">
+          <select name="module_id" id="moduleSelect" required></select>
         </div>
         <div>
-          <label class="font-bold block mb-1">PDF Folder:</label>
-          <input type="text" id="dirInput" class="w-full border rounded p-2" placeholder="/chemin/vers/dossier" required>
+          <label>Dossier PDF</label>
+          <input type="text" id="dirInput" placeholder="/chemin/vers/dossier" required>
         </div>
         <div>
-          <label class="font-bold block mb-1">PDF File:</label>
-          <input type="text" id="fileInput" list="pdfList" class="w-full border rounded p-2" placeholder="Commencez à taper..." required>
+          <label>Fichier PDF</label>
+          <input type="text" id="fileInput" list="pdfList" placeholder="Commencez à taper..." required>
           <datalist id="pdfList"></datalist>
         </div>
-        <button type="submit" id="analyzeBtn" class="brand-bg text-white w-full py-2 rounded brand-hover">Analyser PDF</button>
+        <div style="grid-column:1 / -1; display:flex; justify-content:flex-end; gap:0.8rem;">
+          <button type="submit" id="analyzeBtn" class="stellar-button">Analyser le PDF</button>
+        </div>
       </form>
-      <div id="jsonContainer" class="hidden">
-        <h4 id="jsonTitle" class="text-lg font-bold mb-2">📋 JSON extrait</h4>
-        <textarea id="jsonPreview" class="w-full h-72 border rounded p-2 font-mono bg-gray-800 text-gray-100" readonly></textarea>
-        <button id="confirmImport" class="brand-bg text-white w-full py-2 rounded mt-3 brand-hover">✅ Confirmer Import</button>
+
+      <div class="json-preview" id="jsonContainer">
+        <div class="note" id="jsonTitle">Aperçu JSON extrait</div>
+        <textarea id="jsonPreview" readonly></textarea>
+        <div style="display:flex; gap:0.8rem;">
+          <button id="confirmImport" class="stellar-button">Confirmer l'import</button>
+          <button type="button" id="resetPreview" class="stellar-button secondary">Effacer l'aperçu</button>
+        </div>
       </div>
-    </div>
-    <div id="loadingOverlay"><div class="loader"></div></div>
+    </section>
   </main>
-<script>
-// helper
-function option(text, value) {
-    const o = document.createElement("option");
-    o.textContent = text; o.value = value;
-    return o;
-}
 
-const base = '{{ url_for('pdf.index') }}';
+  <footer>ExBoot Laboratory &mdash; L'analyse de PDF devient un ballet lumineux.</footer>
 
-// 1) Providers -> auto-sélection + cascade
-fetch(base + "api/providers").then(r => r.json()).then(data => {
-    const providerSelect = document.getElementById("providerSelect");
-    providerSelect.innerHTML = "";
-    if (!data || data.length === 0) {
-        providerSelect.appendChild(option("— Aucun provider —", ""));
-        return;
-    }
-    data.forEach(p => providerSelect.appendChild(option(p.name, p.id)));
-    const defProv = data.find(p => p.id === 169);
-    providerSelect.value = defProv ? defProv.id : data[0].id;
-    providerSelect.dispatchEvent(new Event("change"));
-});
+  <div id="loadingOverlay"><div class="loader"></div></div>
 
-// 2) Provider change -> Certifications (puis cascade vers Modules)
-document.getElementById("providerSelect").addEventListener("change", function () {
-    const prov_id = this.value;
-    const certSelect = document.getElementById("certSelect");
-    const modSelect  = document.getElementById("moduleSelect");
-
-    certSelect.innerHTML = "";
-    modSelect.innerHTML  = "";
-
-    if (!prov_id) {
-        certSelect.appendChild(option("— Aucune certification —", ""));
-        modSelect.appendChild(option("— Aucun module —", ""));
-        return;
+  <script>
+    const toggle = document.getElementById('navToggle');
+    const nav = document.getElementById('stellarNav');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const isOpen = toggle.classList.toggle('is-open');
+        document.body.classList.toggle('nav-open', isOpen);
+        toggle.setAttribute('aria-expanded', isOpen);
+      });
     }
 
-    fetch(`${base}api/certifications/${prov_id}`).then(r => r.json()).then(data => {
-        certSelect.innerHTML = "";
+    const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
+    nav?.querySelectorAll('a[data-route]').forEach(link => {
+      const target = (link.dataset.route || '').replace(/\/$/, '') || '/';
+      if (target === '/' ? currentPath === '/' : currentPath.startsWith(target)) {
+        nav.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+        link.classList.add('active');
+      }
+    });
+
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.2 });
+
+    document.querySelectorAll('[data-animate]').forEach(el => observer.observe(el));
+
+    function option(text, value) {
+      const o = document.createElement("option");
+      o.textContent = text; o.value = value;
+      return o;
+    }
+
+    const base = '{{ url_for('pdf.index') }}';
+
+    fetch(base + "api/providers").then(r => r.json()).then(data => {
+        const providerSelect = document.getElementById("providerSelect");
+        providerSelect.innerHTML = "";
         if (!data || data.length === 0) {
+            providerSelect.appendChild(option("— Aucun provider —", ""));
+            return;
+        }
+        data.forEach(p => providerSelect.appendChild(option(p.name, p.id)));
+        const defProv = data.find(p => p.id === 169);
+        providerSelect.value = defProv ? defProv.id : data[0].id;
+        providerSelect.dispatchEvent(new Event("change"));
+    });
+
+    document.getElementById("providerSelect").addEventListener("change", function () {
+        const prov_id = this.value;
+        const certSelect = document.getElementById("certSelect");
+        const modSelect  = document.getElementById("moduleSelect");
+
+        certSelect.innerHTML = "";
+        modSelect.innerHTML  = "";
+
+        if (!prov_id) {
             certSelect.appendChild(option("— Aucune certification —", ""));
             modSelect.appendChild(option("— Aucun module —", ""));
             return;
         }
-        data.forEach(c => certSelect.appendChild(option(c.name, c.id)));
-        let sel = data[0].id;
-        if (Number(prov_id) === 169) {
-            const defCert = data.find(c => c.id === 23);
-            if (defCert) sel = defCert.id;
-        }
-        certSelect.value = sel;
-        certSelect.dispatchEvent(new Event("change"));
-    }).catch(() => {
-        certSelect.innerHTML = ""; modSelect.innerHTML = "";
-        certSelect.appendChild(option("— Erreur chargement —", ""));
+
+        fetch(`${base}api/certifications/${prov_id}`).then(r => r.json()).then(data => {
+            certSelect.innerHTML = "";
+            if (!data || data.length === 0) {
+                certSelect.appendChild(option("— Aucune certification —", ""));
+                modSelect.appendChild(option("— Aucun module —", ""));
+                return;
+            }
+            data.forEach(c => certSelect.appendChild(option(c.name, c.id)));
+            let sel = data[0].id;
+            if (Number(prov_id) === 169) {
+                const defCert = data.find(c => c.id === 23);
+                if (defCert) sel = defCert.id;
+            }
+            certSelect.value = sel;
+            certSelect.dispatchEvent(new Event("change"));
+        }).catch(() => {
+            certSelect.innerHTML = ""; modSelect.innerHTML = "";
+            certSelect.appendChild(option("— Erreur chargement —", ""));
+        });
     });
-});
 
-// 3) Certification change -> Modules (auto-sélection du 1er)
-document.getElementById("certSelect").addEventListener("change", function () {
-    const cert_id = this.value;
-    const modSelect = document.getElementById("moduleSelect");
+    document.getElementById("certSelect").addEventListener("change", function () {
+        const cert_id = this.value;
+        const modSelect = document.getElementById("moduleSelect");
 
-    modSelect.innerHTML = "";
-    if (!cert_id) {
-        modSelect.appendChild(option("— Aucun module —", ""));
-        return;
-    }
-
-    fetch(`${base}api/modules/${cert_id}`).then(r => r.json()).then(data => {
         modSelect.innerHTML = "";
-        if (!data || data.length === 0) {
+        if (!cert_id) {
             modSelect.appendChild(option("— Aucun module —", ""));
             return;
         }
-        data.forEach(m => modSelect.appendChild(option(m.name, m.id)));
-        modSearch.value = "";
-        modSearch.dispatchEvent(new Event('input'));
-    }).catch(() => {
-        modSelect.appendChild(option("— Erreur chargement —", ""));
-    });
-});
 
-// 3bis) Recherche dynamique de PDF
-const dirInput = document.getElementById("dirInput");
-const fileInput = document.getElementById("fileInput");
-const pdfList   = document.getElementById("pdfList");
-
-fileInput.addEventListener("input", function() {
-    const root = dirInput.value.trim();
-    const query = this.value.trim();
-    if (!root || query.length === 0) {
-        pdfList.innerHTML = "";
-        return;
-    }
-    fetch(`${base}api/search-pdfs?root=${encodeURIComponent(root)}&q=${encodeURIComponent(query)}`)
-        .then(r => r.json())
-        .then(data => {
-            pdfList.innerHTML = "";
-            data.forEach(p => {
-                const opt = document.createElement("option");
-                opt.value = p;
-                pdfList.appendChild(opt);
-            });
+        fetch(`${base}api/modules/${cert_id}`).then(r => r.json()).then(data => {
+            modSelect.innerHTML = "";
+            if (!data || data.length === 0) {
+                modSelect.appendChild(option("— Aucun module —", ""));
+                return;
+            }
+            data.forEach(m => modSelect.appendChild(option(m.name, m.id)));
+            modSearch.value = "";
+            modSearch.dispatchEvent(new Event('input'));
+        }).catch(() => {
+            modSelect.appendChild(option("— Erreur chargement —", ""));
         });
-});
-
-// 4) Soumission pour analyse PDF
-let currentSession = null;
-document.getElementById("uploadForm").addEventListener("submit", async function(e) {
-    e.preventDefault();
-    const btn = document.getElementById("analyzeBtn");
-    btn.disabled = true;
-    const overlay = document.getElementById("loadingOverlay");
-    overlay.classList.add('show');
-
-    try {
-        const formData = new FormData();
-        formData.append("module_id", document.getElementById("moduleSelect").value);
-        const dir = dirInput.value.trim().replace(/\/+$/, "");
-        const file = fileInput.value.trim();
-        formData.append("file_path", dir ? `${dir}/${file}` : file);
-        const res = await fetch(base + "upload-pdf", { method: "POST", body: formData });
-        const data = await res.json();
-        if (data.status === "ok") {
-            currentSession = data.session_id;
-            document.getElementById("jsonPreview").value = JSON.stringify(data.json_data, null, 4);
-            document.getElementById("jsonTitle").textContent = `📋 JSON extrait (${data.filename})`;
-            document.getElementById("jsonContainer").classList.remove("hidden");
-        } else {
-            alert("Erreur : " + (data.message || "analyse impossible"));
-        }
-    } catch (err) {
-        alert("Erreur réseau : " + err);
-    } finally {
-        btn.disabled = false;
-        overlay.classList.remove('show');
-    }
-});
-
-// 5) Confirmation import (affiche les bonnes clés de la réponse)
-document.getElementById("confirmImport").addEventListener("click", async function() {
-    if (!currentSession) {
-        alert("Aucune session d’analyse en mémoire. Analyse un PDF d’abord.");
-        return;
-    }
-    const formData = new FormData();
-    formData.append("session_id", currentSession);
-    const overlay = document.getElementById("loadingOverlay");
-    const btn = this;
-    btn.disabled = true;
-    overlay.classList.add('show');
-
-    try {
-        const res = await fetch(base + "import-questions", { method: "POST", body: formData });
-        const data = await res.json();
-        if (data.status === "ok") {
-            alert(`✅ Import terminé : ${data.imported_questions} questions, ${data.imported_answers} réponses`);
-        } else {
-            alert("❌ Erreur import : " + (data.message || "échec"));
-        }
-    } catch (err) {
-        alert("Erreur réseau : " + err);
-    } finally {
-        btn.disabled = false;
-        overlay.classList.remove('show');
-    }
-});
-
-const modSearch = document.getElementById('moduleSearch');
-const moduleSelect = document.getElementById('moduleSelect');
-modSearch.addEventListener('input', function(){
-    const term = this.value.toLowerCase();
-    Array.from(moduleSelect.options).forEach(o => {
-        o.style.display = o.text.toLowerCase().includes(term) ? '' : 'none';
     });
-});
-</script>
+
+    const dirInput = document.getElementById("dirInput");
+    const fileInput = document.getElementById("fileInput");
+    const pdfList   = document.getElementById("pdfList");
+
+    fileInput.addEventListener("input", function() {
+        const root = dirInput.value.trim();
+        const query = this.value.trim();
+        if (!root || query.length === 0) {
+            pdfList.innerHTML = "";
+            return;
+        }
+        fetch(`${base}api/search-pdfs?root=${encodeURIComponent(root)}&q=${encodeURIComponent(query)}`)
+            .then(r => r.json())
+            .then(data => {
+                pdfList.innerHTML = "";
+                data.forEach(p => {
+                    const opt = document.createElement("option");
+                    opt.value = p;
+                    pdfList.appendChild(opt);
+                });
+            });
+    });
+
+    let currentSession = null;
+    document.getElementById("uploadForm").addEventListener("submit", async function(e) {
+        e.preventDefault();
+        const btn = document.getElementById("analyzeBtn");
+        btn.disabled = true;
+        const overlay = document.getElementById("loadingOverlay");
+        overlay.classList.add('show');
+
+        try {
+            const formData = new FormData();
+            formData.append("module_id", document.getElementById("moduleSelect").value);
+            const dir = dirInput.value.trim().replace(/\/+$/, "");
+            const file = fileInput.value.trim();
+            formData.append("file_path", dir ? `${dir}/${file}` : file);
+            const res = await fetch(base + "upload-pdf", { method: "POST", body: formData });
+            const data = await res.json();
+            if (data.status === "ok") {
+                currentSession = data.session_id;
+                document.getElementById("jsonPreview").value = JSON.stringify(data.json_data, null, 4);
+                document.getElementById("jsonTitle").textContent = `Aperçu JSON extrait (${data.filename})`;
+                document.getElementById("jsonContainer").classList.add("active");
+            } else {
+                alert("Erreur : " + (data.message || "analyse impossible"));
+            }
+        } catch (err) {
+            alert("Erreur réseau : " + err);
+        } finally {
+            btn.disabled = false;
+            overlay.classList.remove('show');
+        }
+    });
+
+    document.getElementById("confirmImport").addEventListener("click", async function() {
+        if (!currentSession) {
+            alert("Aucune session d’analyse en mémoire. Analysez un PDF d’abord.");
+            return;
+        }
+        const formData = new FormData();
+        formData.append("session_id", currentSession);
+        const overlay = document.getElementById("loadingOverlay");
+        const btn = this;
+        btn.disabled = true;
+        overlay.classList.add('show');
+
+        try {
+            const res = await fetch(base + "import-questions", { method: "POST", body: formData });
+            const data = await res.json();
+            if (data.status === "ok") {
+                alert(`✅ Import terminé : ${data.imported_questions} questions, ${data.imported_answers} réponses`);
+            } else {
+                alert("❌ Erreur import : " + (data.message || "échec"));
+            }
+        } catch (err) {
+            alert("Erreur réseau : " + err);
+        } finally {
+            btn.disabled = false;
+            overlay.classList.remove('show');
+        }
+    });
+
+    document.getElementById("resetPreview").addEventListener("click", function(){
+      currentSession = null;
+      document.getElementById("jsonPreview").value = '';
+      document.getElementById("jsonContainer").classList.remove("active");
+    });
+
+    const modSearch = document.getElementById('moduleSearch');
+    const moduleSelect = document.getElementById('moduleSelect');
+    modSearch.addEventListener('input', function(){
+        const term = this.value.toLowerCase();
+        Array.from(moduleSelect.options).forEach(o => {
+            o.style.display = o.text.toLowerCase().includes(term) ? '' : 'none';
+        });
+    });
+  </script>
 </body>
 </html>
