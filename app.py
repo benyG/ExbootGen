@@ -8,20 +8,27 @@ from typing import Dict, List
 
 try:  # pragma: no cover - optional runtime dependency
     from celery import Celery  # type: ignore
+    from celery.exceptions import CeleryError  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover - fallback for environments without Celery
+    class CeleryError(Exception):
+        """Fallback CeleryError used when the dependency is unavailable."""
+
     class _CeleryConfig(SimpleNamespace):
         def update(self, *_, **kwargs):
             self.__dict__.update(kwargs)
 
     class Celery:  # type: ignore
         def __init__(self, *_, **__):
-            self.conf = _CeleryConfig(task_always_eager=False, task_eager_propagates=True)
+            # Run tasks eagerly by default when Celery isn't installed so that
+            # development environments without the dependency can still execute
+            # long running jobs synchronously instead of crashing at runtime.
+            self.conf = _CeleryConfig(task_always_eager=True, task_eager_propagates=True)
 
         def task(self, bind: bool = False, name: str | None = None):
             def decorator(func):
                 def apply_async(*, args=None, kwargs=None, task_id=None):
                     if not getattr(self.conf, "task_always_eager", False):
-                        raise RuntimeError(
+                        raise CeleryError(
                             "Celery n'est pas installé. Veuillez ajouter la dépendance 'celery' pour l'exécution asynchrone."
                         )
                     args = args or ()
@@ -46,6 +53,12 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for environments with
 
 
 from flask import Flask, jsonify, render_template, request
+
+try:  # pragma: no cover - optional runtime dependency
+    from kombu.exceptions import OperationalError  # type: ignore
+except (ModuleNotFoundError, ImportError):  # pragma: no cover - fallback when kombu is absent
+    class OperationalError(Exception):
+        """Fallback OperationalError used when kombu is unavailable."""
 
 from config import API_REQUEST_DELAY, DISTRIBUTION, GUI_PASSWORD
 import db
@@ -116,6 +129,8 @@ def make_celery() -> Celery:
 
 celery_app = make_celery()
 job_store = create_job_store()
+
+QUEUE_EXCEPTIONS = (CeleryError, OperationalError, ConnectionError, OSError)
 
 # Enregistrement des blueprints
 app.register_blueprint(dom_bp, url_prefix="/modules")
@@ -417,7 +432,35 @@ def fix_process():
         metadata={"provider_id": provider_id, "cert_id": cert_id, "action": action},
     )
 
-    run_fix_job.apply_async(args=(provider_id, cert_id, action), task_id=job_id)
+    try:
+        run_fix_job.apply_async(args=(provider_id, cert_id, action), task_id=job_id)
+    except QUEUE_EXCEPTIONS as exc:  # pragma: no cover - defensive, surfaced to client
+        app.logger.exception("Unable to enqueue fix job: provider_id=%s cert_id=%s", provider_id, cert_id)
+        job_store.set_status(job_id, "failed", error=str(exc))
+        return (
+            jsonify(
+                {
+                    "error": "Impossible de démarrer le traitement : "
+                    "la file d'attente des tâches est indisponible."
+                }
+            ),
+            500,
+        )
+    except Exception as exc:
+        if getattr(celery_app.conf, "task_always_eager", False):
+            app.logger.exception(
+                "Fix job failed during eager execution: provider_id=%s cert_id=%s",
+                provider_id,
+                cert_id,
+            )
+            status = job_store.get_status(job_id) or {}
+            payload = {"status": status.get("status", "failed"), "job_id": job_id}
+            error = status.get("error") or str(exc)
+            if error:
+                payload["error"] = error
+            return jsonify(payload)
+        raise
+
     return jsonify({"status": "queued", "job_id": job_id})
 
 
@@ -666,7 +709,37 @@ def populate_process():
         metadata={"provider_id": provider_id, "cert_id": cert_id},
     )
 
-    run_population_job.apply_async(args=(provider_id, cert_id), task_id=job_id)
+    try:
+        run_population_job.apply_async(args=(provider_id, cert_id), task_id=job_id)
+    except QUEUE_EXCEPTIONS as exc:  # pragma: no cover - defensive, surfaced to client
+        app.logger.exception(
+            "Unable to enqueue population job: provider_id=%s cert_id=%s", provider_id, cert_id
+        )
+        job_store.set_status(job_id, "failed", error=str(exc))
+        return (
+            jsonify(
+                {
+                    "error": "Impossible de démarrer le traitement : "
+                    "la file d'attente des tâches est indisponible."
+                }
+            ),
+            500,
+        )
+    except Exception as exc:
+        if getattr(celery_app.conf, "task_always_eager", False):
+            app.logger.exception(
+                "Population job failed during eager execution: provider_id=%s cert_id=%s",
+                provider_id,
+                cert_id,
+            )
+            status = job_store.get_status(job_id) or {}
+            payload = {"status": status.get("status", "failed"), "job_id": job_id}
+            error = status.get("error") or str(exc)
+            if error:
+                payload["error"] = error
+            return jsonify(payload)
+        raise
+
     return jsonify({"status": "queued", "job_id": job_id})
 
 
