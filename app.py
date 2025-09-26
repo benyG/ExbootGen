@@ -15,7 +15,10 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for environments with
 
     class Celery:  # type: ignore
         def __init__(self, *_, **__):
-            self.conf = _CeleryConfig(task_always_eager=False, task_eager_propagates=True)
+            # Run tasks eagerly by default when Celery isn't installed so that
+            # development environments without the dependency can still execute
+            # long running jobs synchronously instead of crashing at runtime.
+            self.conf = _CeleryConfig(task_always_eager=True, task_eager_propagates=True)
 
         def task(self, bind: bool = False, name: str | None = None):
             def decorator(func):
@@ -417,7 +420,21 @@ def fix_process():
         metadata={"provider_id": provider_id, "cert_id": cert_id, "action": action},
     )
 
-    run_fix_job.apply_async(args=(provider_id, cert_id, action), task_id=job_id)
+    try:
+        run_fix_job.apply_async(args=(provider_id, cert_id, action), task_id=job_id)
+    except Exception as exc:  # pragma: no cover - defensive, surfaced to client
+        app.logger.exception("Unable to enqueue fix job: provider_id=%s cert_id=%s", provider_id, cert_id)
+        job_store.set_status(job_id, "failed", error=str(exc))
+        return (
+            jsonify(
+                {
+                    "error": "Impossible de démarrer le traitement : "
+                    "la file d'attente des tâches est indisponible."
+                }
+            ),
+            500,
+        )
+
     return jsonify({"status": "queued", "job_id": job_id})
 
 
@@ -666,7 +683,23 @@ def populate_process():
         metadata={"provider_id": provider_id, "cert_id": cert_id},
     )
 
-    run_population_job.apply_async(args=(provider_id, cert_id), task_id=job_id)
+    try:
+        run_population_job.apply_async(args=(provider_id, cert_id), task_id=job_id)
+    except Exception as exc:  # pragma: no cover - defensive, surfaced to client
+        app.logger.exception(
+            "Unable to enqueue population job: provider_id=%s cert_id=%s", provider_id, cert_id
+        )
+        job_store.set_status(job_id, "failed", error=str(exc))
+        return (
+            jsonify(
+                {
+                    "error": "Impossible de démarrer le traitement : "
+                    "la file d'attente des tâches est indisponible."
+                }
+            ),
+            500,
+        )
+
     return jsonify({"status": "queued", "job_id": job_id})
 
 
