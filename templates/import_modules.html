@@ -771,9 +771,12 @@
         bar.style.width = '0%';
 
         for (let i = 0; i < total; i++) {
-          const dom = domains[i];
-          if (!dom.name) {
-            log.textContent += `⚠️ Ignoré (pas de name): ${JSON.stringify(dom)}\n`;
+          const dom = domains[i] || {};
+          const name = dom.name || dom.module_name;
+          const descr = dom.descr !== undefined ? dom.descr : dom.module_descr;
+
+          if (!name) {
+            log.textContent += `⚠️ Ignoré (pas de nom): ${JSON.stringify(dom)}\n`;
             continue;
           }
           try {
@@ -782,8 +785,8 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 certification_id: certId,
-                name: dom.name,
-                descr: dom.descr || null
+                name,
+                descr: descr || null
               })
             });
             const j = await res.json();
