@@ -288,6 +288,8 @@
       const $jobLogList = $("#job-log-list");
 
       let initialProgress = {{ initial_progress|tojson }};
+      const preloadedCertId = "{{ selected_cert_id if selected_cert_id is not none else '' }}";
+      const preloadedAction = "{{ selected_action or 'assign' }}";
       const statusUrlTemplate = "{{ url_for('fix_status', job_id='__JOB__') }}";
       const processUrl = "{{ url_for('fix_process') }}";
       let poller = null;
@@ -409,24 +411,32 @@
       }
 
       function updateProgress(){
-        const providerId = $provider.val();
         const certId = $cert.val();
-        const action = $action.val();
+        const action = $action.val() || "assign";
         if(!certId){
           clearProgress();
           return;
         }
-        const key = `${providerId}|${certId}|${action}`;
-        const counters = initialProgress[key];
-        if(counters){
-          renderProgress(counters);
-        } else {
-          clearProgress();
+
+        if(initialProgress && String(certId) === String(preloadedCertId) && String(action) === String(preloadedAction)){
+          renderProgress(initialProgress);
+          initialProgress = null;
+          return;
         }
+
+        $.post("{{ url_for('fix_get_progress') }}", { cert_id: certId, action: action }, function(data){
+          if(data){
+            renderProgress(data);
+          } else {
+            clearProgress();
+          }
+        }, "json").fail(function(){
+          clearProgress();
+        });
       }
 
       function loadCertifications(providerId, selectedCertId){
-        $.post("{{ url_for('get_certifications') }}", { provider_id: providerId }, function(data){
+        $.post("{{ url_for('fix_get_certifications') }}", { provider_id: providerId }, function(data){
           $cert.empty();
           $.each(data || [], function(i, item){
             const option = $("<option>", { value: item.id, text: item.name });
