@@ -146,7 +146,6 @@ def generate_domains_outline(certification: str) -> dict:
         raise Exception(
             "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer des domaines."
         )
-
     prompt = DOMAIN_PROMPT_TEMPLATE.replace("{{NAME_OF_CERTIFICATION}}", certification)
     payload = {
         "model": OPENAI_MODEL,
