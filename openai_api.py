@@ -39,20 +39,37 @@ def clean_and_decode_json(content: str) -> dict:
     En cas d'erreur, on log et on lève une exception.
     """
     logging.debug(f"Raw content received: {content}")
-    
-    # Supprimer les balises ```json et ```
-    content = re.sub(r'```json|```', '', content).strip()
-    
-    try:
-        decoded_json = json.loads(content)
-    except json.JSONDecodeError as e:
-        logging.error(f"JSON Decoding Error: {str(e)} - content was: {content}")
-        err = Exception(f"JSON Decoding Error. Raw content: {content}")
-        setattr(err, "raw_content", content)
-        raise err from e
 
-    logging.debug(f"Decoded JSON: {decoded_json}")
-    return decoded_json
+    # Supprimer les balises ```json et ```
+    cleaned = re.sub(r'```json|```', '', content).strip()
+
+    # Premier essai : décodage direct du JSON
+    try:
+        decoded_json = json.loads(cleaned)
+        logging.debug(f"Decoded JSON (direct): {decoded_json}")
+        return decoded_json
+    except json.JSONDecodeError as direct_error:
+        logging.debug(
+            "Direct JSON decode failed, attempting to locate embedded object: %s",
+            direct_error,
+        )
+
+    # Deuxième essai : détecter l'objet JSON principal lorsqu'il est entouré de texte
+    start = cleaned.find('{')
+    end = cleaned.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        snippet = cleaned[start : end + 1].strip()
+        try:
+            decoded_json = json.loads(snippet)
+            logging.debug(f"Decoded JSON (snippet): {decoded_json}")
+            return decoded_json
+        except json.JSONDecodeError as snippet_error:
+            logging.debug("Snippet decode failed: %s", snippet_error)
+
+    logging.error("JSON Decoding Error - content was: %s", cleaned)
+    err = Exception(f"JSON Decoding Error. Raw content: {cleaned}")
+    setattr(err, "raw_content", cleaned)
+    raise err
 
 
 def _post_with_retry(payload: dict) -> requests.Response:
@@ -125,6 +142,10 @@ def _post_with_retry(payload: dict) -> requests.Response:
 def generate_domains_outline(certification: str) -> dict:
     """Retrieve official domains for a certification via the OpenAI API."""
 
+    if not OPENAI_API_KEY:
+        raise Exception(
+            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer des domaines."
+        )
     prompt = DOMAIN_PROMPT_TEMPLATE.replace("{{NAME_OF_CERTIFICATION}}", certification)
     payload = {
         "model": OPENAI_MODEL,
