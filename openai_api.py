@@ -20,17 +20,10 @@ DOMAIN_PROMPT_TEMPLATE = (
     "Format your response as a decodable JSON object in a single line without line breaks.\n"
     "Your answer MUST only be the requested JSON, nothing else.\n"
     "EXPECTED RESPONSE FORMAT (JSON only, no additional text):\n"
-    "{ \n"
-    "  modules: [\n"
-    "       {\n"
-    "        module_name: Domain Name A,\n"
-    "        module_descr: Domain Name A description\n"
-    "       {\n"
-    "       module_name: Domain Name B,\n"
-    "       module_descr: Domain Name B description\n"
-    "      }\n"
-    "  ]\n"
-    "}"
+    "["
+    "  {name:Domaine A,descr:Description…},"
+    "  {name:Domaine B,descr:Description…} "
+    "]"
 )
 
 def clean_and_decode_json(content: str) -> dict:
