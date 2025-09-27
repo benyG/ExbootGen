@@ -264,6 +264,8 @@
 
   <div id="loadingOverlay"><div class="loader"></div></div>
 
+  <script src="{{ url_for('static', filename='js/searchable-select.js') }}"></script>
+
   <script>
     const toggle = document.getElementById('navToggle');
     const nav = document.getElementById('stellarNav');
@@ -304,29 +306,64 @@
     const genUrl = '{{ url_for('pdf.generate_questions_from_pdf') }}';
     let currentSession = null;
 
+    const providerSelect = document.getElementById("providerSelect");
+    const certSelect = document.getElementById("certSelect");
+    const providerSearch = window.makeSelectSearchable ? window.makeSelectSearchable(providerSelect, { placeholder: 'Rechercher un provider…' }) : null;
+    const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certSelect, { placeholder: 'Rechercher une certification…' }) : null;
+
     fetch(base + "api/providers").then(r => r.json()).then(data => {
-        const providerSelect = document.getElementById("providerSelect");
-        providerSelect.innerHTML = "";
-        data.forEach(p => providerSelect.appendChild(option(p.name, p.id)));
-        if (data.length > 0) {
-            providerSelect.value = data[0].id;
-            providerSelect.dispatchEvent(new Event("change"));
+        const items = (data || []).map(p => ({ value: p.id, label: p.name }));
+        const list = items.length ? items : [{ value: '', label: '— Aucun provider —' }];
+        const selectedValue = list[0]?.value ?? '';
+        if (providerSearch) {
+            providerSearch.setOptions(list, { keepSearch: false, selectedValue });
+            providerSearch.select.dispatchEvent(new Event("change"));
+        } else {
+            providerSelect.innerHTML = "";
+            list.forEach(opt => providerSelect.appendChild(option(opt.label, opt.value)));
+            if (list.length) {
+                providerSelect.value = selectedValue;
+                providerSelect.dispatchEvent(new Event("change"));
+            }
         }
     });
 
-    document.getElementById("providerSelect").addEventListener("change", function(){
+    providerSelect.addEventListener("change", function(){
         const prov_id = this.value;
-        const certSelect = document.getElementById("certSelect");
         const domSelect = document.getElementById("domainSelect");
-        certSelect.innerHTML = ""; domSelect.innerHTML = "";
-        if (!prov_id) return;
+        domSelect.innerHTML = "";
+        if (certSearch) {
+            certSearch.setOptions([], { keepSearch: false, selectedValue: '' });
+        } else {
+            certSelect.innerHTML = "";
+        }
+        if (!prov_id) {
+            if (!certSearch) {
+                certSelect.appendChild(option('— Aucune certification —', ''));
+            } else {
+                certSearch.setOptions([{ value: '', label: '— Aucune certification —' }], { keepSearch: false, selectedValue: '' });
+            }
+            return;
+        }
         fetch(`${base}api/certifications/${prov_id}`).then(r=>r.json()).then(data=>{
-            data.forEach(c => certSelect.appendChild(option(c.name, c.id)));
-            if (data.length>0){ certSelect.value = data[0].id; certSelect.dispatchEvent(new Event("change")); }
+            const items = (data || []).map(c => ({ value: c.id, label: c.name }));
+            const list = items.length ? items : [{ value: '', label: '— Aucune certification —' }];
+            const selectedValue = list[0]?.value ?? '';
+            if (certSearch) {
+                certSearch.setOptions(list, { keepSearch: false, selectedValue });
+                certSearch.select.dispatchEvent(new Event("change"));
+            } else {
+                certSelect.innerHTML = "";
+                list.forEach(opt => certSelect.appendChild(option(opt.label, opt.value)));
+                if (list.length) {
+                    certSelect.value = selectedValue;
+                    certSelect.dispatchEvent(new Event("change"));
+                }
+            }
         });
     });
 
-    document.getElementById("certSelect").addEventListener("change", function(){
+    certSelect.addEventListener("change", function(){
         const cert_id = this.value;
         const domSelect = document.getElementById("domainSelect");
         domSelect.innerHTML = "";

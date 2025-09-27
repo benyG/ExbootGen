@@ -243,6 +243,8 @@
 
   <footer>ExBoot Laboratory &mdash; La mobilité des questions devient un art.</footer>
 
+  <script src="{{ url_for('static', filename='js/searchable-select.js') }}"></script>
+
   <script>
     const toggle = document.getElementById('navToggle');
     const nav = document.getElementById('stellarNav');
@@ -280,19 +282,24 @@
     }
 
     function fillSelect(el, items, addAll = false) {
-      el.innerHTML = '';
+      const helper = el && el.__searchableSelect;
+      const data = [];
       if (addAll) {
-        const opt = document.createElement('option');
-        opt.value = '__all__';
-        opt.text = '— Tous —';
-        el.appendChild(opt);
+        data.push({ value: '__all__', label: '— Tous —' });
       }
-      items.forEach(i => {
-        const o = document.createElement('option');
-        o.value = i.id;
-        o.text = i.name;
-        el.appendChild(o);
-      });
+      (items || []).forEach(i => data.push({ value: i.id, label: i.name }));
+
+      if (helper) {
+        helper.setOptions(data, { keepSearch: false });
+      } else {
+        el.innerHTML = '';
+        data.forEach(item => {
+          const o = document.createElement('option');
+          o.value = item.value;
+          o.text = item.label;
+          el.appendChild(o);
+        });
+      }
     }
 
     const base = '{{ url_for('move.index') }}';
@@ -303,8 +310,12 @@
       const dom = document.getElementById(prefix + '-dom');
       const isSource = prefix === 'src';
 
+      const provSearch = window.makeSelectSearchable ? window.makeSelectSearchable(prov, { placeholder: 'Rechercher un provider…' }) : null;
+      const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(cert, { placeholder: 'Rechercher une certification…' }) : null;
+
       const provs = await loadJSON(base + 'api/providers');
       fillSelect(prov, provs);
+      provSearch && provSearch.setSearchTerm('');
       if (provs.length) {
         prov.value = provs[0].id;
         prov.dispatchEvent(new Event('change'));
@@ -313,6 +324,7 @@
       prov.addEventListener('change', async () => {
         const cs = await loadJSON(`${base}api/certifications/${prov.value}`);
         fillSelect(cert, cs);
+        certSearch && certSearch.setSearchTerm('');
         if (cs.length) {
           cert.value = cs[0].id;
           cert.dispatchEvent(new Event('change'));

@@ -530,6 +530,8 @@
 
   <footer>ExBoot Laboratory &mdash; Importer des modules n'a jamais été aussi sensoriel.</footer>
 
+  <script src="{{ url_for('static', filename='js/searchable-select.js') }}"></script>
+
   <script>
     const toggle = document.getElementById('navToggle');
     const nav = document.getElementById('stellarNav');
@@ -604,13 +606,18 @@
     }
 
     function fill(select, items) {
-      select.innerHTML = '';
-      items.forEach(item => {
-        const option = document.createElement('option');
-        option.value = item.id;
-        option.textContent = item.name;
-        select.appendChild(option);
-      });
+      const helper = select && select.__searchableSelect;
+      if (helper) {
+        helper.setOptions((items || []).map(item => ({ value: item.id, label: item.name })), { keepSearch: false });
+      } else {
+        select.innerHTML = '';
+        (items || []).forEach(item => {
+          const option = document.createElement('option');
+          option.value = item.id;
+          option.textContent = item.name;
+          select.appendChild(option);
+        });
+      }
     }
 
     function setGenerationStatus(message, tone = 'muted') {
@@ -674,6 +681,9 @@
       const provSel = document.getElementById('prov');
       const certSel = document.getElementById('cert');
 
+      const provSearch = window.makeSelectSearchable ? window.makeSelectSearchable(provSel, { placeholder: 'Rechercher un provider…' }) : null;
+      const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certSel, { placeholder: 'Rechercher une certification…' }) : null;
+
       function updateSelectionLabel() {
         selectionLabel.textContent = `${provSel.options[provSel.selectedIndex]?.text || ''} → ${certSel.options[certSel.selectedIndex]?.text || '—'}`;
       }
@@ -682,6 +692,7 @@
         try {
           const certs = await loadJSON(`${base}api/certifications/${provSel.value}`);
           fill(certSel, certs);
+          certSearch && certSearch.setSearchTerm('');
           if (certs.length) {
             certSel.value = certs[0].id;
             updateSelectionLabel();
@@ -701,6 +712,7 @@
       try {
         const providers = await loadJSON(base + 'api/providers');
         fill(provSel, providers);
+        provSearch && provSearch.setSearchTerm('');
         if (providers.length) {
           provSel.value = providers[0].id;
           await refreshProviderCertifications();
