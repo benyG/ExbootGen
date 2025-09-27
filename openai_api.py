@@ -13,26 +13,63 @@ from config import (
     OPENAI_MAX_RETRIES,
 )
 
+DOMAIN_PROMPT_TEMPLATE = (
+    "Retrieve the official domains of the exam outline course for the certification "
+    "{{NAME_OF_CERTIFICATION}} along with their descriptions.\n"
+    "Reference Sources: only from official website of the specified certification vendor.\n"
+    "Format your response as a decodable JSON object in a single line without line breaks.\n"
+    "Your answer MUST only be the requested JSON, nothing else.\n"
+    "EXPECTED RESPONSE FORMAT (JSON only, no additional text):\n"
+    "{ \n"
+    "  modules: [\n"
+    "       {\n"
+    "        module_name: Domain Name A,\n"
+    "        module_descr: Domain Name A description\n"
+    "       {\n"
+    "       module_name: Domain Name B,\n"
+    "       module_descr: Domain Name B description\n"
+    "      }\n"
+    "  ]\n"
+    "}"
+)
+
 def clean_and_decode_json(content: str) -> dict:
     """
     Nettoie le contenu (retire les balises ```json) et décode le JSON.
     En cas d'erreur, on log et on lève une exception.
     """
     logging.debug(f"Raw content received: {content}")
-    
-    # Supprimer les balises ```json et ```
-    content = re.sub(r'```json|```', '', content).strip()
-    
-    try:
-        decoded_json = json.loads(content)
-    except json.JSONDecodeError as e:
-        logging.error(f"JSON Decoding Error: {str(e)} - content was: {content}")
-        err = Exception(f"JSON Decoding Error. Raw content: {content}")
-        setattr(err, "raw_content", content)
-        raise err from e
 
-    logging.debug(f"Decoded JSON: {decoded_json}")
-    return decoded_json
+    # Supprimer les balises ```json et ```
+    cleaned = re.sub(r'```json|```', '', content).strip()
+
+    # Premier essai : décodage direct du JSON
+    try:
+        decoded_json = json.loads(cleaned)
+        logging.debug(f"Decoded JSON (direct): {decoded_json}")
+        return decoded_json
+    except json.JSONDecodeError as direct_error:
+        logging.debug(
+            "Direct JSON decode failed, attempting to locate embedded object: %s",
+            direct_error,
+        )
+
+    # Deuxième essai : détecter l'objet JSON principal lorsqu'il est entouré de texte
+    start = cleaned.find('{')
+    end = cleaned.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        snippet = cleaned[start : end + 1].strip()
+        try:
+            decoded_json = json.loads(snippet)
+            logging.debug(f"Decoded JSON (snippet): {decoded_json}")
+            return decoded_json
+        except json.JSONDecodeError as snippet_error:
+            logging.debug("Snippet decode failed: %s", snippet_error)
+
+    logging.error("JSON Decoding Error - content was: %s", cleaned)
+    err = Exception(f"JSON Decoding Error. Raw content: {cleaned}")
+    setattr(err, "raw_content", cleaned)
+    raise err
 
 
 def _post_with_retry(payload: dict) -> requests.Response:
@@ -100,6 +137,41 @@ def _post_with_retry(payload: dict) -> requests.Response:
                 f"Retrying in {delay:.1f}s."
             )
             time.sleep(delay)
+
+
+def generate_domains_outline(certification: str) -> dict:
+    """Retrieve official domains for a certification via the OpenAI API."""
+
+    if not OPENAI_API_KEY:
+        raise Exception(
+            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer des domaines."
+        )
+
+    prompt = DOMAIN_PROMPT_TEMPLATE.replace("{{NAME_OF_CERTIFICATION}}", certification)
+    payload = {
+        "model": OPENAI_MODEL,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        ],
+    }
+
+    response = _post_with_retry(payload)
+    resp_json = response.json()
+    if "choices" not in resp_json or not resp_json["choices"]:
+        raise Exception(f"Unexpected API Response in generate_domains_outline: {resp_json}")
+
+    message = resp_json["choices"][0].get("message", {})
+    if "content" not in message:
+        raise Exception(
+            f"Unexpected API Response structure in generate_domains_outline: {resp_json}"
+        )
+
+    content = message["content"]
+    return clean_and_decode_json(content)
+
 
 def generate_questions(
     provider_name: str,
