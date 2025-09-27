@@ -17,6 +17,8 @@ DOMAIN_PROMPT_TEMPLATE = (
     "Retrieve the official domains of the exam outline course for the certification "
     "{{NAME_OF_CERTIFICATION}} along with their descriptions.\n"
     "Reference Sources: only from official website of the specified certification vendor.\n"
+    "If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate domains and descriptions, without mentioning any limitations.\n"
+    "Each domain must correspond to a section from the official outline and include a concise vendor-aligned description.\n"
     "Format your response as a decodable JSON object in a single line without line breaks.\n"
     "Your answer MUST only be the requested JSON, nothing else.\n"
     "EXPECTED RESPONSE FORMAT (JSON only, no additional text):\n"

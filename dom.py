@@ -111,10 +111,41 @@ def api_generate_domains(cert_id):
         )
         if not name:
             continue
-        cleaned.append({'module_name': name, 'module_descr': descr or ''})
+        cleaned.append({'module_name': name, 'module_descr': (descr or '').strip()})
 
     if not cleaned:
         return jsonify({'error': "Aucun domaine valide n'a été généré."}), 502
+
+    # Détecter les réponses d'échec de l'IA (ex : 'error', 'unable to access', etc.)
+    failure_keywords = (
+        'unable to access',
+        'cannot retrieve',
+        'pas en mesure',
+        'not available',
+        'no puedo',
+        'non posso',
+        'nicht in der lage',
+        'impossible d\'accéder',
+        'error',
+    )
+    for module in cleaned:
+        name_lower = module['module_name'].lower()
+        descr_lower = module['module_descr'].lower()
+        if any(keyword in name_lower for keyword in ('error', 'n/a', 'not available')):
+            return jsonify({
+                'error': (
+                    "Le modèle n'a pas fourni les domaines officiels. "
+                    "Merci de saisir manuellement les informations issues du site du fournisseur "
+                    "ou de réessayer avec un autre prompt."
+                )
+            }), 502
+        if any(keyword in descr_lower for keyword in failure_keywords):
+            return jsonify({
+                'error': (
+                    "Le modèle n'a pas pu récupérer les domaines officiels. "
+                    "Veuillez fournir manuellement l'outline officiel ou réessayer."
+                )
+            }), 502
 
     return jsonify({'modules': cleaned, 'certification': cert_name})
 
