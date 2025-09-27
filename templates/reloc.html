@@ -224,6 +224,8 @@
 
   <footer>ExBoot Laboratory &mdash; La relocalisation IA devient fluide et lumineuse.</footer>
 
+  <script src="{{ url_for('static', filename='js/searchable-select.js') }}"></script>
+
   <script>
     const toggle = document.getElementById('navToggle');
     const nav = document.getElementById('stellarNav');
@@ -257,12 +259,17 @@
 
     async function loadJSON(u){ return (await fetch(u)).json(); }
     function fill(el, items){
-      el.innerHTML = '';
-      items.forEach(i=>{
-        const o = document.createElement('option');
-        o.value = i.id; o.text = i.name;
-        el.appendChild(o);
-      });
+      const helper = el && el.__searchableSelect;
+      if (helper) {
+        helper.setOptions((items || []).map(i => ({ value: i.id, label: i.name })), { keepSearch: false });
+      } else {
+        el.innerHTML = '';
+        (items || []).forEach(i=>{
+          const o = document.createElement('option');
+          o.value = i.id; o.text = i.name;
+          el.appendChild(o);
+        });
+      }
     }
 
     async function initPanel(pref, hasModule, defProv=null, defCert=null){
@@ -271,10 +278,14 @@
       const m = hasModule && document.getElementById(pref+'-mod');
       const s = hasModule && document.getElementById(pref+'-mod-search');
 
+      const provSearch = window.makeSelectSearchable ? window.makeSelectSearchable(p, { placeholder: 'Rechercher un provider…' }) : null;
+      const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(c, { placeholder: 'Rechercher une certification…' }) : null;
+
       const base = '{{ url_for('reloc.index') }}';
       p.addEventListener('change', async()=>{
         const cs = await loadJSON(`${base}api/certifications/${p.value}`);
         fill(c, cs);
+        certSearch && certSearch.setSearchTerm('');
         let sel = cs[0]?.id;
         if(Number(p.value) === defProv){
           const found = cs.find(x=>x.id===defCert);
@@ -302,6 +313,7 @@
 
       const provs = await loadJSON(base + 'api/providers');
       fill(p, provs);
+      provSearch && provSearch.setSearchTerm('');
       p.value = provs.find(x=>x.id===defProv)?.id || provs[0]?.id;
       p.dispatchEvent(new Event('change'));
     }

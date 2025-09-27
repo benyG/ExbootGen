@@ -227,6 +227,8 @@
 
   <div id="loadingOverlay"><div class="loader"></div></div>
 
+  <script src="{{ url_for('static', filename='js/searchable-select.js') }}"></script>
+
   <script>
     const toggle = document.getElementById('navToggle');
     const nav = document.getElementById('stellarNav');
@@ -266,55 +268,97 @@
 
     const base = '{{ url_for('pdf.index') }}';
 
+    const providerSelect = document.getElementById("providerSelect");
+    const certSelect = document.getElementById("certSelect");
+    const providerSearch = window.makeSelectSearchable ? window.makeSelectSearchable(providerSelect, { placeholder: 'Rechercher un provider…' }) : null;
+    const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certSelect, { placeholder: 'Rechercher une certification…' }) : null;
+
     fetch(base + "api/providers").then(r => r.json()).then(data => {
-        const providerSelect = document.getElementById("providerSelect");
-        providerSelect.innerHTML = "";
-        if (!data || data.length === 0) {
-            providerSelect.appendChild(option("— Aucun provider —", ""));
-            return;
+        const items = (data || []).map(p => ({ value: p.id, label: p.name }));
+        const defProv = items.find(p => Number(p.value) === 169);
+        const list = items.length ? items : [{ value: '', label: '— Aucun provider —' }];
+        const selectedValue = defProv ? defProv.value : (list[0]?.value ?? '');
+        if (providerSearch) {
+            providerSearch.setOptions(list, { keepSearch: false, selectedValue });
+            providerSearch.select.dispatchEvent(new Event("change"));
+        } else {
+            providerSelect.innerHTML = "";
+            list.forEach(opt => providerSelect.appendChild(option(opt.label, opt.value)));
+            if (list.length) {
+                providerSelect.value = selectedValue;
+                providerSelect.dispatchEvent(new Event("change"));
+            }
         }
-        data.forEach(p => providerSelect.appendChild(option(p.name, p.id)));
-        const defProv = data.find(p => p.id === 169);
-        providerSelect.value = defProv ? defProv.id : data[0].id;
-        providerSelect.dispatchEvent(new Event("change"));
     });
 
-    document.getElementById("providerSelect").addEventListener("change", function () {
+    providerSelect.addEventListener("change", function () {
         const prov_id = this.value;
-        const certSelect = document.getElementById("certSelect");
         const modSelect  = document.getElementById("moduleSelect");
 
-        certSelect.innerHTML = "";
         modSelect.innerHTML  = "";
+        if (certSearch) {
+            certSearch.setOptions([], { keepSearch: false, selectedValue: '' });
+        } else {
+            certSelect.innerHTML = "";
+        }
 
         if (!prov_id) {
-            certSelect.appendChild(option("— Aucune certification —", ""));
+            const fallbackCert = { value: '', label: '— Aucune certification —' };
+            if (certSearch) {
+                certSearch.setOptions([fallbackCert], { keepSearch: false, selectedValue: '' });
+            } else {
+                certSelect.appendChild(option(fallbackCert.label, fallbackCert.value));
+            }
             modSelect.appendChild(option("— Aucun module —", ""));
             return;
         }
 
         fetch(`${base}api/certifications/${prov_id}`).then(r => r.json()).then(data => {
-            certSelect.innerHTML = "";
-            if (!data || data.length === 0) {
-                certSelect.appendChild(option("— Aucune certification —", ""));
-                modSelect.appendChild(option("— Aucun module —", ""));
-                return;
+            const items = (data || []).map(c => ({ value: c.id, label: c.name }));
+            let list = items.length ? items : [{ value: '', label: '— Aucune certification —' }];
+            if (items.length && Number(prov_id) === 169) {
+                const defCert = items.find(c => Number(c.value) === 23);
+                if (defCert) {
+                    list = items;
+                    const selectedValue = defCert.value;
+                    if (certSearch) {
+                        certSearch.setOptions(list, { keepSearch: false, selectedValue });
+                        certSearch.select.dispatchEvent(new Event("change"));
+                    } else {
+                        certSelect.innerHTML = "";
+                        list.forEach(opt => certSelect.appendChild(option(opt.label, opt.value)));
+                        certSelect.value = selectedValue;
+                        certSelect.dispatchEvent(new Event("change"));
+                    }
+                    return;
+                }
             }
-            data.forEach(c => certSelect.appendChild(option(c.name, c.id)));
-            let sel = data[0].id;
-            if (Number(prov_id) === 169) {
-                const defCert = data.find(c => c.id === 23);
-                if (defCert) sel = defCert.id;
+
+            const selectedValue = list[0]?.value ?? '';
+            if (certSearch) {
+                certSearch.setOptions(list, { keepSearch: false, selectedValue });
+                certSearch.select.dispatchEvent(new Event("change"));
+            } else {
+                certSelect.innerHTML = "";
+                list.forEach(opt => certSelect.appendChild(option(opt.label, opt.value)));
+                certSelect.value = selectedValue;
+                certSelect.dispatchEvent(new Event("change"));
             }
-            certSelect.value = sel;
-            certSelect.dispatchEvent(new Event("change"));
         }).catch(() => {
-            certSelect.innerHTML = ""; modSelect.innerHTML = "";
-            certSelect.appendChild(option("— Erreur chargement —", ""));
+            if (certSearch) {
+                certSearch.setOptions([{ value: '', label: '— Erreur chargement —' }], { keepSearch: false, selectedValue: '' });
+                certSearch.select.dispatchEvent(new Event("change"));
+            } else {
+                certSelect.innerHTML = "";
+                certSelect.appendChild(option("— Erreur chargement —", ""));
+                certSelect.dispatchEvent(new Event("change"));
+            }
+            modSelect.innerHTML = "";
+            modSelect.appendChild(option("— Aucun module —", ""));
         });
     });
 
-    document.getElementById("certSelect").addEventListener("change", function () {
+    certSelect.addEventListener("change", function () {
         const cert_id = this.value;
         const modSelect = document.getElementById("moduleSelect");
 

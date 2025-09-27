@@ -272,6 +272,8 @@
     document.querySelectorAll('[data-animate]').forEach(el => observer.observe(el));
   </script>
 
+  <script src="{{ url_for('static', filename='js/searchable-select.js') }}"></script>
+
   <script>
     $(document).ready(function(){
       const $provider = $("#provider_id");
@@ -286,6 +288,9 @@
       const $jobStatus = $("#job-status");
       const $jobIdLabel = $("#job-id-label");
       const $jobLogList = $("#job-log-list");
+
+      const providerSearch = window.makeSelectSearchable ? window.makeSelectSearchable($provider[0], { placeholder: 'Rechercher un provider…' }) : null;
+      const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable($cert[0], { placeholder: 'Rechercher une certification…' }) : null;
 
       let initialProgress = {{ initial_progress|tojson }};
       const preloadedCertId = "{{ selected_cert_id if selected_cert_id is not none else '' }}";
@@ -438,15 +443,27 @@
 
       function loadCertifications(providerId, selectedCertId){
         $.post("{{ url_for('fix_get_certifications') }}", { provider_id: providerId }, function(data){
-          $cert.empty();
-          $.each(data || [], function(i, item){
-            const option = $("<option>", { value: item.id, text: item.name });
-            if(Number(selectedCertId) === Number(item.id)){
-              option.prop('selected', true);
-            }
-            $cert.append(option);
-          });
-          $cert.trigger('change');
+          const items = (data || []).map(item => ({
+            value: item.id,
+            label: item.name,
+            selected: Number(selectedCertId) === Number(item.id)
+          }));
+          if (certSearch) {
+            const list = items.length ? items : [{ value: '', label: '— Aucune certification —' }];
+            const selectedValue = list.find(opt => opt.selected)?.value ?? list[0]?.value ?? '';
+            certSearch.setOptions(list, { keepSearch: false, selectedValue });
+            certSearch.select.dispatchEvent(new Event('change'));
+          } else {
+            $cert.empty();
+            $.each(items.length ? items : [{ value: '', label: '— Aucune certification —' }], function(_, optionData){
+              const option = $("<option>", { value: optionData.value, text: optionData.label });
+              if (optionData.selected) {
+                option.prop('selected', true);
+              }
+              $cert.append(option);
+            });
+            $cert.trigger('change');
+          }
         }, "json");
       }
 
