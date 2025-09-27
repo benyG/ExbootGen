@@ -89,7 +89,13 @@ def api_generate_domains(cert_id):
     except Exception as exc:
         return jsonify({'error': str(exc)}), 500
 
-    modules = response.get('modules') if isinstance(response, dict) else None
+    if isinstance(response, list):
+        modules = response
+    elif isinstance(response, dict):
+        modules = response.get('modules')
+    else:
+        modules = None
+
     if not isinstance(modules, list):
         return jsonify({'error': "Réponse invalide du modèle."}), 502
 
@@ -97,8 +103,12 @@ def api_generate_domains(cert_id):
     for module in modules:
         if not isinstance(module, dict):
             continue
-        name = module.get('module_name') or module.get('name')
-        descr = module.get('module_descr') or module.get('descr')
+        name = module.get('name') or module.get('module_name')
+        descr = (
+            module.get('descr')
+            or module.get('module_descr')
+            or module.get('description')
+        )
         if not name:
             continue
         cleaned.append({'module_name': name, 'module_descr': descr or ''})
