@@ -17,7 +17,7 @@ import os
 import sqlite3
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -238,84 +238,129 @@ class RedisJobStore(BaseJobStore):
                 "Impossible d'enregistrer le job dans Redis : vérifiez que l'URL utilise "
                 "une base autorisée (souvent '/0' sur Redis Cloud)."
             ) from exc
+        except self._redis_module.exceptions.RedisError as exc:
+            raise JobStoreError(
+                "Impossible de se connecter à Redis pour créer le job."
+            ) from exc
 
     def append_log(self, job_id: str, message: str) -> None:
-        if not self._redis.exists(self._job_key(job_id)):
-            raise JobStoreError(f"Unknown job_id {job_id}")
-        pipe = self._redis.pipeline()
-        pipe.rpush(self._log_key(job_id), message)
-        pipe.ltrim(self._log_key(job_id), -MAX_LOG_ENTRIES, -1)
-        pipe.hset(self._job_key(job_id), "updated_at", str(time.time()))
-        pipe.execute()
+        try:
+            if not self._redis.exists(self._job_key(job_id)):
+                raise JobStoreError(f"Unknown job_id {job_id}")
+            pipe = self._redis.pipeline()
+            pipe.rpush(self._log_key(job_id), message)
+            pipe.ltrim(self._log_key(job_id), -MAX_LOG_ENTRIES, -1)
+            pipe.hset(self._job_key(job_id), "updated_at", str(time.time()))
+            pipe.execute()
+        except self._redis_module.exceptions.RedisError as exc:
+            raise JobStoreError(
+                "Impossible de contacter Redis pour ajouter une entrée de log."
+            ) from exc
 
     def update_counters(self, job_id: str, values: Dict[str, Any]) -> None:
         key = self._job_key(job_id)
-        if not self._redis.exists(key):
-            raise JobStoreError(f"Unknown job_id {job_id}")
-        raw = self._redis.hget(key, "counters") or "{}"
-        counters = json.loads(raw)
-        counters.update(values)
-        pipe = self._redis.pipeline()
-        pipe.hset(key, mapping={"counters": json.dumps(counters), "updated_at": str(time.time())})
-        pipe.execute()
+        try:
+            if not self._redis.exists(key):
+                raise JobStoreError(f"Unknown job_id {job_id}")
+            raw = self._redis.hget(key, "counters") or "{}"
+            counters = json.loads(raw)
+            counters.update(values)
+            pipe = self._redis.pipeline()
+            pipe.hset(
+                key,
+                mapping={
+                    "counters": json.dumps(counters),
+                    "updated_at": str(time.time()),
+                },
+            )
+            pipe.execute()
+        except self._redis_module.exceptions.RedisError as exc:
+            raise JobStoreError(
+                "Impossible de contacter Redis pour mettre à jour les compteurs."
+            ) from exc
 
     def set_status(self, job_id: str, status: str, *, error: Optional[str] = None) -> None:
         key = self._job_key(job_id)
-        if not self._redis.exists(key):
-            raise JobStoreError(f"Unknown job_id {job_id}")
-        mapping: Dict[str, str] = {"status": status, "updated_at": str(time.time())}
-        if error is not None:
-            mapping["error"] = error
-        self._redis.hset(key, mapping=mapping)
+        try:
+            if not self._redis.exists(key):
+                raise JobStoreError(f"Unknown job_id {job_id}")
+            mapping: Dict[str, str] = {"status": status, "updated_at": str(time.time())}
+            if error is not None:
+                mapping["error"] = error
+            self._redis.hset(key, mapping=mapping)
+        except self._redis_module.exceptions.RedisError as exc:
+            raise JobStoreError(
+                "Impossible de contacter Redis pour mettre à jour le statut du job."
+            ) from exc
 
     def get_status(self, job_id: str) -> Optional[Dict[str, Any]]:
         key = self._job_key(job_id)
-        if not self._redis.exists(key):
-            return None
-        data = self._redis.hgetall(key)
-        log_entries = self._redis.lrange(self._log_key(job_id), 0, -1)
-        return {
-            "job_id": job_id,
-            "status": data.get("status", "unknown"),
-            "log": log_entries,
-            "counters": json.loads(data.get("counters") or "{}"),
-            "error": data.get("error") or None,
-            "description": data.get("description") or None,
-            "metadata": json.loads(data.get("metadata") or "{}"),
-            "created_at": float(data.get("created_at", 0.0)),
-            "updated_at": float(data.get("updated_at", 0.0)),
-        }
+        try:
+            if not self._redis.exists(key):
+                return None
+            data = self._redis.hgetall(key)
+            log_entries = self._redis.lrange(self._log_key(job_id), 0, -1)
+            return {
+                "job_id": job_id,
+                "status": data.get("status", "unknown"),
+                "log": log_entries,
+                "counters": json.loads(data.get("counters") or "{}"),
+                "error": data.get("error") or None,
+                "description": data.get("description") or None,
+                "metadata": json.loads(data.get("metadata") or "{}"),
+                "created_at": float(data.get("created_at", 0.0)),
+                "updated_at": float(data.get("updated_at", 0.0)),
+            }
+        except self._redis_module.exceptions.RedisError as exc:
+            raise JobStoreError(
+                "Impossible de récupérer le statut du job dans Redis."
+            ) from exc
 
     def pause(self, job_id: str) -> bool:
         key = self._job_key(job_id)
-        if not self._redis.exists(key):
-            return False
-        status = self._redis.hget(key, "status")
-        if status in {"completed", "failed"}:
-            return False
-        pipe = self._redis.pipeline()
-        pipe.set(self._pause_key(job_id), "1")
-        pipe.hset(key, mapping={"status": "paused", "updated_at": str(time.time())})
-        pipe.execute()
-        return True
+        try:
+            if not self._redis.exists(key):
+                return False
+            status = self._redis.hget(key, "status")
+            if status in {"completed", "failed"}:
+                return False
+            pipe = self._redis.pipeline()
+            pipe.set(self._pause_key(job_id), "1")
+            pipe.hset(key, mapping={"status": "paused", "updated_at": str(time.time())})
+            pipe.execute()
+            return True
+        except self._redis_module.exceptions.RedisError as exc:
+            raise JobStoreError(
+                "Impossible de contacter Redis pour mettre le job en pause."
+            ) from exc
 
     def resume(self, job_id: str) -> bool:
         key = self._job_key(job_id)
-        if not self._redis.exists(key):
-            return False
-        pipe = self._redis.pipeline()
-        pipe.set(self._pause_key(job_id), "0")
-        current_status = self._redis.hget(key, "status")
-        if current_status == "paused":
-            pipe.hset(key, mapping={"status": "running", "updated_at": str(time.time())})
-        else:
-            pipe.hset(key, "updated_at", str(time.time()))
-        pipe.execute()
-        return True
+        try:
+            if not self._redis.exists(key):
+                return False
+            pipe = self._redis.pipeline()
+            pipe.set(self._pause_key(job_id), "0")
+            current_status = self._redis.hget(key, "status")
+            if current_status == "paused":
+                pipe.hset(key, mapping={"status": "running", "updated_at": str(time.time())})
+            else:
+                pipe.hset(key, "updated_at", str(time.time()))
+            pipe.execute()
+            return True
+        except self._redis_module.exceptions.RedisError as exc:
+            raise JobStoreError(
+                "Impossible de contacter Redis pour reprendre le job."
+            ) from exc
 
     def wait_if_paused(self, job_id: str, interval: float = 0.5) -> None:  # pragma: no cover - blocking
-        while self._redis.get(self._pause_key(job_id)) == "1":
-            time.sleep(interval)
+        try:
+            while self._redis.get(self._pause_key(job_id)) == "1":
+                time.sleep(interval)
+        except self._redis_module.exceptions.RedisError as exc:
+            raise JobStoreError(
+                "Impossible de contacter Redis pour vérifier l'état de pause du job."
+            ) from exc
 
 
 class SQLiteJobStore(BaseJobStore):
@@ -545,18 +590,52 @@ class JobContext:
 
     store: BaseJobStore
     job_id: str
+    _store_error_logged: bool = field(default=False, init=False, repr=False, compare=False)
 
     def log(self, message: str) -> None:
-        self.store.append_log(self.job_id, message)
+        try:
+            self.store.append_log(self.job_id, message)
+        except JobStoreError as exc:
+            self._handle_store_error("append_log", exc)
+            LOGGER.info("[%s] %s", self.job_id, message)
 
     def update_counters(self, **values: Any) -> None:
-        self.store.update_counters(self.job_id, values)
+        try:
+            self.store.update_counters(self.job_id, values)
+        except JobStoreError as exc:
+            self._handle_store_error("update_counters", exc)
 
     def wait_if_paused(self) -> None:
-        self.store.wait_if_paused(self.job_id)
+        try:
+            self.store.wait_if_paused(self.job_id)
+        except JobStoreError as exc:
+            self._handle_store_error("wait_if_paused", exc)
 
     def set_status(self, status: str, *, error: Optional[str] = None) -> None:
-        self.store.set_status(self.job_id, status, error=error)
+        try:
+            self.store.set_status(self.job_id, status, error=error)
+        except JobStoreError as exc:
+            self._handle_store_error("set_status", exc)
+            if error:
+                LOGGER.warning(
+                    "Job %s status '%s' non persisté (erreur de magasin): %s", self.job_id, status, error
+                )
+
+    def _handle_store_error(self, operation: str, exc: Exception) -> None:
+        if not self._store_error_logged:
+            LOGGER.warning(
+                "Job %s: impossible d'accéder au magasin de jobs (%s). "
+                "Les opérations seront poursuivies sans persistance.",
+                self.job_id,
+                exc,
+            )
+            object.__setattr__(self, "_store_error_logged", True)
+        LOGGER.debug(
+            "Job %s: erreur lors de %s sur le magasin de jobs: %s",
+            self.job_id,
+            operation,
+            exc,
+        )
 
 
 def initialise_job(

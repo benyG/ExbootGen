@@ -722,18 +722,10 @@ def run_population_job(self, provider_id: int, cert_id: int) -> None:
     """Celery task wrapper for :func:`run_population`."""
 
     job_id = self.request.id
+    metadata = {"provider_id": provider_id, "cert_id": cert_id}
     context = JobContext(job_store, job_id)
 
-    try:
-        job_store.set_status(job_id, "running")
-    except JobStoreError:
-        initialise_job(
-            job_store,
-            job_id=job_id,
-            description="populate-certification",
-            metadata={"provider_id": provider_id, "cert_id": cert_id},
-        )
-        job_store.set_status(job_id, "running")
+    _ensure_job_marked_running(job_id, metadata)
 
     try:
         run_population(context, provider_id, cert_id)
@@ -742,6 +734,66 @@ def run_population_job(self, provider_id: int, cert_id: int) -> None:
         raise
     else:
         context.set_status("completed")
+
+
+def _run_population_thread(job_id: str, provider_id: int, cert_id: int) -> threading.Thread:
+    """Run the population workflow in a local background thread.
+
+    When the Celery broker is unavailable (for instance when Redis refuses
+    new clients because the configured limit is reached) we still want to
+    allow the user to launch the populate process.  This helper mimics the
+    behaviour of :func:`run_population_job` but executes it within a daemon
+    thread of the web process so that the HTTP request can return immediately.
+    """
+
+    metadata = {"provider_id": provider_id, "cert_id": cert_id}
+
+    def _target() -> None:
+        context = JobContext(job_store, job_id)
+        _ensure_job_marked_running(job_id, metadata)
+
+        try:
+            run_population(context, provider_id, cert_id)
+        except Exception as exc:  # pragma: no cover - logged for diagnostics
+            app.logger.exception(
+                "Population job failed during local execution: job_id=%s", job_id
+            )
+            context.set_status("failed", error=str(exc))
+        else:
+            context.set_status("completed")
+
+    thread = threading.Thread(
+        target=_target, name=f"populate-{job_id}", daemon=True
+    )
+    thread.start()
+    return thread
+
+
+def _ensure_job_marked_running(job_id: str, metadata: Dict[str, int]) -> None:
+    try:
+        job_store.set_status(job_id, "running")
+        return
+    except JobStoreError as exc:
+        try:
+            initialise_job(
+                job_store,
+                job_id=job_id,
+                description="populate-certification",
+                metadata=metadata,
+            )
+            job_store.set_status(job_id, "running")
+            return
+        except JobStoreError as retry_exc:
+            app.logger.warning(
+                "Job %s: impossible de persister l'état 'running' dans le magasin de jobs (%s).",
+                job_id,
+                retry_exc,
+            )
+            app.logger.debug(
+                "Job %s: échec initial lors du passage en 'running': %s",
+                job_id,
+                exc,
+            )
 
 
 @app.route("/populate/process", methods=["POST"])
@@ -762,16 +814,24 @@ def populate_process():
         app.logger.exception(
             "Unable to enqueue population job: provider_id=%s cert_id=%s", provider_id, cert_id
         )
-        job_store.set_status(job_id, "failed", error=str(exc))
-        return (
-            jsonify(
-                {
-                    "error": "Impossible de démarrer le traitement : "
-                    "la file d'attente des tâches est indisponible."
-                }
-            ),
-            500,
+        try:
+            _run_population_thread(job_id, provider_id, cert_id)
+        except Exception:  # pragma: no cover - fallback may still fail
+            job_store.set_status(job_id, "failed", error=str(exc))
+            return (
+                jsonify(
+                    {
+                        "error": "Impossible de démarrer le traitement : "
+                        "la file d'attente des tâches est indisponible."
+                    }
+                ),
+                500,
+            )
+        app.logger.warning(
+            "Population job %s running in local thread because the task queue is unavailable.",
+            job_id,
         )
+        return jsonify({"status": "queued", "job_id": job_id, "mode": "local"})
     except Exception as exc:
         if getattr(celery_app.conf, "task_always_eager", False):
             app.logger.exception(
