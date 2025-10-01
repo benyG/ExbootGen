@@ -722,18 +722,10 @@ def run_population_job(self, provider_id: int, cert_id: int) -> None:
     """Celery task wrapper for :func:`run_population`."""
 
     job_id = self.request.id
+    metadata = {"provider_id": provider_id, "cert_id": cert_id}
     context = JobContext(job_store, job_id)
 
-    try:
-        job_store.set_status(job_id, "running")
-    except JobStoreError:
-        initialise_job(
-            job_store,
-            job_id=job_id,
-            description="populate-certification",
-            metadata={"provider_id": provider_id, "cert_id": cert_id},
-        )
-        job_store.set_status(job_id, "running")
+    _ensure_job_marked_running(job_id, metadata)
 
     try:
         run_population(context, provider_id, cert_id)
@@ -758,16 +750,7 @@ def _run_population_thread(job_id: str, provider_id: int, cert_id: int) -> threa
 
     def _target() -> None:
         context = JobContext(job_store, job_id)
-        try:
-            job_store.set_status(job_id, "running")
-        except JobStoreError:
-            initialise_job(
-                job_store,
-                job_id=job_id,
-                description="populate-certification",
-                metadata=metadata,
-            )
-            job_store.set_status(job_id, "running")
+        _ensure_job_marked_running(job_id, metadata)
 
         try:
             run_population(context, provider_id, cert_id)
@@ -785,6 +768,32 @@ def _run_population_thread(job_id: str, provider_id: int, cert_id: int) -> threa
     thread.start()
     return thread
 
+
+def _ensure_job_marked_running(job_id: str, metadata: Dict[str, int]) -> None:
+    try:
+        job_store.set_status(job_id, "running")
+        return
+    except JobStoreError as exc:
+        try:
+            initialise_job(
+                job_store,
+                job_id=job_id,
+                description="populate-certification",
+                metadata=metadata,
+            )
+            job_store.set_status(job_id, "running")
+            return
+        except JobStoreError as retry_exc:
+            app.logger.warning(
+                "Job %s: impossible de persister l'état 'running' dans le magasin de jobs (%s).",
+                job_id,
+                retry_exc,
+            )
+            app.logger.debug(
+                "Job %s: échec initial lors du passage en 'running': %s",
+                job_id,
+                exc,
+            )
 
 @app.route("/populate/process", methods=["POST"])
 def populate_process():
