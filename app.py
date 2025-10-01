@@ -795,7 +795,6 @@ def _ensure_job_marked_running(job_id: str, metadata: Dict[str, int]) -> None:
                 exc,
             )
 
-
 @app.route("/populate/process", methods=["POST"])
 def populate_process():
     provider_id = int(request.form.get("provider_id"))
