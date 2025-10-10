@@ -11,6 +11,11 @@ level_mapping = {"easy": 0, "medium": 1, "hard": 2}
 nature_mapping = {"qcm": 1, "truefalse": 2, "short-answer": 3, "matching": 4, "drag-n-drop": 5}
 ty_mapping = {"no": 1, "scenario": 2, "scenario-illustrated": 3}
 
+# Reverse mappings used when projecting aggregated database results.
+reverse_level_mapping = {value: key for key, value in level_mapping.items()}
+reverse_nature_mapping = {value: key for key, value in nature_mapping.items()}
+reverse_ty_mapping = {value: key for key, value in ty_mapping.items()}
+
 executor = ThreadPoolExecutor(max_workers=8)
 
 
@@ -233,6 +238,40 @@ def count_total_questions(domain_id):
     cursor.close()
     conn.close()
     return total
+
+
+def get_domain_question_snapshot(domain_id):
+    """Return total and per-category question counts for a domain."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        query = """
+            SELECT level, nature, ty, COUNT(*)
+            FROM questions
+            WHERE module = %s
+            GROUP BY level, nature, ty
+        """
+        cursor.execute(query, (domain_id,))
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    total = 0
+    categories = {}
+    for level_num, nature_num, ty_num, count in rows:
+        value = int(count or 0)
+        total += value
+
+        difficulty = reverse_level_mapping.get(int(level_num))
+        qtype = reverse_nature_mapping.get(int(nature_num))
+        scenario = reverse_ty_mapping.get(int(ty_num))
+
+        if difficulty and qtype and scenario:
+            categories[(difficulty, qtype, scenario)] = value
+
+    return total, categories
 
 
 def count_questions_in_category(domain_id, level, qtype, scenario_type):
