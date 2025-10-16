@@ -70,5 +70,47 @@ class ProcessDomainByDifficultyTest(unittest.TestCase):
         self.assertTrue(any('Secondary domains' in entry for entry in context.logs))
 
 
+    def test_uses_progress_cache_when_available(self):
+        class DummyProgress:
+            def __init__(self):
+                self.counts = {('easy', 'qcm', 'scenario'): 5}
+                self.total = 5
+                self.recorded = []
+
+            def category_total(self, difficulty, qtype, scenario):
+                return self.counts.get((difficulty, qtype, scenario), 0)
+
+            def record_insertion(self, difficulty, qtype, scenario, imported):
+                self.recorded.append((difficulty, qtype, scenario, imported))
+                self.counts[(difficulty, qtype, scenario)] = self.counts.get(
+                    (difficulty, qtype, scenario), 0
+                ) + imported
+                self.total += imported
+
+            def total_questions(self):
+                return self.total
+
+        context = DummyContext()
+        progress = DummyProgress()
+
+        with patch('app.db.count_questions_in_category') as count_mock:
+            inserted = app.process_domain_by_difficulty(
+                context,
+                domain_id=1,
+                domain_name='Dom',
+                difficulty='easy',
+                distribution={'qcm': {'scenario': 1}},
+                provider_name='Prov',
+                cert_name='Cert',
+                analysis={},
+                all_domain_names=['Dom'],
+                domain_descriptions={1: 'desc'},
+                progress=progress,
+            )
+
+        self.assertEqual(inserted, 0)
+        count_mock.assert_not_called()
+
+
 if __name__ == '__main__':
     unittest.main()
