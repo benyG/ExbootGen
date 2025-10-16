@@ -1,6 +1,8 @@
 import os
+import shutil
 import sys
 import unittest
+import uuid
 from unittest.mock import patch
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
@@ -10,9 +12,15 @@ os.environ.setdefault("OPENAI_API_KEY", "test")
 os.environ.setdefault("CELERY_TASK_ALWAYS_EAGER", "1")
 os.environ.setdefault("CELERY_BROKER_URL", "memory://")
 os.environ.setdefault("CELERY_RESULT_BACKEND", "cache+memory://")
-os.environ.setdefault("JOB_STORE_URL", "sqlite:///:memory:")
+os.environ.setdefault("JOB_STORE_URL", "sqlite:///test_job_store.db")
+
+JOB_CACHE_DIR = os.path.join(os.path.dirname(__file__), "job_cache_data")
+shutil.rmtree(JOB_CACHE_DIR, ignore_errors=True)
+os.makedirs(JOB_CACHE_DIR, exist_ok=True)
+os.environ.setdefault("JOB_STATUS_CACHE_DIR", JOB_CACHE_DIR)
 
 import app
+import jobs
 
 
 class DummyContext:
@@ -111,6 +119,89 @@ class ProcessDomainByDifficultyTest(unittest.TestCase):
         self.assertEqual(inserted, 0)
         count_mock.assert_not_called()
 
+class JobStatusFallbackTest(unittest.TestCase):
+    def setUp(self):
+        self.client = app.app.test_client()
+
+    def tearDown(self) -> None:
+        # Ensure the in-memory cache is cleared between tests to exercise disk reloads.
+        with jobs._JOB_CACHE._lock:
+            jobs._JOB_CACHE._jobs.clear()
+        return super().tearDown()
+
+    def test_returns_cached_status_when_store_unavailable(self):
+        job_id = uuid.uuid4().hex
+        app.initialise_job(
+            app.job_store,
+            job_id=job_id,
+            description="populate-certification",
+            metadata={},
+        )
+        context = app.JobContext(app.job_store, job_id)
+        context.set_status("running")
+        context.log("Started")
+        context.update_counters(progress=1)
+
+        with patch.object(app.job_store, "get_status", side_effect=app.JobStoreError("down")):
+            response = self.client.get(f"/populate/status/{job_id}")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "running")
+        self.assertIn("Started", payload["log"])
+        self.assertEqual(payload["counters"].get("progress"), 1)
+
+    def test_returns_cached_status_when_store_reports_missing_job(self):
+        job_id = uuid.uuid4().hex
+        app.initialise_job(
+            app.job_store,
+            job_id=job_id,
+            description="populate-certification",
+            metadata={},
+        )
+        context = app.JobContext(app.job_store, job_id)
+        context.set_status("completed")
+
+        with patch.object(app.job_store, "get_status", return_value=None):
+            response = self.client.get(f"/fix/status/{job_id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "completed")
+
+    def test_returns_error_when_no_cache_available(self):
+        unknown_id = uuid.uuid4().hex
+        with patch.object(app.job_store, "get_status", side_effect=app.JobStoreError("down")):
+            response = self.client.get(f"/populate/status/{unknown_id}")
+
+        self.assertEqual(response.status_code, 503)
+        payload = response.get_json()
+        self.assertEqual(payload["error"], "job store unavailable")
+
+    def test_uses_disk_cache_when_memory_missing(self):
+        job_id = uuid.uuid4().hex
+        app.initialise_job(
+            app.job_store,
+            job_id=job_id,
+            description="populate-certification",
+            metadata={},
+        )
+        context = app.JobContext(app.job_store, job_id)
+        context.set_status("running")
+        context.log("Started")
+        context.update_counters(progress=1)
+
+        # Simulate a fresh process by clearing the in-memory cache only.
+        with jobs._JOB_CACHE._lock:
+            jobs._JOB_CACHE._jobs.clear()
+
+        with patch.object(app.job_store, "get_status", side_effect=app.JobStoreError("down")):
+            response = self.client.get(f"/populate/status/{job_id}")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "running")
+        self.assertIn("Started", payload["log"])
+        self.assertEqual(payload["counters"].get("progress"), 1)
 
 if __name__ == '__main__':
     unittest.main()

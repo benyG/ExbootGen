@@ -66,7 +66,17 @@ except (ModuleNotFoundError, ImportError):  # pragma: no cover - fallback when k
 from config import API_REQUEST_DELAY, DISTRIBUTION, GUI_PASSWORD
 import db
 from eraser_api import render_diagram
-from jobs import JobContext, JobStoreError, create_job_store, initialise_job
+from jobs import (
+    JobContext,
+    JobStoreError,
+    cache_job_snapshot,
+    create_job_store,
+    get_cached_status,
+    initialise_job,
+    mark_job_paused,
+    mark_job_resumed,
+    set_cached_status,
+)
 from openai_api import analyze_certif, correct_questions, generate_questions
 
 from dom import dom_bp
@@ -505,6 +515,7 @@ def run_fix_job(self, provider_id: int, cert_id: int, action: str) -> None:
     job_id = self.request.id
     context = JobContext(job_store, job_id)
 
+    set_cached_status(job_id, "running")
     try:
         job_store.set_status(job_id, "running")
     except JobStoreError:
@@ -556,6 +567,7 @@ def fix_process():
 
         def _run_inline() -> None:
             context = JobContext(job_store, job_id)
+            set_cached_status(job_id, "running")
             try:
                 job_store.set_status(job_id, "running")
             except JobStoreError:
@@ -611,14 +623,27 @@ def fix_process():
 
 def _load_job_status(job_id: str):
     """Return job state or a JSON error response when unavailable."""
+    cached = get_cached_status(job_id)
 
     try:
         data = job_store.get_status(job_id)
     except JobStoreError as exc:
         app.logger.exception("Job %s: unable to fetch status from store", job_id)
+        if cached is not None:
+            app.logger.warning(
+                "Job %s: returning cached status because the job store is unavailable", job_id
+            )
+            return cached, None, None
         return None, jsonify({"error": "job store unavailable", "details": str(exc)}), 503
     if data is None:
+        if cached is not None:
+            app.logger.warning(
+                "Job %s: job store returned no data; using cached snapshot instead", job_id
+            )
+            return cached, None, None
         return None, jsonify({"error": "unknown job id"}), 404
+    cache_job_snapshot(job_id, data)
+
     return data, None, None
 
 
@@ -940,6 +965,7 @@ def _run_population_thread(job_id: str, provider_id: int, cert_id: int) -> threa
 
 
 def _ensure_job_marked_running(job_id: str, metadata: Dict[str, int]) -> None:
+    set_cached_status(job_id, "running")
     try:
         job_store.set_status(job_id, "running")
         return
@@ -986,6 +1012,7 @@ def populate_process():
         try:
             _run_population_thread(job_id, provider_id, cert_id)
         except Exception:  # pragma: no cover - fallback may still fail
+            set_cached_status(job_id, "failed", error=str(exc))
             job_store.set_status(job_id, "failed", error=str(exc))
             return (
                 jsonify(
@@ -1158,6 +1185,7 @@ def process_domain_by_difficulty(
 @app.route("/populate/pause/<job_id>", methods=["POST"])
 def pause_populate(job_id):
     if job_store.pause(job_id):
+        mark_job_paused(job_id)
         return jsonify({"status": "paused"})
     return jsonify({"error": "unknown job id"}), 404
 
@@ -1165,6 +1193,7 @@ def pause_populate(job_id):
 @app.route("/populate/resume/<job_id>", methods=["POST"])
 def resume_populate(job_id):
     if job_store.resume(job_id):
+        mark_job_resumed(job_id)
         return jsonify({"status": "resumed"})
     return jsonify({"error": "unknown job id"}), 404
 
