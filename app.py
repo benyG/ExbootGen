@@ -9,7 +9,6 @@ from threading import Lock
 from types import SimpleNamespace
 from typing import Dict, Iterable, List, Optional, Tuple
 
-
 try:  # pragma: no cover - optional runtime dependency
     from celery import Celery  # type: ignore
     from celery.exceptions import CeleryError  # type: ignore
@@ -596,7 +595,10 @@ def fix_process():
                 provider_id,
                 cert_id,
             )
-            status = job_store.get_status(job_id) or {}
+            try:
+                status = job_store.get_status(job_id) or {}
+            except JobStoreError:
+                status = {}
             payload = {"status": status.get("status", "failed"), "job_id": job_id}
             error = status.get("error") or str(exc)
             if error:
@@ -607,11 +609,24 @@ def fix_process():
     return jsonify({"status": "queued", "job_id": job_id})
 
 
+def _load_job_status(job_id: str):
+    """Return job state or a JSON error response when unavailable."""
+
+    try:
+        data = job_store.get_status(job_id)
+    except JobStoreError as exc:
+        app.logger.exception("Job %s: unable to fetch status from store", job_id)
+        return None, jsonify({"error": "job store unavailable", "details": str(exc)}), 503
+    if data is None:
+        return None, jsonify({"error": "unknown job id"}), 404
+    return data, None, None
+
+
 @app.route("/fix/status/<job_id>", methods=["GET"])
 def fix_status(job_id):
-    data = job_store.get_status(job_id)
-    if data is None:
-        return jsonify({"error": "unknown job id"}), 404
+    data, error_response, status = _load_job_status(job_id)
+    if error_response is not None:
+        return error_response, status
     return jsonify(data)
 
 
@@ -993,7 +1008,10 @@ def populate_process():
                 provider_id,
                 cert_id,
             )
-            status = job_store.get_status(job_id) or {}
+            try:
+                status = job_store.get_status(job_id) or {}
+            except JobStoreError:
+                status = {}
             payload = {"status": status.get("status", "failed"), "job_id": job_id}
             error = status.get("error") or str(exc)
             if error:
@@ -1006,9 +1024,9 @@ def populate_process():
 
 @app.route("/populate/status/<job_id>", methods=["GET"])
 def populate_status(job_id):
-    data = job_store.get_status(job_id)
-    if data is None:
-        return jsonify({"error": "unknown job id"}), 404
+    data, error_response, status = _load_job_status(job_id)
+    if error_response is not None:
+        return error_response, status
     return jsonify(data)
 
 
