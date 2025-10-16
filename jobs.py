@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import sqlite3
+import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
@@ -28,11 +29,88 @@ MAX_LOG_ENTRIES = 5000
 
 
 class JobStatusCache:
-    """Keep an in-process snapshot of job metadata for degraded operations."""
+    """Keep job metadata cached locally and optionally on disk for resilience."""
 
-    def __init__(self) -> None:
+    def __init__(self, persist_dir: Optional[Path] = None) -> None:
         self._jobs: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()
+        self._persist_dir: Optional[Path] = None
+        if persist_dir is not None:
+            try:
+                persist_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                LOGGER.warning(
+                    "Impossible de créer le dossier de cache des jobs %s: %s",
+                    persist_dir,
+                    exc,
+                )
+            else:
+                self._persist_dir = persist_dir
+
+    def _normalise_snapshot(self, job_id: str, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        data = {
+            "job_id": job_id,
+            "status": snapshot.get("status", "queued"),
+            "log": list(snapshot.get("log", []))[-MAX_LOG_ENTRIES:],
+            "counters": dict(snapshot.get("counters", {})),
+            "error": snapshot.get("error"),
+            "description": snapshot.get("description"),
+            "metadata": dict(snapshot.get("metadata") or {}),
+            "created_at": float(snapshot.get("created_at") or time.time()),
+            "updated_at": float(snapshot.get("updated_at") or time.time()),
+        }
+        return data
+
+    def _persist_to_disk(self, job_id: str, data: Dict[str, Any]) -> None:
+        if self._persist_dir is None:
+            return
+        path = self._persist_dir / f"{job_id}.json"
+        tmp_path = path.parent / f"{path.name}.tmp"
+        try:
+            with tmp_path.open("w", encoding="utf-8") as handle:
+                json.dump(data, handle, ensure_ascii=False)
+            os.replace(tmp_path, path)
+        except TypeError as exc:
+            LOGGER.warning(
+                "Job %s: impossible de sérialiser le cache local sur disque: %s",
+                job_id,
+                exc,
+            )
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+        except OSError as exc:
+            LOGGER.warning(
+                "Job %s: impossible d'écrire le cache local sur %s: %s",
+                job_id,
+                path,
+                exc,
+            )
+
+    def _load_from_disk(self, job_id: str) -> Optional[Dict[str, Any]]:
+        if self._persist_dir is None:
+            return None
+        path = self._persist_dir / f"{job_id}.json"
+        if not path.exists():
+            return None
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except (OSError, json.JSONDecodeError) as exc:
+            LOGGER.warning(
+                "Job %s: impossible de lire le cache local sur %s: %s",
+                job_id,
+                path,
+                exc,
+            )
+            return None
+        return self._normalise_snapshot(job_id, payload)
+
+    def _persist(self, job_id: str) -> None:
+        data = self._jobs.get(job_id)
+        if data is not None:
+            self._persist_to_disk(job_id, data)
 
     def create_job(
         self,
@@ -43,34 +121,28 @@ class JobStatusCache:
     ) -> None:
         now = time.time()
         with self._lock:
-            self._jobs[job_id] = {
-                "job_id": job_id,
-                "status": "queued",
-                "log": [],
-                "counters": {},
-                "error": None,
-                "description": description,
-                "metadata": dict(metadata or {}),
-                "created_at": now,
-                "updated_at": now,
-            }
+            self._jobs[job_id] = self._normalise_snapshot(
+                job_id,
+                {
+                    "status": "queued",
+                    "log": [],
+                    "counters": {},
+                    "error": None,
+                    "description": description,
+                    "metadata": dict(metadata or {}),
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
+            self._persist(job_id)
 
     def refresh(self, job_id: str, snapshot: Dict[str, Any]) -> None:
         if not snapshot:
             return
         with self._lock:
-            data = {
-                "job_id": job_id,
-                "status": snapshot.get("status", "queued"),
-                "log": list(snapshot.get("log", []))[-MAX_LOG_ENTRIES:],
-                "counters": dict(snapshot.get("counters", {})),
-                "error": snapshot.get("error"),
-                "description": snapshot.get("description"),
-                "metadata": dict(snapshot.get("metadata") or {}),
-                "created_at": float(snapshot.get("created_at") or time.time()),
-                "updated_at": float(snapshot.get("updated_at") or time.time()),
-            }
+            data = self._normalise_snapshot(job_id, snapshot)
             self._jobs[job_id] = data
+            self._persist(job_id)
 
     def append_log(self, job_id: str, message: str) -> None:
         with self._lock:
@@ -81,6 +153,7 @@ class JobStatusCache:
             if len(data["log"]) > MAX_LOG_ENTRIES:
                 del data["log"][: len(data["log"]) - MAX_LOG_ENTRIES]
             data["updated_at"] = time.time()
+            self._persist(job_id)
 
     def update_counters(self, job_id: str, values: Dict[str, Any]) -> None:
         with self._lock:
@@ -89,6 +162,7 @@ class JobStatusCache:
                 return
             data["counters"].update(values)
             data["updated_at"] = time.time()
+            self._persist(job_id)
 
     def set_status(self, job_id: str, status: str, *, error: Optional[str] = None) -> None:
         with self._lock:
@@ -99,6 +173,7 @@ class JobStatusCache:
             if error is not None:
                 data["error"] = error
             data["updated_at"] = time.time()
+            self._persist(job_id)
 
     def pause(self, job_id: str) -> None:
         with self._lock:
@@ -107,6 +182,7 @@ class JobStatusCache:
                 return
             data["status"] = "paused"
             data["updated_at"] = time.time()
+            self._persist(job_id)
 
     def resume(self, job_id: str) -> None:
         with self._lock:
@@ -116,12 +192,16 @@ class JobStatusCache:
             if data.get("status") == "paused":
                 data["status"] = "running"
             data["updated_at"] = time.time()
+            self._persist(job_id)
 
     def get_status(self, job_id: str) -> Optional[Dict[str, Any]]:
         with self._lock:
             data = self._jobs.get(job_id)
             if not data:
-                return None
+                data = self._load_from_disk(job_id)
+                if data is None:
+                    return None
+                self._jobs[job_id] = data
             return {
                 "job_id": job_id,
                 "status": data.get("status", "queued"),
@@ -135,7 +215,17 @@ class JobStatusCache:
             }
 
 
-_JOB_CACHE = JobStatusCache()
+def _default_cache_dir() -> Optional[Path]:
+    override = os.getenv("JOB_STATUS_CACHE_DIR")
+    if override is not None:
+        override = override.strip()
+        if not override:
+            return None
+        return Path(override)
+    return Path(tempfile.gettempdir()) / "exbootgen-job-cache"
+
+
+_JOB_CACHE = JobStatusCache(_default_cache_dir())
 
 
 class JobStoreError(RuntimeError):
@@ -761,8 +851,16 @@ def initialise_job(
 ) -> str:
     """Register a new job in ``store`` and return its identifier."""
 
-    store.create_job(job_id, description=description, metadata=metadata)
     _JOB_CACHE.create_job(job_id, description=description, metadata=metadata)
+    try:
+        store.create_job(job_id, description=description, metadata=metadata)
+    except JobStoreError as exc:
+        LOGGER.warning(
+            "Job %s: impossible d'enregistrer le job dans le magasin principal (%s). "
+            "Utilisation du cache local uniquement jusqu'à ce que le magasin redevienne disponible.",
+            job_id,
+            exc,
+        )
     return job_id
 
 
