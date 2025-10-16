@@ -1,10 +1,14 @@
 import os
 import random
 import threading
+import os
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 from types import SimpleNamespace
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
+
 
 try:  # pragma: no cover - optional runtime dependency
     from celery import Celery  # type: ignore
@@ -79,6 +83,28 @@ app = Flask(__name__, template_folder="templates")
 def _env_flag(name: str, default: str = "0") -> bool:
     value = os.getenv(name, default)
     return value.lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int, *, minimum: int = 1, maximum: Optional[int] = None) -> int:
+    """Return an integer value from the environment bounded between ``minimum`` and ``maximum``."""
+
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        value = default
+    else:
+        try:
+            value = int(raw_value)
+        except ValueError as exc:
+            raise ValueError(f"{name} doit être un entier") from exc
+    value = max(value, minimum)
+    if maximum is not None:
+        value = min(value, maximum)
+    return value
+
+
+def _default_parallelism(maximum: int = 8) -> int:
+    cpu_count = os.cpu_count() or 1
+    return max(1, min(cpu_count, maximum))
 
 
 def make_celery() -> Celery:
@@ -394,9 +420,28 @@ def run_fix(context: JobContext, provider_id: int, cert_id: int, action: str) ->
 
     total_to_process = len(questions)
     context.log(f"{total_to_process} question(s) à traiter.")
+    if total_to_process == 0:
+        context.log(f"{task_label} terminé : 0 question traitée.")
+        return
 
-    processed = 0
-    for index, question in enumerate(questions, start=1):
+    max_workers = _env_int(
+        "FIX_MAX_WORKERS",
+        _default_parallelism(maximum=4),
+        minimum=1,
+        maximum=32,
+    )
+    if max_workers > 1:
+        context.log(f"Exécution en parallèle avec {max_workers} worker(s).")
+
+    counters_lock = Lock()
+    state = {
+        "processed": 0,
+        "corrected": corrected,
+        "remaining": remaining,
+    }
+
+    def _process_question(item: Tuple[int, Dict[str, object]]) -> None:
+        index, question = item
         context.wait_if_paused()
         qid = question.get("id")
         context.log(f"[{index}/{total_to_process}] Traitement de la question {qid}.")
@@ -404,35 +449,54 @@ def run_fix(context: JobContext, provider_id: int, cert_id: int, action: str) ->
             responses = correct_questions(provider_name, cert_name, [question], action)
         except Exception as exc:  # pragma: no cover - propagated to Celery
             context.log(f"Erreur lors de l'appel OpenAI pour la question {qid}: {exc}")
-            continue
+            return
 
         if not responses:
             context.log(f"Aucune réponse obtenue pour la question {qid}.")
-            continue
+            return
 
         result = responses[0] or {}
         try:
             updated = _apply_result(result)
         except Exception as exc:  # pragma: no cover - DB errors surfaced in logs
             context.log(f"Erreur base de données pour la question {qid}: {exc}")
-            continue
+            return
 
-        processed += 1
+        with counters_lock:
+            state["processed"] += 1
+            if updated:
+                state["corrected"] = (
+                    min(total, state["corrected"] + 1)
+                    if total
+                    else state["corrected"] + 1
+                )
+                state["remaining"] = max(state["remaining"] - 1, 0)
+            current_processed = state["processed"]
+            current_corrected = state["corrected"]
+            current_remaining = state["remaining"]
+
         if updated:
-            corrected = min(total, corrected + 1) if total else corrected + 1
-            remaining = max(remaining - 1, 0)
             context.log(f"Question {qid} mise à jour.")
         else:
             context.log(f"Aucune modification enregistrée pour la question {qid}.")
+
         context.update_counters(
             total=total,
-            corrected=corrected,
-            remaining=remaining,
-            processed=processed,
+            corrected=current_corrected,
+            remaining=current_remaining,
+            processed=current_processed,
         )
         time.sleep(API_REQUEST_DELAY)
 
-    context.log(f"{task_label} terminé : {processed} question(s) traitée(s).")
+    items: Iterable[Tuple[int, Dict[str, object]]] = enumerate(questions, start=1)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(_process_question, item) for item in items]
+        for future in as_completed(futures):
+            future.result()
+
+    context.log(
+        f"{task_label} terminé : {state['processed']} question(s) traitée(s)."
+    )
 
 
 @celery_app.task(bind=True, name="fix.run")
@@ -601,9 +665,48 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
         for item in db.get_domains_description_by_certif(cert_id)
     }
 
-    domains_processed = 0
+    counters_lock = Lock()
+    counters = {
+        "domains_processed": 0,
+        "total_questions": total_questions_count,
+    }
 
-    for domain_id, domain_name in domains:
+    def _add_questions(amount: int) -> Tuple[int, int]:
+        if amount <= 0:
+            with counters_lock:
+                return counters["domains_processed"], counters["total_questions"]
+        with counters_lock:
+            counters["total_questions"] += amount
+            current_domains = counters["domains_processed"]
+            current_total_questions = counters["total_questions"]
+        context.update_counters(
+            domainsProcessed=current_domains,
+            totalQuestions=current_total_questions,
+        )
+        return current_domains, current_total_questions
+
+    def _mark_domain_completed() -> Tuple[int, int]:
+        with counters_lock:
+            counters["domains_processed"] += 1
+            current_domains = counters["domains_processed"]
+            current_total_questions = counters["total_questions"]
+        context.update_counters(
+            domainsProcessed=current_domains,
+            totalQuestions=current_total_questions,
+        )
+        return current_domains, current_total_questions
+
+    max_workers = _env_int(
+        "POPULATION_MAX_WORKERS",
+        _default_parallelism(maximum=4),
+        minimum=1,
+        maximum=32,
+    )
+    if max_workers > 1:
+        context.log(f"Traitement des domaines en parallèle avec {max_workers} worker(s).")
+
+    def _process_domain(domain: Tuple[int, str]) -> None:
+        domain_id, domain_name = domain
         context.wait_if_paused()
         context.log(f"[{domain_name}] Domain processing started.")
         progress = progress_map[domain_id]
@@ -611,21 +714,16 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
         context.log(f"[{domain_name}] Initial question count: {current_total}")
 
         if current_total >= TARGET_PER_DOMAIN:
-            domains_processed += 1
+            current_domains, _ = _mark_domain_completed()
             context.log(
-                f"[{domain_name}] Domain already complete (>= {TARGET_PER_DOMAIN} questions)."
+                f"[{domain_name}] Domain already complete (>= {TARGET_PER_DOMAIN} questions). ({current_domains}/{total_domains})"
             )
-            context.update_counters(
-                domainsProcessed=domains_processed,
-                totalQuestions=total_questions_count,
-            )
-            continue
+            return
 
         context.log(
             f"[{domain_name}] Needs {TARGET_PER_DOMAIN - current_total} additional questions to reach {TARGET_PER_DOMAIN}."
         )
 
-        # --- Élaboration par niveau de difficulté ---
         # Traitement EASY si le domaine est vide
         if current_total == 0:
             context.wait_if_paused()
@@ -645,7 +743,8 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
                 progress=progress,
             )
             if inserted_easy:
-                total_questions_count += inserted_easy
+                _add_questions(inserted_easy)
+
             current_total = progress.total_questions()
             context.log(f"[{domain_name}] Total after EASY: {current_total}")
 
@@ -671,7 +770,7 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
                 progress=progress,
             )
             if inserted_medium:
-                total_questions_count += inserted_medium
+                _add_questions(inserted_medium)
             current_total = progress.total_questions()
             context.log(f"[{domain_name}] Total after MEDIUM: {current_total}")
 
@@ -697,7 +796,7 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
                 progress=progress,
             )
             if inserted_hard:
-                total_questions_count += inserted_hard
+                _add_questions(inserted_hard)
             current_total = progress.total_questions()
             context.log(f"[{domain_name}] Total after HARD: {current_total}")
 
@@ -744,7 +843,7 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
                     imported = int(stats.get("imported_questions", 0) or 0)
                 if imported:
                     progress.record_insertion("medium", "qcm", practical_val, imported)
-                    total_questions_count += imported
+                    _add_questions(imported)
                     context.log(
                         f"[{domain_name}] {imported} fallback question(s) inserted."
                     )
@@ -757,18 +856,19 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
                     f"[{domain_name}] Error during fallback generation: {exc}"
                 )
 
-        domains_processed += 1
         final_total = progress.total_questions()
+        current_domains, _ = _mark_domain_completed()
         context.log(
-            f"[{domain_name}] Domain completed: final total = {final_total} ({domains_processed}/{total_domains})."
-        )
-        context.update_counters(
-            domainsProcessed=domains_processed,
-            totalQuestions=total_questions_count,
+            f"[{domain_name}] Domain completed: final total = {final_total} ({current_domains}/{total_domains})."
         )
 
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(_process_domain, domain) for domain in domains]
+        for future in as_completed(futures):
+            future.result()
+
     context.log(
-        f"Process finished: {domains_processed} domains processed out of {total_domains}."
+        f"Process finished: {counters['domains_processed']} domains processed out of {total_domains}."
     )
 
 
