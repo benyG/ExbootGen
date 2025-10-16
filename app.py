@@ -759,6 +759,7 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
             )
             if inserted_easy:
                 _add_questions(inserted_easy)
+
             current_total = progress.total_questions()
             context.log(f"[{domain_name}] Total after EASY: {current_total}")
 
