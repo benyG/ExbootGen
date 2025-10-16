@@ -119,7 +119,6 @@ class ProcessDomainByDifficultyTest(unittest.TestCase):
         self.assertEqual(inserted, 0)
         count_mock.assert_not_called()
 
-
 class JobStatusFallbackTest(unittest.TestCase):
     def setUp(self):
         self.client = app.app.test_client()
@@ -203,7 +202,6 @@ class JobStatusFallbackTest(unittest.TestCase):
         self.assertEqual(payload["status"], "running")
         self.assertIn("Started", payload["log"])
         self.assertEqual(payload["counters"].get("progress"), 1)
-
 
 if __name__ == '__main__':
     unittest.main()

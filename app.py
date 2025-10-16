@@ -623,8 +623,8 @@ def fix_process():
 
 def _load_job_status(job_id: str):
     """Return job state or a JSON error response when unavailable."""
-
     cached = get_cached_status(job_id)
+
     try:
         data = job_store.get_status(job_id)
     except JobStoreError as exc:
@@ -643,6 +643,7 @@ def _load_job_status(job_id: str):
             return cached, None, None
         return None, jsonify({"error": "unknown job id"}), 404
     cache_job_snapshot(job_id, data)
+
     return data, None, None
 
 
@@ -783,6 +784,7 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
             )
             if inserted_easy:
                 _add_questions(inserted_easy)
+
             current_total = progress.total_questions()
             context.log(f"[{domain_name}] Total after EASY: {current_total}")
 
