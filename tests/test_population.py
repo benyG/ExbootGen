@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+import uuid
 from unittest.mock import patch
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
@@ -10,7 +11,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test")
 os.environ.setdefault("CELERY_TASK_ALWAYS_EAGER", "1")
 os.environ.setdefault("CELERY_BROKER_URL", "memory://")
 os.environ.setdefault("CELERY_RESULT_BACKEND", "cache+memory://")
-os.environ.setdefault("JOB_STORE_URL", "sqlite:///:memory:")
+os.environ.setdefault("JOB_STORE_URL", "sqlite:///test_job_store.db")
 
 import app
 
@@ -68,6 +69,101 @@ class ProcessDomainByDifficultyTest(unittest.TestCase):
         self.assertEqual(inserted[0][0], 1)
         self.assertEqual(inserted[0][1], 'scenario')
         self.assertTrue(any('Secondary domains' in entry for entry in context.logs))
+
+
+    def test_uses_progress_cache_when_available(self):
+        class DummyProgress:
+            def __init__(self):
+                self.counts = {('easy', 'qcm', 'scenario'): 5}
+                self.total = 5
+                self.recorded = []
+
+            def category_total(self, difficulty, qtype, scenario):
+                return self.counts.get((difficulty, qtype, scenario), 0)
+
+            def record_insertion(self, difficulty, qtype, scenario, imported):
+                self.recorded.append((difficulty, qtype, scenario, imported))
+                self.counts[(difficulty, qtype, scenario)] = self.counts.get(
+                    (difficulty, qtype, scenario), 0
+                ) + imported
+                self.total += imported
+
+            def total_questions(self):
+                return self.total
+
+        context = DummyContext()
+        progress = DummyProgress()
+
+        with patch('app.db.count_questions_in_category') as count_mock:
+            inserted = app.process_domain_by_difficulty(
+                context,
+                domain_id=1,
+                domain_name='Dom',
+                difficulty='easy',
+                distribution={'qcm': {'scenario': 1}},
+                provider_name='Prov',
+                cert_name='Cert',
+                analysis={},
+                all_domain_names=['Dom'],
+                domain_descriptions={1: 'desc'},
+                progress=progress,
+            )
+
+        self.assertEqual(inserted, 0)
+        count_mock.assert_not_called()
+
+
+class JobStatusFallbackTest(unittest.TestCase):
+    def setUp(self):
+        self.client = app.app.test_client()
+
+    def test_returns_cached_status_when_store_unavailable(self):
+        job_id = uuid.uuid4().hex
+        app.initialise_job(
+            app.job_store,
+            job_id=job_id,
+            description="populate-certification",
+            metadata={},
+        )
+        context = app.JobContext(app.job_store, job_id)
+        context.set_status("running")
+        context.log("Started")
+        context.update_counters(progress=1)
+
+        with patch.object(app.job_store, "get_status", side_effect=app.JobStoreError("down")):
+            response = self.client.get(f"/populate/status/{job_id}")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "running")
+        self.assertIn("Started", payload["log"])
+        self.assertEqual(payload["counters"].get("progress"), 1)
+
+    def test_returns_cached_status_when_store_reports_missing_job(self):
+        job_id = uuid.uuid4().hex
+        app.initialise_job(
+            app.job_store,
+            job_id=job_id,
+            description="populate-certification",
+            metadata={},
+        )
+        context = app.JobContext(app.job_store, job_id)
+        context.set_status("completed")
+
+        with patch.object(app.job_store, "get_status", return_value=None):
+            response = self.client.get(f"/fix/status/{job_id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "completed")
+
+    def test_returns_error_when_no_cache_available(self):
+        unknown_id = uuid.uuid4().hex
+        with patch.object(app.job_store, "get_status", side_effect=app.JobStoreError("down")):
+            response = self.client.get(f"/populate/status/{unknown_id}")
+
+        self.assertEqual(response.status_code, 503)
+        payload = response.get_json()
+        self.assertEqual(payload["error"], "job store unavailable")
 
 
 if __name__ == '__main__':

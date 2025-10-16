@@ -27,6 +27,117 @@ LOGGER = logging.getLogger(__name__)
 MAX_LOG_ENTRIES = 5000
 
 
+class JobStatusCache:
+    """Keep an in-process snapshot of job metadata for degraded operations."""
+
+    def __init__(self) -> None:
+        self._jobs: Dict[str, Dict[str, Any]] = {}
+        self._lock = threading.RLock()
+
+    def create_job(
+        self,
+        job_id: str,
+        *,
+        description: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        now = time.time()
+        with self._lock:
+            self._jobs[job_id] = {
+                "job_id": job_id,
+                "status": "queued",
+                "log": [],
+                "counters": {},
+                "error": None,
+                "description": description,
+                "metadata": dict(metadata or {}),
+                "created_at": now,
+                "updated_at": now,
+            }
+
+    def refresh(self, job_id: str, snapshot: Dict[str, Any]) -> None:
+        if not snapshot:
+            return
+        with self._lock:
+            data = {
+                "job_id": job_id,
+                "status": snapshot.get("status", "queued"),
+                "log": list(snapshot.get("log", []))[-MAX_LOG_ENTRIES:],
+                "counters": dict(snapshot.get("counters", {})),
+                "error": snapshot.get("error"),
+                "description": snapshot.get("description"),
+                "metadata": dict(snapshot.get("metadata") or {}),
+                "created_at": float(snapshot.get("created_at") or time.time()),
+                "updated_at": float(snapshot.get("updated_at") or time.time()),
+            }
+            self._jobs[job_id] = data
+
+    def append_log(self, job_id: str, message: str) -> None:
+        with self._lock:
+            data = self._jobs.get(job_id)
+            if not data:
+                return
+            data["log"].append(message)
+            if len(data["log"]) > MAX_LOG_ENTRIES:
+                del data["log"][: len(data["log"]) - MAX_LOG_ENTRIES]
+            data["updated_at"] = time.time()
+
+    def update_counters(self, job_id: str, values: Dict[str, Any]) -> None:
+        with self._lock:
+            data = self._jobs.get(job_id)
+            if not data:
+                return
+            data["counters"].update(values)
+            data["updated_at"] = time.time()
+
+    def set_status(self, job_id: str, status: str, *, error: Optional[str] = None) -> None:
+        with self._lock:
+            data = self._jobs.get(job_id)
+            if not data:
+                return
+            data["status"] = status
+            if error is not None:
+                data["error"] = error
+            data["updated_at"] = time.time()
+
+    def pause(self, job_id: str) -> None:
+        with self._lock:
+            data = self._jobs.get(job_id)
+            if not data:
+                return
+            data["status"] = "paused"
+            data["updated_at"] = time.time()
+
+    def resume(self, job_id: str) -> None:
+        with self._lock:
+            data = self._jobs.get(job_id)
+            if not data:
+                return
+            if data.get("status") == "paused":
+                data["status"] = "running"
+            data["updated_at"] = time.time()
+
+    def get_status(self, job_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            data = self._jobs.get(job_id)
+            if not data:
+                return None
+            return {
+                "job_id": job_id,
+                "status": data.get("status", "queued"),
+                "log": list(data.get("log", [])),
+                "counters": dict(data.get("counters", {})),
+                "error": data.get("error"),
+                "description": data.get("description"),
+                "metadata": dict(data.get("metadata") or {}),
+                "created_at": data.get("created_at", time.time()),
+                "updated_at": data.get("updated_at", time.time()),
+            }
+
+
+_JOB_CACHE = JobStatusCache()
+
+
 class JobStoreError(RuntimeError):
     """Raised when a job operation cannot be completed."""
 
@@ -593,6 +704,7 @@ class JobContext:
     _store_error_logged: bool = field(default=False, init=False, repr=False, compare=False)
 
     def log(self, message: str) -> None:
+        _JOB_CACHE.append_log(self.job_id, message)
         try:
             self.store.append_log(self.job_id, message)
         except JobStoreError as exc:
@@ -600,6 +712,7 @@ class JobContext:
             LOGGER.info("[%s] %s", self.job_id, message)
 
     def update_counters(self, **values: Any) -> None:
+        _JOB_CACHE.update_counters(self.job_id, values)
         try:
             self.store.update_counters(self.job_id, values)
         except JobStoreError as exc:
@@ -612,6 +725,7 @@ class JobContext:
             self._handle_store_error("wait_if_paused", exc)
 
     def set_status(self, status: str, *, error: Optional[str] = None) -> None:
+        _JOB_CACHE.set_status(self.job_id, status, error=error)
         try:
             self.store.set_status(self.job_id, status, error=error)
         except JobStoreError as exc:
@@ -648,7 +762,38 @@ def initialise_job(
     """Register a new job in ``store`` and return its identifier."""
 
     store.create_job(job_id, description=description, metadata=metadata)
+    _JOB_CACHE.create_job(job_id, description=description, metadata=metadata)
     return job_id
+
+
+def cache_job_snapshot(job_id: str, data: Dict[str, Any]) -> None:
+    """Update the local cache with the latest snapshot from the store."""
+
+    _JOB_CACHE.refresh(job_id, data)
+
+
+def get_cached_status(job_id: str) -> Optional[Dict[str, Any]]:
+    """Return the locally cached status for ``job_id`` if any."""
+
+    return _JOB_CACHE.get_status(job_id)
+
+
+def mark_job_paused(job_id: str) -> None:
+    """Record that ``job_id`` is paused in the local cache."""
+
+    _JOB_CACHE.pause(job_id)
+
+
+def mark_job_resumed(job_id: str) -> None:
+    """Record that ``job_id`` has resumed in the local cache."""
+
+    _JOB_CACHE.resume(job_id)
+
+
+def set_cached_status(job_id: str, status: str, *, error: Optional[str] = None) -> None:
+    """Update the cached status for ``job_id`` when the store is updated directly."""
+
+    _JOB_CACHE.set_status(job_id, status, error=error)
 
 
 __all__ = [
@@ -656,8 +801,13 @@ __all__ = [
     "InMemoryJobStore",
     "JobContext",
     "JobStoreError",
+    "cache_job_snapshot",
+    "get_cached_status",
     "RedisJobStore",
     "SQLiteJobStore",
+    "mark_job_paused",
+    "mark_job_resumed",
+    "set_cached_status",
     "create_job_store",
     "initialise_job",
 ]

@@ -1,12 +1,16 @@
 # reloc.py
 
-from flask import Blueprint, render_template, request, Response
-import mysql.connector
-import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
+import os
 import re
 from time import sleep
-from config import OPENAI_API_KEY, OPENAI_MODEL, DB_CONFIG
+
+from flask import Blueprint, Response, render_template, request
+import mysql.connector
+import requests
+
+from config import DB_CONFIG, OPENAI_API_KEY, OPENAI_MODEL
 
 OPENAI_ENDPOINT = 'https://api.openai.com/v1/chat/completions'
 
@@ -61,6 +65,7 @@ def stream_relocate():
     src_module = request.args.get('source_module_id',    type=int)
     dst_cert    = request.args.get('destination_cert_id', type=int)
     batch_size  = request.args.get('batch_size',          default=10, type=int)
+    requested_workers = request.args.get('workers', type=int)
 
     if not src_module or not dst_cert:
         return {"error": "source_module_id et destination_cert_id sont requis"}, 400
@@ -73,26 +78,42 @@ def stream_relocate():
         modules = cur0.fetchall()
         cur0.close(); conn0.close()
 
-        total_moved = 0
+        conn1 = mysql.connector.connect(**DB_CONFIG)
+        cur1 = conn1.cursor(dictionary=True)
+        cur1.execute(
+            "SELECT id, text FROM questions WHERE module = %s",
+            (src_module,)
+        )
+        all_questions = cur1.fetchall()
+        cur1.close(); conn1.close()
 
-        while True:
-            # 2) Récupérer un batch de questions (toujours les premières restantes)
-            conn1 = mysql.connector.connect(**DB_CONFIG)
-            cur1 = conn1.cursor(dictionary=True)
-            cur1.execute(
-                "SELECT id, text FROM questions WHERE module = %s LIMIT %s",
-                (src_module, batch_size)
-            )
-            questions = cur1.fetchall()
-            cur1.close(); conn1.close()
+        if not all_questions:
+            yield "data: Aucun traitement (0 questions trouvées)\n\n"
+            return
 
-            if not questions:
-                break
+        batches = [
+            all_questions[i : i + max(1, batch_size)]
+            for i in range(0, len(all_questions), max(1, batch_size))
+        ]
+        default_workers = max(1, min(os.cpu_count() or 1, 8))
+        env_workers = os.getenv("RELOC_MAX_WORKERS")
+        if env_workers:
+            try:
+                default_workers = max(1, min(int(env_workers), 32))
+            except ValueError:
+                pass
+        if requested_workers:
+            default_workers = max(1, min(requested_workers, 32))
 
-            # 3) Construire le prompt pour l’IA
-            modules_info   = json.dumps(modules,   ensure_ascii=False)
+        max_workers = min(default_workers, len(batches))
+        if max_workers > 1:
+            yield f"data: Traitement parallèle avec {max_workers} worker(s)\n\n"
+
+        modules_info = json.dumps(modules, ensure_ascii=False)
+
+        def _process_batch(batch_index: int, questions_batch):
             questions_info = json.dumps(
-                [{'question_id': q['id'], 'text': q['text']} for q in questions],
+                [{'question_id': q['id'], 'text': q['text']} for q in questions_batch],
                 ensure_ascii=False
             )
             prompt = (
@@ -103,70 +124,69 @@ def stream_relocate():
                 f"Questions: {questions_info}\n"
             )
 
-            # 4) Appel à l’API OpenAI
             payload = {
-                "model":    OPENAI_MODEL,
-                "messages":[{"role":"user","content":prompt}]
+                "model": OPENAI_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
             }
-            try:
-                resp = requests.post(
-                    OPENAI_ENDPOINT,
-                    headers={
-                        'Content-Type':  'application/json',
-                        'Authorization': f'Bearer {OPENAI_API_KEY}'
-                    },
-                    json=payload,
-                    timeout=60
-                )
-                resp.raise_for_status()
-            except Exception as e:
-                yield f"data: ERREUR OpenAI: {e}\n\n"
-                return
+
+            resp = requests.post(
+                OPENAI_ENDPOINT,
+                headers={
+                    'Content-Type': 'application/json',
+                    'Authorization': f'Bearer {OPENAI_API_KEY}'
+                },
+                json=payload,
+                timeout=60,
+            )
+            resp.raise_for_status()
 
             choices = resp.json().get('choices', [])
             if not choices or 'message' not in choices[0]:
-                yield "data: ERREUR réponse OpenAI invalide\n\n"
-                return
+                raise ValueError("réponse OpenAI invalide")
 
             content = choices[0]['message']['content']
-            # 5) Nettoyage et parsing du JSON renvoyé
             cleaned = re.sub(r"```json|```", "", content).strip()
             try:
                 mapping = json.loads(cleaned)
             except json.JSONDecodeError:
                 cleaned2 = cleaned.replace("\n", "").replace("\\", "")
-                try:
-                    mapping = json.loads(cleaned2)
-                except Exception as e:
-                    yield f"data: ERREUR parsing JSON IA: {e}\n\n"
-                    return
+                mapping = json.loads(cleaned2)
 
-            # 6) Mise à jour en base pour ce batch
             conn2 = mysql.connector.connect(**DB_CONFIG)
-            cur2  = conn2.cursor()
+            cur2 = conn2.cursor()
             moved = 0
             for item in mapping:
-                qid    = item.get('question_id')
+                qid = item.get('question_id')
                 mod_id = item.get('domain_to_affect')
                 if isinstance(qid, int) and isinstance(mod_id, int):
                     cur2.execute(
                         "UPDATE questions SET module=%s WHERE id=%s",
-                        (mod_id, qid)
+                        (mod_id, qid),
                     )
                     moved += cur2.rowcount
             conn2.commit()
             cur2.close()
             conn2.close()
 
-            total_moved += moved
-
-            # 7) Envoi de l’événement SSE pour ce batch
-            yield f"data: Batch moved={moved}, total={total_moved}\n\n"
-            if moved == 0:
-                break
             sleep(0.1)
+            return moved
 
-        # 8) Fin du flux
+        total_moved = 0
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(_process_batch, idx, batch): idx
+                for idx, batch in enumerate(batches, start=1)
+            }
+            for future in as_completed(futures):
+                batch_index = futures[future]
+                try:
+                    moved = future.result()
+                except Exception as exc:
+                    yield f"data: ERREUR batch #{batch_index}: {exc}\n\n"
+                    return
+                total_moved += moved
+                yield f"data: Batch #{batch_index} moved={moved}, total={total_moved}\n\n"
+
         if total_moved == 0:
             yield "data: Aucun traitement (0 questions trouvées)\n\n"
         else:
