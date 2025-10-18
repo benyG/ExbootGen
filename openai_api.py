@@ -28,6 +28,40 @@ DOMAIN_PROMPT_TEMPLATE = (
     "]"
 )
 
+ARTICLE_PROMPT_TEMPLATE = """
+Retrieve official information about exam certification: {certification} from vendor {vendor}.
+Your mission is to write a clear, actionable and up-to-date article, which presents the certification to the reader.
+Reference Sources: only from official website of the specified certification vendor.
+If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate informations.
+
+RULES:
+- Titles should be short.
+- respect scrupulously the given Article structure only
+- Formulates complete, non-robotic sentences
+- Target length: 1,500–2,200 words.
+- Tone: motivating, factual, without unexplained jargon.
+- Zero fluff: each section must deliver useful and actionable information.
+
+Article structure:
+- certification objectives
+- targeted professions.
+- targeted audience
+- Official prerequisites.
+- Exam plan: Precise format (duration, number of questions, types), language, passing score, retake policy, validity/recertification.
+- Call to action +  {exam_url}
+"""
+
+TWEET_PROMPT_TEMPLATE = """
+You are a social media manager for Examboot.
+Write a single tweet in English announcing that the {certification} certification from {vendor} is available and invite readers to take the free practice test hosted on Examboot.
+Requirements:
+- Maximum 280 characters.
+- Use a motivating yet professional tone.
+- End the tweet with: Call to action + {exam_url}
+- Include exactly three relevant hashtags.
+- Return only the tweet text without additional commentary or quotation marks.
+"""
+
 def clean_and_decode_json(content: str) -> dict:
     """
     Nettoie le contenu (retire les balises ```json) et décode le JSON.
@@ -65,6 +99,61 @@ def clean_and_decode_json(content: str) -> dict:
     err = Exception(f"JSON Decoding Error. Raw content: {cleaned}")
     setattr(err, "raw_content", cleaned)
     raise err
+
+
+def _run_completion(prompt: str) -> str:
+    payload = {
+        "model": OPENAI_MODEL,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        ],
+    }
+
+    response = _post_with_retry(payload)
+    resp_json = response.json()
+    if "choices" not in resp_json or not resp_json["choices"]:
+        raise Exception(f"Unexpected API Response: {resp_json}")
+
+    message = resp_json["choices"][0].get("message", {})
+    if "content" not in message:
+        raise Exception(f"Unexpected API Response structure: {resp_json}")
+
+    return message["content"].strip()
+
+
+def generate_certification_article(certification: str, vendor: str, exam_url: str) -> str:
+    """Generate the long-form certification article following the required structure."""
+
+    if not OPENAI_API_KEY:
+        raise Exception(
+            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un article."
+        )
+
+    prompt = ARTICLE_PROMPT_TEMPLATE.format(
+        certification=certification,
+        vendor=vendor,
+        exam_url=exam_url,
+    )
+    return _run_completion(prompt)
+
+
+def generate_certification_tweet(certification: str, vendor: str, exam_url: str) -> str:
+    """Generate the announcement tweet for the certification launch."""
+
+    if not OPENAI_API_KEY:
+        raise Exception(
+            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un tweet."
+        )
+
+    prompt = TWEET_PROMPT_TEMPLATE.format(
+        certification=certification,
+        vendor=vendor,
+        exam_url=exam_url,
+    )
+    return _run_completion(prompt)
 
 
 def _post_with_retry(payload: dict) -> requests.Response:

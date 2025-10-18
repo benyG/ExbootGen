@@ -19,6 +19,10 @@ set "OPENAI_API_URL=https://api.openai.com/v1/chat/completions"
 set "OPENAI_MAX_RETRIES=5"
 set "API_REQUEST_DELAY=1"
 
+REM === Paramètres X (Twitter) ===
+set "X_API_BEARER_TOKEN=ajoutez-votre-bearer-token"
+set "X_API_TWEET_URL=https://api.twitter.com/2/tweets"
+
 REM === Paramètres Redis / Celery ===
 set "REDIS_HOST=redis-25453.crce197.us-east-2-1.ec2.redns.redis-cloud.com:15453"
 set "REDIS_PASSWORD=yACmUW5fjfEFG3MVcKrGJw0s0HNDLIt2"

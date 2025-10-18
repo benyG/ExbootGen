@@ -84,6 +84,7 @@ from move import move_bp
 from reloc import reloc_bp
 from pdf_importer import pdf_bp
 from quest import quest_bp
+from articles import articles_bp
 
 # Instanciation de l'application Flask
 app = Flask(__name__, template_folder="templates")
@@ -196,6 +197,7 @@ app.register_blueprint(move_bp, url_prefix="/move")
 app.register_blueprint(reloc_bp, url_prefix="/reloc")
 app.register_blueprint(pdf_bp, url_prefix="/pdf")
 app.register_blueprint(quest_bp, url_prefix="/quest")
+app.register_blueprint(articles_bp, url_prefix="/articles")
 
 # Définition de l'ordre des niveaux de difficulté
 DIFFICULTY_LEVELS = ["easy", "medium", "hard"]
