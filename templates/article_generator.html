@@ -367,7 +367,12 @@
         articleOutput.textContent = payload.article || 'Aucun contenu généré.';
         setStatus('Article généré avec succès.');
         runPlaybookBtn.disabled = false;
-        lastSelection = { providerId, certificationId, examUrl };
+        lastSelection = {
+          provider_id: providerId,
+          certification_id: certificationId,
+          exam_url: examUrl
+        };
+
       } catch (error) {
         setStatus(error.message, true);
         articleOutput.textContent = 'L\'article n\'a pas pu être généré.';
