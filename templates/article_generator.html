@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Article Certification · ExBoot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #040711;
+      --glass: rgba(14, 19, 33, 0.72);
+      --glass-strong: rgba(18, 24, 42, 0.86);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --radius-lg: 22px;
+      --radius-md: 16px;
+      --shadow: 0 18px 40px rgba(7, 12, 24, 0.45);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 12% 18%, rgba(124,247,255,0.15), transparent 55%),
+                  radial-gradient(circle at 85% 20%, rgba(244,114,182,0.18), transparent 60%),
+                  radial-gradient(circle at 40% 80%, rgba(71,245,192,0.18), transparent 65%),
+                  var(--bg);
+      color: var(--text-primary);
+      padding: 2.5rem clamp(1.2rem, 4vw, 3rem);
+      display: flex;
+      justify-content: center;
+    }
+
+    main {
+      width: min(1100px, 100%);
+      display: grid;
+      gap: 1.8rem;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.4rem 1.8rem;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px) saturate(160%);
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+
+    header a {
+      color: var(--accent-strong);
+      text-decoration: none;
+      font-weight: 500;
+      border: 1px solid rgba(124, 247, 255, 0.25);
+      padding: 0.5rem 1.1rem;
+      border-radius: 999px;
+      transition: background 0.3s ease, transform 0.3s ease;
+    }
+
+    header a:hover {
+      background: rgba(124, 247, 255, 0.08);
+      transform: translateY(-2px);
+    }
+
+    section {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: clamp(1.3rem, 3vw, 2rem);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px) saturate(150%);
+    }
+
+    .grid-two {
+      display: grid;
+      gap: 1.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+
+    label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 0.6rem;
+      color: var(--text-muted);
+    }
+
+    input[type="search"],
+    select,
+    input[type="url"] {
+      width: 100%;
+      background: rgba(12, 17, 31, 0.86);
+      color: var(--text-primary);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: var(--radius-md);
+      padding: 0.75rem 1rem;
+      font-size: 0.95rem;
+      transition: border 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    input:focus,
+    select:focus {
+      outline: none;
+      border-color: rgba(71, 245, 192, 0.6);
+      box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.15);
+    }
+
+    select {
+      appearance: none;
+      background-image: url('data:image/svg+xml;utf8,<svg fill="white" height="14" viewBox="0 0 24 24" width="14" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+      background-repeat: no-repeat;
+      background-position: right 0.8rem center;
+      background-size: 0.8rem;
+      padding-right: 2.5rem;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.8rem;
+      margin-top: 1.4rem;
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 999px;
+      padding: 0.75rem 1.6rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      transition: transform 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease;
+    }
+
+    button.primary {
+      background: linear-gradient(135deg, rgba(71,245,192,0.85), rgba(124,247,255,0.9));
+      color: #041221;
+      box-shadow: 0 12px 30px rgba(124, 247, 255, 0.18);
+    }
+
+    button.primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    button.secondary {
+      background: rgba(17, 24, 39, 0.75);
+      color: var(--text-primary);
+      border: 1px solid rgba(124,247,255,0.25);
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-2px);
+    }
+
+    .status {
+      margin-top: 0.8rem;
+      min-height: 1.2rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .article-output {
+      background: var(--glass-strong);
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(124, 247, 255, 0.2);
+      padding: 1.5rem;
+      white-space: pre-wrap;
+      line-height: 1.65;
+      max-height: 540px;
+      overflow-y: auto;
+    }
+
+    .article-output h2,
+    .article-output h3 {
+      color: var(--accent-strong);
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: 1.8rem 1.1rem;
+      }
+
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.8rem;
+      }
+
+      header a {
+        align-self: flex-end;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Article de certification piloté par IA</h1>
+        <p style="margin:0;color:var(--text-muted);max-width:38rem">Composez un article complet en sélectionnant un provider, une certification et le lien du test partagé Examboot. L'intelligence artificielle rédige automatiquement le contenu prêt à être publié.</p>
+      </div>
+      <a href="{{ url_for('home') }}">← Retour</a>
+    </header>
+
+    <section>
+      <h2 style="margin-top:0;margin-bottom:1.5rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">1. Sélectionnez la certification</h2>
+      <div class="grid-two">
+        <div>
+          <label for="providerSearch">Recherche provider</label>
+          <input type="search" id="providerSearch" placeholder="Rechercher un provider" autocomplete="off">
+        </div>
+        <div>
+          <label for="providerSelect">Providers disponibles</label>
+          <select id="providerSelect">
+            <option value="">Choisir un provider…</option>
+          </select>
+        </div>
+        <div>
+          <label for="certSearch">Recherche certification</label>
+          <input type="search" id="certSearch" placeholder="Rechercher une certification" autocomplete="off" disabled>
+        </div>
+        <div>
+          <label for="certSelect">Certifications shortlistées</label>
+          <select id="certSelect" disabled>
+            <option value="">Choisir une certification…</option>
+          </select>
+        </div>
+        <div>
+          <label for="examUrl">Lien du test partagé Examboot</label>
+          <input type="url" id="examUrl" placeholder="https://" autocomplete="off">
+        </div>
+      </div>
+      <div class="actions">
+        <button class="primary" id="generateBtn">Générer l'article</button>
+        <button class="secondary" id="runPlaybookBtn" disabled>Run playbook</button>
+      </div>
+      <div class="status" id="statusArea"></div>
+    </section>
+
+    <section>
+      <h2 style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">2. Article généré</h2>
+      <div class="article-output" id="articleOutput">L'article généré apparaîtra ici après soumission du formulaire.</div>
+    </section>
+  </main>
+
+  <script>
+    const providerSearch = document.getElementById('providerSearch');
+    const providerSelect = document.getElementById('providerSelect');
+    const certSearch = document.getElementById('certSearch');
+    const certSelect = document.getElementById('certSelect');
+    const examUrlInput = document.getElementById('examUrl');
+    const statusArea = document.getElementById('statusArea');
+    const generateBtn = document.getElementById('generateBtn');
+    const runPlaybookBtn = document.getElementById('runPlaybookBtn');
+    const articleOutput = document.getElementById('articleOutput');
+
+    let providers = [];
+    let certifications = [];
+    let lastSelection = null;
+
+    async function fetchProviders() {
+      try {
+        const response = await fetch('/quest/api/providers');
+        if (!response.ok) throw new Error('Impossible de récupérer les providers');
+        providers = await response.json();
+        renderProviders(providers);
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    }
+
+    function renderProviders(list) {
+      providerSelect.innerHTML = '<option value="">Choisir un provider…</option>';
+      list.forEach(provider => {
+        const option = document.createElement('option');
+        option.value = provider.id;
+        option.textContent = provider.name;
+        providerSelect.appendChild(option);
+      });
+    }
+
+    function renderCertifications(list) {
+      certSelect.innerHTML = '<option value="">Choisir une certification…</option>';
+      list.forEach(cert => {
+        const option = document.createElement('option');
+        option.value = cert.id;
+        option.textContent = cert.name;
+        certSelect.appendChild(option);
+      });
+    }
+
+    providerSearch.addEventListener('input', () => {
+      const query = providerSearch.value.toLowerCase();
+      const filtered = providers.filter(provider => provider.name.toLowerCase().includes(query));
+      renderProviders(filtered);
+    });
+
+    providerSelect.addEventListener('change', async () => {
+      const providerId = providerSelect.value;
+      certSearch.value = '';
+      certifications = [];
+      certSelect.disabled = !providerId;
+      certSearch.disabled = !providerId;
+      renderCertifications([]);
+      if (!providerId) {
+        return;
+      }
+      try {
+        setStatus('Chargement des certifications…');
+        const response = await fetch(`/quest/api/certifications/${providerId}`);
+        if (!response.ok) throw new Error('Erreur lors de la récupération des certifications');
+        certifications = await response.json();
+        renderCertifications(certifications);
+        setStatus('');
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
+    certSearch.addEventListener('input', () => {
+      const query = certSearch.value.toLowerCase();
+      const filtered = certifications.filter(cert => cert.name.toLowerCase().includes(query));
+      renderCertifications(filtered);
+    });
+
+    generateBtn.addEventListener('click', async () => {
+      const providerId = providerSelect.value;
+      const certificationId = certSelect.value;
+      const examUrl = examUrlInput.value.trim();
+
+      if (!providerId || !certificationId || !examUrl) {
+        setStatus('Veuillez sélectionner un provider, une certification et saisir le lien du test.', true);
+        return;
+      }
+
+      try {
+        toggleLoading(true);
+        setStatus('Génération de l\'article en cours…');
+        const response = await fetch('/articles/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider_id: providerId, certification_id: certificationId, exam_url: examUrl })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur inconnue lors de la génération');
+        }
+        articleOutput.textContent = payload.article || 'Aucun contenu généré.';
+        setStatus('Article généré avec succès.');
+        runPlaybookBtn.disabled = false;
+        lastSelection = { providerId, certificationId, examUrl };
+      } catch (error) {
+        setStatus(error.message, true);
+        articleOutput.textContent = 'L\'article n\'a pas pu être généré.';
+        runPlaybookBtn.disabled = true;
+        lastSelection = null;
+      } finally {
+        toggleLoading(false);
+      }
+    });
+
+    runPlaybookBtn.addEventListener('click', async () => {
+      if (!lastSelection) {
+        setStatus('Veuillez d\'abord générer un article.', true);
+        return;
+      }
+      try {
+        toggleLoading(true);
+        setStatus('Création et publication du tweet…');
+        const response = await fetch('/articles/run-playbook', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(lastSelection)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur inconnue lors de la publication');
+        }
+        setStatus('Tweet publié avec succès !');
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        toggleLoading(false);
+      }
+    });
+
+    function toggleLoading(isLoading) {
+      generateBtn.disabled = isLoading;
+      runPlaybookBtn.disabled = isLoading || !lastSelection;
+    }
+
+    function setStatus(message, isError = false) {
+      statusArea.textContent = message;
+      statusArea.style.color = isError ? '#f87171' : 'var(--text-muted)';
+    }
+
+    fetchProviders();
+  </script>
+</body>
+</html>
