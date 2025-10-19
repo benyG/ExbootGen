@@ -21,7 +21,7 @@ set "API_REQUEST_DELAY=1"
 
 REM === Paramètres X (Twitter) ===
 set "X_API_BEARER_TOKEN=ajoutez-votre-bearer-token"
-set "X_API_TWEET_URL=https://api.twitter.com/2/tweets"
+set "X_API_TWEET_URL=https://api.x.com/2/tweets"
 
 REM === Paramètres Redis / Celery ===
 set "REDIS_HOST=redis-25453.crce197.us-east-2-1.ec2.redns.redis-cloud.com:15453"

@@ -41,7 +41,7 @@ API_REQUEST_DELAY = float(os.environ.get("API_REQUEST_DELAY", "1"))
 # X (Twitter) integration
 # ---------------------------------------------------------------------------
 X_API_BEARER_TOKEN = os.environ.get("X_API_BEARER_TOKEN", "")
-X_API_TWEET_URL = os.environ.get("X_API_TWEET_URL", "https://api.twitter.com/2/tweets")
+X_API_TWEET_URL = os.environ.get("X_API_TWEET_URL", "https://api.x.com/2/tweets")
 
 # ---------------------------------------------------------------------------
 # GUI authentication
