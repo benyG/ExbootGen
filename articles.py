@@ -55,7 +55,7 @@ def _publish_tweet(text: str) -> dict:
     if not X_API_BEARER_TOKEN:
         raise RuntimeError("X_API_BEARER_TOKEN n'est pas configuré.")
 
-    tweet_url = X_API_TWEET_URL or "https://api.twitter.com/2/tweets"
+    tweet_url = X_API_TWEET_URL or "https://api.x.com/2/tweets"
     headers = {
         "Authorization": f"Bearer {X_API_BEARER_TOKEN}",
         "Content-Type": "application/json",
