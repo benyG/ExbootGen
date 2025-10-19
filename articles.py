@@ -51,6 +51,19 @@ class Selection:
     certification_name: str
 
 
+class SocialPublishError(RuntimeError):
+    """Exception raised when a social network publication fails.
+
+    It carries the HTTP status returned by the upstream API so the route can
+    propagate a meaningful status code back to the front-end instead of a
+    generic 500 error.
+    """
+
+    def __init__(self, message: str, status_code: int = 500) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
 def _fetch_selection(provider_id: int, certification_id: int) -> Selection:
     """Return the provider and certification names for the given identifiers."""
 
@@ -190,8 +203,9 @@ def _publish_tweet(text: str) -> dict:
                 "X_API_ACCESS_TOKEN, X_API_ACCESS_TOKEN_SECRET ou fournissez "
                 "X_API_CLIENT_ID, X_API_CLIENT_SECRET et X_API_REFRESH_TOKEN."
             )
-        raise RuntimeError(
-            f"Erreur lors de la publication du tweet ({response.status_code}): {error_message}"
+        raise SocialPublishError(
+            f"Erreur lors de la publication du tweet ({response.status_code}): {error_message}",
+            status_code=response.status_code,
         )
 
     return response.json()
@@ -347,8 +361,9 @@ def _publish_linkedin_post(text: str) -> dict:
         response = _send(token)
 
     if response.status_code >= 400:
-        raise RuntimeError(
-            f"Erreur lors de la publication LinkedIn ({response.status_code}): {response.text}"
+        raise SocialPublishError(
+            f"Erreur lors de la publication LinkedIn ({response.status_code}): {response.text}",
+            status_code=response.status_code,
         )
 
     return response.json()
@@ -515,6 +530,8 @@ def publish_tweet():
     try:
         selection = _fetch_selection(provider_id, certification_id)
         tweet_text, tweet_response = _run_tweet_workflow(selection, exam_url)
+    except SocialPublishError as exc:  # pragma: no cover - return upstream status
+        return jsonify({"error": str(exc)}), exc.status_code
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
@@ -535,6 +552,8 @@ def publish_linkedin():
     try:
         selection = _fetch_selection(provider_id, certification_id)
         linkedin_post, linkedin_response = _run_linkedin_workflow(selection, exam_url)
+    except SocialPublishError as exc:  # pragma: no cover - return upstream status
+        return jsonify({"error": str(exc)}), exc.status_code
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
