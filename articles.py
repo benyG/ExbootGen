@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import secrets
+import time
 from dataclasses import dataclass
 from typing import Optional, Tuple
+from urllib.parse import parse_qsl, quote, urlparse
 
 import mysql.connector
 import requests
@@ -18,7 +24,14 @@ from config import (
     LINKEDIN_ORGANIZATION_URN,
     LINKEDIN_POST_URL,
     LINKEDIN_REFRESH_TOKEN,
-    X_API_BEARER_TOKEN,
+    X_API_ACCESS_TOKEN,
+    X_API_ACCESS_TOKEN_SECRET,
+    X_API_CLIENT_ID,
+    X_API_CLIENT_SECRET,
+    X_API_REFRESH_TOKEN,
+    X_API_TOKEN_URL,
+    X_API_CONSUMER_KEY,
+    X_API_CONSUMER_SECRET,
     X_API_TWEET_URL,
 )
 from openai_api import (
@@ -65,23 +78,174 @@ def _fetch_selection(provider_id: int, certification_id: int) -> Selection:
     )
 
 
+def _percent_encode(value: str) -> str:
+    """Return a string percent-encoded according to RFC 3986."""
+
+    return quote(str(value), safe="~-._")
+
+
+def _build_oauth1_header(method: str, url: str) -> str:
+    """Return the OAuth 1.0 Authorization header for the given request."""
+
+    nonce = secrets.token_hex(16)
+    timestamp = str(int(time.time()))
+
+    oauth_params = {
+        "oauth_consumer_key": X_API_CONSUMER_KEY,
+        "oauth_nonce": nonce,
+        "oauth_signature_method": "HMAC-SHA1",
+        "oauth_timestamp": timestamp,
+        "oauth_token": X_API_ACCESS_TOKEN,
+        "oauth_version": "1.0",
+    }
+
+    url_parts = urlparse(url)
+    query_params = parse_qsl(url_parts.query, keep_blank_values=True)
+
+    signature_pairs = [
+        (_percent_encode(key), _percent_encode(value))
+        for key, value in list(query_params) + list(oauth_params.items())
+    ]
+    signature_pairs.sort(key=lambda item: (item[0], item[1]))
+    parameter_string = "&".join(f"{key}={value}" for key, value in signature_pairs)
+
+    base_url = f"{url_parts.scheme}://{url_parts.netloc}{url_parts.path}"
+    base_string = "&".join(
+        _percent_encode(part)
+        for part in (method.upper(), base_url, parameter_string)
+    )
+
+    signing_key = "&".join(
+        (_percent_encode(X_API_CONSUMER_SECRET), _percent_encode(X_API_ACCESS_TOKEN_SECRET))
+    )
+    signature = hmac.new(
+        signing_key.encode("utf-8"),
+        base_string.encode("utf-8"),
+        hashlib.sha1,
+    ).digest()
+    oauth_params["oauth_signature"] = base64.b64encode(signature).decode("utf-8")
+
+    header_params = ", ".join(
+        f'{_percent_encode(key)}="{_percent_encode(value)}"'
+        for key, value in sorted(oauth_params.items())
+    )
+    return f"OAuth {header_params}"
+
+
 def _publish_tweet(text: str) -> dict:
     """Publish a tweet using the X (Twitter) v2 API."""
 
-    if not X_API_BEARER_TOKEN:
-        raise RuntimeError("X_API_BEARER_TOKEN n'est pas configuré.")
+    if not text.strip():
+        raise ValueError("Le contenu du tweet est vide.")
 
-    tweet_url = X_API_TWEET_URL or "https://api.x.com/2/tweets"
+    oauth1_credentials = all(
+        (
+            X_API_CONSUMER_KEY,
+            X_API_CONSUMER_SECRET,
+            X_API_ACCESS_TOKEN,
+            X_API_ACCESS_TOKEN_SECRET,
+        )
+    )
+
+    if oauth1_credentials:
+        headers = {
+            "Authorization": _build_oauth1_header("POST", X_API_TWEET_URL),
+            "Content-Type": "application/json",
+        }
+    else:
+        oauth2_credentials = all((X_API_CLIENT_ID, X_API_CLIENT_SECRET, X_API_REFRESH_TOKEN))
+
+        if oauth2_credentials:
+            access_token = _get_x_oauth2_access_token()
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            }
+        else:
+            raise RuntimeError(
+                "Les identifiants X (Twitter) sont incomplets. Fournissez les clés OAuth 1.0a "
+                "(X_API_CONSUMER_KEY, X_API_CONSUMER_SECRET, X_API_ACCESS_TOKEN, "
+                "X_API_ACCESS_TOKEN_SECRET) ou un trio OAuth 2.0 (X_API_CLIENT_ID, "
+                "X_API_CLIENT_SECRET, X_API_REFRESH_TOKEN)."
+            )
+
+    response = requests.post(
+        X_API_TWEET_URL,
+        headers=headers,
+        json={"text": text},
+        timeout=30,
+    )
+
+    if response.status_code >= 400:
+        error_message = response.text
+        if response.status_code == 403 and "Unsupported Authentication" in error_message:
+            error_message = (
+                "L'API X a rejeté l'authentification utilisée. L'envoi de tweets "
+                "nécessite désormais des identifiants OAuth 1.0a (user context) ou "
+                "un trio OAuth 2.0 user context. Vérifiez la configuration des "
+                "variables X_API_CONSUMER_KEY, X_API_CONSUMER_SECRET, "
+                "X_API_ACCESS_TOKEN, X_API_ACCESS_TOKEN_SECRET ou fournissez "
+                "X_API_CLIENT_ID, X_API_CLIENT_SECRET et X_API_REFRESH_TOKEN."
+            )
+        raise RuntimeError(
+            f"Erreur lors de la publication du tweet ({response.status_code}): {error_message}"
+        )
+
+    return response.json()
+
+
+_X_OAUTH2_TOKEN_CACHE: Optional[Tuple[str, float]] = None
+
+
+def _get_x_oauth2_access_token(force_refresh: bool = False) -> str:
+    """Return a user-context OAuth 2.0 access token for the X API."""
+
+    global _X_OAUTH2_TOKEN_CACHE
+
+    if not force_refresh and _X_OAUTH2_TOKEN_CACHE:
+        token, expires_at = _X_OAUTH2_TOKEN_CACHE
+        if expires_at > time.time():
+            return token
+
+    if not all((X_API_CLIENT_ID, X_API_CLIENT_SECRET, X_API_REFRESH_TOKEN)):
+        raise RuntimeError(
+            "Impossible de rafraîchir le token OAuth 2.0 : configurez X_API_CLIENT_ID, "
+            "X_API_CLIENT_SECRET et X_API_REFRESH_TOKEN."
+        )
+
+    basic_credentials = base64.b64encode(
+        f"{X_API_CLIENT_ID}:{X_API_CLIENT_SECRET}".encode("utf-8")
+    ).decode("utf-8")
     headers = {
-        "Authorization": f"Bearer {X_API_BEARER_TOKEN}",
-        "Content-Type": "application/json",
+        "Authorization": f"Basic {basic_credentials}",
+        "Content-Type": "application/x-www-form-urlencoded",
     }
-    response = requests.post(tweet_url, headers=headers, json={"text": text}, timeout=30)
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": X_API_REFRESH_TOKEN,
+    }
+
+    response = requests.post(X_API_TOKEN_URL, headers=headers, data=data, timeout=30)
     if response.status_code >= 400:
         raise RuntimeError(
-            f"Erreur lors de la publication du tweet ({response.status_code}): {response.text}"
+            "Impossible d'obtenir un token OAuth 2.0 pour X : "
+            f"{response.status_code} {response.text}"
         )
-    return response.json()
+
+    payload = response.json()
+    access_token = payload.get("access_token")
+    expires_in = payload.get("expires_in", 0)
+
+    if not access_token:
+        raise RuntimeError(
+            "La réponse du serveur X ne contient pas de champ access_token : "
+            f"{payload}"
+        )
+
+    expires_at = time.time() + max(int(expires_in), 0) - 30
+    _X_OAUTH2_TOKEN_CACHE = (access_token, expires_at)
+
+    return access_token
 
 
 _LINKEDIN_ACCESS_TOKEN_CACHE: Optional[str] = None
