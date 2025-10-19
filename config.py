@@ -40,8 +40,18 @@ API_REQUEST_DELAY = float(os.environ.get("API_REQUEST_DELAY", "1"))
 # ---------------------------------------------------------------------------
 # X (Twitter) integration
 # ---------------------------------------------------------------------------
+# ``X_API_BEARER_TOKEN`` is kept for backwards compatibility with legacy
+# application-only authentication tokens.  The X API now requires user-context
+# credentials to publish tweets, so the preferred configuration is to provide
+# OAuth 1.0a keys and secrets.  When these are available they will be used in
+# priority, otherwise the code falls back to ``X_API_BEARER_TOKEN`` (which must
+# then reference a user-context OAuth 2.0 token).
 X_API_BEARER_TOKEN = os.environ.get("X_API_BEARER_TOKEN", "")
 X_API_TWEET_URL = os.environ.get("X_API_TWEET_URL", "https://api.x.com/2/tweets")
+X_API_CONSUMER_KEY = os.environ.get("X_API_CONSUMER_KEY", "")
+X_API_CONSUMER_SECRET = os.environ.get("X_API_CONSUMER_SECRET", "")
+X_API_ACCESS_TOKEN = os.environ.get("X_API_ACCESS_TOKEN", "")
+X_API_ACCESS_TOKEN_SECRET = os.environ.get("X_API_ACCESS_TOKEN_SECRET", "")
 
 # ---------------------------------------------------------------------------
 # LinkedIn integration

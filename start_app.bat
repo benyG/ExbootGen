@@ -20,6 +20,13 @@ set "OPENAI_MAX_RETRIES=5"
 set "API_REQUEST_DELAY=1"
 
 REM === Paramètres X (Twitter) ===
+REM  Pour publier un tweet, fournissez de preference les identifiants OAuth 1.0a
+REM  suivants (user context). Conservez X_API_BEARER_TOKEN uniquement si vous
+REM  disposez d'un token OAuth 2.0 user context.
+set "X_API_CONSUMER_KEY=votre-consumer-key"
+set "X_API_CONSUMER_SECRET=votre-consumer-secret"
+set "X_API_ACCESS_TOKEN=votre-access-token"
+set "X_API_ACCESS_TOKEN_SECRET=votre-access-token-secret"
 set "X_API_BEARER_TOKEN=ajoutez-votre-bearer-token"
 set "X_API_TWEET_URL=https://api.x.com/2/tweets"
 
