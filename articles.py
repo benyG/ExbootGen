@@ -28,7 +28,6 @@ from config import (
     X_API_ACCESS_TOKEN_SECRET,
     X_API_CLIENT_ID,
     X_API_CLIENT_SECRET,
-    X_API_BEARER_TOKEN,
     X_API_REFRESH_TOKEN,
     X_API_TOKEN_URL,
     X_API_CONSUMER_KEY,
@@ -139,8 +138,6 @@ def _publish_tweet(text: str) -> dict:
     if not text.strip():
         raise ValueError("Le contenu du tweet est vide.")
 
-    tweet_url = X_API_TWEET_URL or "https://api.x.com/2/tweets"
-
     oauth1_credentials = all(
         (
             X_API_CONSUMER_KEY,
@@ -152,7 +149,7 @@ def _publish_tweet(text: str) -> dict:
 
     if oauth1_credentials:
         headers = {
-            "Authorization": _build_oauth1_header("POST", tweet_url),
+            "Authorization": _build_oauth1_header("POST", X_API_TWEET_URL),
             "Content-Type": "application/json",
         }
     else:
@@ -165,22 +162,15 @@ def _publish_tweet(text: str) -> dict:
                 "Content-Type": "application/json",
             }
         else:
-            if not X_API_BEARER_TOKEN:
-                raise RuntimeError(
-                    "Les identifiants X (Twitter) sont incomplets. Fournissez les clés OAuth 1.0a "
-                    "(X_API_CONSUMER_KEY, X_API_CONSUMER_SECRET, X_API_ACCESS_TOKEN, "
-                    "X_API_ACCESS_TOKEN_SECRET), un trio OAuth 2.0 (X_API_CLIENT_ID, "
-                    "X_API_CLIENT_SECRET, X_API_REFRESH_TOKEN) ou un token utilisateur OAuth 2.0 "
-                    "dans X_API_BEARER_TOKEN."
-                )
-
-            headers = {
-                "Authorization": f"Bearer {X_API_BEARER_TOKEN}",
-                "Content-Type": "application/json",
-            }
+            raise RuntimeError(
+                "Les identifiants X (Twitter) sont incomplets. Fournissez les clés OAuth 1.0a "
+                "(X_API_CONSUMER_KEY, X_API_CONSUMER_SECRET, X_API_ACCESS_TOKEN, "
+                "X_API_ACCESS_TOKEN_SECRET) ou un trio OAuth 2.0 (X_API_CLIENT_ID, "
+                "X_API_CLIENT_SECRET, X_API_REFRESH_TOKEN)."
+            )
 
     response = requests.post(
-        tweet_url,
+        X_API_TWEET_URL,
         headers=headers,
         json={"text": text},
         timeout=30,
@@ -192,11 +182,10 @@ def _publish_tweet(text: str) -> dict:
             error_message = (
                 "L'API X a rejeté l'authentification utilisée. L'envoi de tweets "
                 "nécessite désormais des identifiants OAuth 1.0a (user context) ou "
-                "un token OAuth 2.0 user context. Vérifiez la configuration des "
+                "un trio OAuth 2.0 user context. Vérifiez la configuration des "
                 "variables X_API_CONSUMER_KEY, X_API_CONSUMER_SECRET, "
                 "X_API_ACCESS_TOKEN, X_API_ACCESS_TOKEN_SECRET ou fournissez "
-                "X_API_CLIENT_ID, X_API_CLIENT_SECRET et X_API_REFRESH_TOKEN. À défaut, "
-                "remplacez X_API_BEARER_TOKEN par un token user context valide."
+                "X_API_CLIENT_ID, X_API_CLIENT_SECRET et X_API_REFRESH_TOKEN."
             )
         raise RuntimeError(
             f"Erreur lors de la publication du tweet ({response.status_code}): {error_message}"
