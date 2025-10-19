@@ -96,6 +96,19 @@
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     }
 
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .field-group .sub-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+
     label {
       display: block;
       font-weight: 500;
@@ -137,6 +150,13 @@
       flex-wrap: wrap;
       gap: 0.8rem;
       margin-top: 1.4rem;
+      align-items: center;
+    }
+
+    .secondary-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.8rem;
     }
 
     button {
@@ -189,6 +209,29 @@
       overflow-y: auto;
     }
 
+    .social-output {
+      display: grid;
+      gap: 1.3rem;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+
+    .social-output h3 {
+      margin: 0 0 0.6rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--accent-strong);
+    }
+
+    .social-block {
+      background: rgba(12, 17, 31, 0.86);
+      border: 1px solid rgba(124, 247, 255, 0.18);
+      border-radius: var(--radius-md);
+      padding: 1.1rem 1.2rem;
+      min-height: 160px;
+      white-space: pre-wrap;
+      line-height: 1.55;
+    }
+
     .article-output h2,
     .article-output h3 {
       color: var(--accent-strong);
@@ -224,34 +267,34 @@
     <section>
       <h2 style="margin-top:0;margin-bottom:1.5rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">1. Sélectionnez la certification</h2>
       <div class="grid-two">
-        <div>
-          <label for="providerSearch">Recherche provider</label>
-          <input type="search" id="providerSearch" placeholder="Rechercher un provider" autocomplete="off">
-        </div>
-        <div>
+        <div class="field-group">
           <label for="providerSelect">Providers disponibles</label>
+          <label class="sub-label" for="providerSearch">Recherche provider</label>
+          <input type="search" id="providerSearch" placeholder="Rechercher un provider" autocomplete="off">
           <select id="providerSelect">
             <option value="">Choisir un provider…</option>
           </select>
         </div>
-        <div>
-          <label for="certSearch">Recherche certification</label>
-          <input type="search" id="certSearch" placeholder="Rechercher une certification" autocomplete="off" disabled>
-        </div>
-        <div>
+        <div class="field-group">
           <label for="certSelect">Certifications shortlistées</label>
+          <label class="sub-label" for="certSearch">Recherche certification</label>
+          <input type="search" id="certSearch" placeholder="Rechercher une certification" autocomplete="off" disabled>
           <select id="certSelect" disabled>
             <option value="">Choisir une certification…</option>
           </select>
         </div>
-        <div>
+        <div class="field-group">
           <label for="examUrl">Lien du test partagé Examboot</label>
           <input type="url" id="examUrl" placeholder="https://" autocomplete="off">
         </div>
       </div>
       <div class="actions">
         <button class="primary" id="generateBtn">Générer l'article</button>
-        <button class="secondary" id="runPlaybookBtn" disabled>Run playbook</button>
+        <div class="secondary-actions">
+          <button class="secondary" id="publishTweetBtn" disabled>Publier le tweet</button>
+          <button class="secondary" id="publishLinkedinBtn" disabled>Publier le post LinkedIn</button>
+          <button class="secondary" id="runPlaybookBtn" disabled>Run playbook</button>
+        </div>
       </div>
       <div class="status" id="statusArea"></div>
     </section>
@@ -259,6 +302,20 @@
     <section>
       <h2 style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">2. Article généré</h2>
       <div class="article-output" id="articleOutput">L'article généré apparaîtra ici après soumission du formulaire.</div>
+    </section>
+
+    <section>
+      <h2 style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">3. Annonces sociales</h2>
+      <div class="social-output">
+        <div>
+          <h3>Tweet</h3>
+          <div class="social-block" id="tweetOutput">Le tweet généré apparaîtra ici après l'action correspondante.</div>
+        </div>
+        <div>
+          <h3>Post LinkedIn</h3>
+          <div class="social-block" id="linkedinOutput">Le post LinkedIn généré apparaîtra ici après l'action correspondante.</div>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -271,11 +328,41 @@
     const statusArea = document.getElementById('statusArea');
     const generateBtn = document.getElementById('generateBtn');
     const runPlaybookBtn = document.getElementById('runPlaybookBtn');
+    const publishTweetBtn = document.getElementById('publishTweetBtn');
+    const publishLinkedinBtn = document.getElementById('publishLinkedinBtn');
     const articleOutput = document.getElementById('articleOutput');
+    const tweetOutput = document.getElementById('tweetOutput');
+    const linkedinOutput = document.getElementById('linkedinOutput');
 
     let providers = [];
     let certifications = [];
-    let lastSelection = null;
+    let isLoading = false;
+
+    function getSelectionPayload() {
+      const providerId = providerSelect.value;
+      const certificationId = certSelect.value;
+      const examUrl = examUrlInput.value.trim();
+
+      if (!providerId || !certificationId || !examUrl) {
+        return null;
+      }
+
+      return {
+        provider_id: providerId,
+        certification_id: certificationId,
+        exam_url: examUrl
+      };
+    }
+
+    function updateActionAvailability() {
+      if (isLoading) {
+        return;
+      }
+      const hasSelection = Boolean(getSelectionPayload());
+      runPlaybookBtn.disabled = !hasSelection;
+      publishTweetBtn.disabled = !hasSelection;
+      publishLinkedinBtn.disabled = !hasSelection;
+    }
 
     async function fetchProviders() {
       try {
@@ -296,6 +383,7 @@
         option.textContent = provider.name;
         providerSelect.appendChild(option);
       });
+      updateActionAvailability();
     }
 
     function renderCertifications(list) {
@@ -306,6 +394,7 @@
         option.textContent = cert.name;
         certSelect.appendChild(option);
       });
+      updateActionAvailability();
     }
 
     providerSearch.addEventListener('input', () => {
@@ -321,6 +410,7 @@
       certSelect.disabled = !providerId;
       certSearch.disabled = !providerId;
       renderCertifications([]);
+      updateActionAvailability();
       if (!providerId) {
         return;
       }
@@ -334,6 +424,7 @@
       } catch (error) {
         setStatus(error.message, true);
       }
+      updateActionAvailability();
     });
 
     certSearch.addEventListener('input', () => {
@@ -342,12 +433,13 @@
       renderCertifications(filtered);
     });
 
-    generateBtn.addEventListener('click', async () => {
-      const providerId = providerSelect.value;
-      const certificationId = certSelect.value;
-      const examUrl = examUrlInput.value.trim();
+    certSelect.addEventListener('change', updateActionAvailability);
+    examUrlInput.addEventListener('input', updateActionAvailability);
 
-      if (!providerId || !certificationId || !examUrl) {
+    generateBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+
+      if (!selection) {
         setStatus('Veuillez sélectionner un provider, une certification et saisir le lien du test.', true);
         return;
       }
@@ -358,7 +450,7 @@
         const response = await fetch('/articles/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider_id: providerId, certification_id: certificationId, exam_url: examUrl })
+          body: JSON.stringify(selection)
         });
         const payload = await response.json();
         if (!response.ok) {
@@ -366,41 +458,36 @@
         }
         articleOutput.textContent = payload.article || 'Aucun contenu généré.';
         setStatus('Article généré avec succès.');
-        runPlaybookBtn.disabled = false;
-        lastSelection = {
-          provider_id: providerId,
-          certification_id: certificationId,
-          exam_url: examUrl
-        };
 
       } catch (error) {
         setStatus(error.message, true);
         articleOutput.textContent = 'L\'article n\'a pas pu être généré.';
-        runPlaybookBtn.disabled = true;
-        lastSelection = null;
       } finally {
         toggleLoading(false);
       }
     });
 
     runPlaybookBtn.addEventListener('click', async () => {
-      if (!lastSelection) {
-        setStatus('Veuillez d\'abord générer un article.', true);
+      const selection = getSelectionPayload();
+      if (!selection) {
+        setStatus('Veuillez sélectionner un provider, une certification et saisir le lien du test.', true);
         return;
       }
       try {
         toggleLoading(true);
-        setStatus('Création et publication du tweet…');
+        setStatus('Exécution du playbook : génération et publication en cours…');
         const response = await fetch('/articles/run-playbook', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(lastSelection)
+          body: JSON.stringify(selection)
         });
         const payload = await response.json();
         if (!response.ok) {
           throw new Error(payload.error || 'Erreur inconnue lors de la publication');
         }
-        setStatus('Tweet publié avec succès !');
+        tweetOutput.textContent = payload.tweet || 'Aucun tweet généré.';
+        linkedinOutput.textContent = payload.linkedin_post || 'Aucun post LinkedIn généré.';
+        setStatus('Playbook exécuté : tweet et post LinkedIn publiés.');
       } catch (error) {
         setStatus(error.message, true);
       } finally {
@@ -408,9 +495,71 @@
       }
     });
 
-    function toggleLoading(isLoading) {
-      generateBtn.disabled = isLoading;
-      runPlaybookBtn.disabled = isLoading || !lastSelection;
+    publishTweetBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+      if (!selection) {
+        setStatus('Veuillez sélectionner un provider, une certification et saisir le lien du test.', true);
+        return;
+      }
+      try {
+        toggleLoading(true);
+        setStatus('Publication du tweet en cours…');
+        const response = await fetch('/articles/publish-tweet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selection)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la publication du tweet');
+        }
+        tweetOutput.textContent = payload.tweet || 'Aucun tweet généré.';
+        setStatus('Tweet publié avec succès.');
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        toggleLoading(false);
+      }
+    });
+
+    publishLinkedinBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+      if (!selection) {
+        setStatus('Veuillez sélectionner un provider, une certification et saisir le lien du test.', true);
+        return;
+      }
+      try {
+        toggleLoading(true);
+        setStatus('Publication du post LinkedIn en cours…');
+        const response = await fetch('/articles/publish-linkedin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selection)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la publication du post LinkedIn');
+        }
+        linkedinOutput.textContent = payload.linkedin_post || 'Aucun post LinkedIn généré.';
+        setStatus('Post LinkedIn publié avec succès.');
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        toggleLoading(false);
+      }
+    });
+
+    function toggleLoading(state) {
+      isLoading = Boolean(state);
+      if (isLoading) {
+        generateBtn.disabled = true;
+        runPlaybookBtn.disabled = true;
+        publishTweetBtn.disabled = true;
+        publishLinkedinBtn.disabled = true;
+      } else {
+        generateBtn.disabled = false;
+        updateActionAvailability();
+      }
     }
 
     function setStatus(message, isError = false) {
@@ -419,6 +568,7 @@
     }
 
     fetchProviders();
+    updateActionAvailability();
   </script>
 </body>
 </html>

@@ -44,6 +44,21 @@ X_API_BEARER_TOKEN = os.environ.get("X_API_BEARER_TOKEN", "")
 X_API_TWEET_URL = os.environ.get("X_API_TWEET_URL", "https://api.x.com/2/tweets")
 
 # ---------------------------------------------------------------------------
+# LinkedIn integration
+# ---------------------------------------------------------------------------
+LINKEDIN_CLIENT_ID = os.environ.get("LINKEDIN_CLIENT_ID", "")
+LINKEDIN_CLIENT_SECRET = os.environ.get("LINKEDIN_CLIENT_SECRET", "")
+LINKEDIN_ACCESS_TOKEN = os.environ.get("LINKEDIN_ACCESS_TOKEN", "")
+LINKEDIN_REFRESH_TOKEN = os.environ.get("LINKEDIN_REFRESH_TOKEN", "")
+LINKEDIN_ORGANIZATION_URN = os.environ.get("LINKEDIN_ORGANIZATION_URN", "")
+LINKEDIN_POST_URL = os.environ.get(
+    "LINKEDIN_POST_URL", "https://api.linkedin.com/v2/ugcPosts"
+)
+LINKEDIN_ACCESS_TOKEN_URL = os.environ.get(
+    "LINKEDIN_ACCESS_TOKEN_URL", "https://www.linkedin.com/oauth/v2/accessToken"
+)
+
+# ---------------------------------------------------------------------------
 # GUI authentication
 # ---------------------------------------------------------------------------
 # Password required by the local GUI before the web service can be started.
