@@ -102,12 +102,12 @@ def _build_oauth1_header(method: str, url: str) -> str:
     url_parts = urlparse(url)
     query_params = parse_qsl(url_parts.query, keep_blank_values=True)
 
-    signature_pairs = list(query_params) + list(oauth_params.items())
+    signature_pairs = [
+        (_percent_encode(key), _percent_encode(value))
+        for key, value in list(query_params) + list(oauth_params.items())
+    ]
     signature_pairs.sort(key=lambda item: (item[0], item[1]))
-    parameter_string = "&".join(
-        f"{_percent_encode(key)}={_percent_encode(value)}"
-        for key, value in signature_pairs
-    )
+    parameter_string = "&".join(f"{key}={value}" for key, value in signature_pairs)
 
     base_url = f"{url_parts.scheme}://{url_parts.netloc}{url_parts.path}"
     base_string = "&".join(
