@@ -62,6 +62,18 @@ Requirements:
 - Return only the tweet text without additional commentary or quotation marks.
 """
 
+LINKEDIN_POST_PROMPT_TEMPLATE = """
+You are the social media manager for Examboot.
+Write a playful yet professional LinkedIn post in English announcing that the {certification} certification from {vendor} is now available on Examboot.
+Requirements:
+- Highlight why this certification matters for professionals and how it helps them grow.
+- Mention that learners can take the practice test on Examboot and encourage them to try it.
+- Explicitly include the link to the test: {exam_url}
+- Use short paragraphs or bullet points suitable for LinkedIn readability.
+- Close with 2 to 3 relevant hashtags.
+- Return only the body of the LinkedIn post without any additional commentary or markup.
+"""
+
 def clean_and_decode_json(content: str) -> dict:
     """
     Nettoie le contenu (retire les balises ```json) et décode le JSON.
@@ -149,6 +161,24 @@ def generate_certification_tweet(certification: str, vendor: str, exam_url: str)
         )
 
     prompt = TWEET_PROMPT_TEMPLATE.format(
+        certification=certification,
+        vendor=vendor,
+        exam_url=exam_url,
+    )
+    return _run_completion(prompt)
+
+
+def generate_certification_linkedin_post(
+    certification: str, vendor: str, exam_url: str
+) -> str:
+    """Generate the LinkedIn announcement post for the certification launch."""
+
+    if not OPENAI_API_KEY:
+        raise Exception(
+            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un post LinkedIn."
+        )
+
+    prompt = LINKEDIN_POST_PROMPT_TEMPLATE.format(
         certification=certification,
         vendor=vendor,
         exam_url=exam_url,
