@@ -28,12 +28,12 @@ DOMAIN_PROMPT_TEMPLATE = (
     "]"
 )
 
-ARTICLE_PROMPT_TEMPLATE = """
+ARTICLE_PROMPT_TEMPLATES = {
+    "certification_presentation": """
 Retrieve official information about exam certification: {certification} from vendor {vendor}.
-Your mission is to write a clear, actionable and up-to-date article, which presents the certification to the reader.
+Your mission is to write a SEO optimized, clear, actionable and up-to-date article, which presents the certification to the reader.
 Reference Sources: only from official website of the specified certification vendor.
 If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate informations.
-
 RULES:
 - Titles should be short.
 - respect scrupulously the given Article structure only
@@ -41,38 +41,107 @@ RULES:
 - Target length: 1,500–2,200 words.
 - Tone: motivating, factual, without unexplained jargon.
 - Zero fluff: each section must deliver useful and actionable information.
-
-Article structure:
+STRUCTURE:
 - certification objectives
 - targeted professions.
 - targeted audience
 - Official prerequisites.
 - Exam plan: Precise format (duration, number of questions, types), language, passing score, retake policy, validity/recertification.
-- Call to action +  {exam_url}
-"""
+- How ExamBoot.net helps candidates prepare
+- A call to action with a link to to start a free test: {exam_url}.
+""",
+    "preparation_methodology": """
+Write a step-by-step guide on how to Prepare for the certification exam: {certification} from {vendor}.
+Include study duration, key topics, common mistakes, and preparation resources.
+Integrate how ExamBoot.net’s AI coach, performances analysis and realistic simulations accelerate learning.
+Format with headings, bullet points, and a motivational tone.
+Explicitly include the link to start a free ExamBoot test: {exam_url}.
+""",
+    "experience_testimony": """
+Write a first-person or storytelling-style blog post on how to pass the certification exam: {certification} from {vendor}.
+Structure: motivation, challenges, strategy, results.
+Include realistic study milestones, use of ExamBoot.net, and takeaways for other candidates.
+End with a call to action containing the link to start a free test: {exam_url}.
+""",
+    "career_impact": """
+Write a data-driven blog post on how the certification exam: {certification} from {vendor} can Boost Your career Opportunities.
+Include statistics (average salaries, job titles, demand trends), examples of companies hiring certified professionals, and how ExamBoot.net helps candidates stand out.
+Conclude with a call to action featuring the link to start a free ExamBoot test: {exam_url}.
+""",
+    "engagement_community": """
+Write an interactive blog post titled “Can You Pass This Mini {certification} from {vendor} Quiz?”
+Include 5–10 sample questions with answers and explanations.
+Add a section inviting readers to try the full simulation on ExamBoot.net and share their scores online.
+Insert a call to action with the link to start a free ExamBoot test: {exam_url}.
+""",
+}
 
-TWEET_PROMPT_TEMPLATE = """
-You are a social media manager for Examboot.
-Write a single tweet in English announcing that the {certification} certification from {vendor} is available and invite readers to take the free practice test hosted on Examboot.
-Requirements:
-- Maximum 280 characters.
-- Use a motivating yet professional tone.
-- End the tweet with: Call to action + {exam_url}
-- Include exactly three relevant hashtags.
-- Return only the tweet text without additional commentary or quotation marks.
-"""
+TWEET_PROMPT_TEMPLATES = {
+    "certification_presentation": """
+Compose a short, punchy tweet introducing the certification: {certification} from {vendor}.
+Highlight 1 key benefit, 1 career outcome, and mention ExamBoot.net as the platform to prepare.
+Include 3 relevant hashtags and a link to the free practice test: {exam_url}.
+Return only the tweet text without additional commentary.
+""",
+    "preparation_methodology": """
+Tweet actionable exam prep tips for certification exam: {certification} from {vendor}.
+Follow with 3 quick bullet points, then “💡Train smarter with ExamBoot free test: {exam_url}”.
+Include 3 relevant hashtags and no additional commentary.
+""",
+    "experience_testimony": """
+Post a motivational short story tweet on how to pass the certification exam: {certification} from {vendor} after specified weeks of focused prep.
+Biggest lesson? Practice + AI guidance = success.
+Try ExamBoot.net for your journey with a link to start a free test: 👉{exam_url}
+Include 3 relevant hashtags.
+Return only the tweet body.
+""",
+    "career_impact": """
+Tweet key value insight from certification exam: {certification} from {vendor}.
+Include 3 relevant hashtags and a link to the free practice test: {exam_url}.
+Return only the tweet content.
+""",
+    "engagement_community": """
+“Can you pass this mini {certification} from {vendor} quiz? 🤔”
+Try the free practice test now on ExamBoot.net and share your score!
+👉 {exam_url}
+Include 3 relevant hashtags and no additional commentary.
+""",
+}
 
-LINKEDIN_POST_PROMPT_TEMPLATE = """
-You are the social media manager for Examboot.
-Write a playful yet professional LinkedIn post in English announcing that the {certification} certification from {vendor} is now available on Examboot.
-Requirements:
-- Highlight why this certification matters for professionals and how it helps them grow.
-- Mention that learners can take the practice test on Examboot and encourage them to try it.
-- Explicitly include the link to the test: {exam_url}
-- Use short paragraphs or bullet points suitable for LinkedIn readability.
-- Close with 2 to 3 relevant hashtags.
-- Return only the body of the LinkedIn post without any additional commentary or markup.
-"""
+LINKEDIN_POST_PROMPT_TEMPLATES = {
+    "certification_presentation": """
+Create an engaging LinkedIn post announcing a guide about the certification: {certification} from {vendor}.
+Explain why professionals should consider it, what career paths it opens, and how they can start preparing using ExamBoot.net.
+End with a call to action to “Start your free practice test today: {exam_url}.”
+Include 3 relevant hashtags.
+Return only the LinkedIn post body without extra commentary.
+""",
+    "preparation_methodology": """
+Write a LinkedIn post giving practical study tips for passing the certification exam: {certification} from {vendor}.
+Start with a question like “Getting ready for {certification} from @{vendor}? Here’s how to study smarter.”,
+give 3 concise preparation tips, and end with a link to try a free ExamBoot simulation: {exam_url}.
+Include 3 relevant hashtags and no additional commentary.
+""",
+    "experience_testimony": """
+Create a personal and authentic LinkedIn post narrating how someone succeeded in the certification exam: {certification} from {vendor}.
+Use a storytelling tone, mention ExamBoot.net as part of the preparation journey, and end with encouragement for others to start.
+A call to action with a link to start a free test: {exam_url}.
+Include 3 relevant hashtags and return only the post text.
+""",
+    "career_impact": """
+Draft a professional LinkedIn post highlighting the career benefits of the certification exam: {certification} from {vendor}.
+Mention salary increases, job roles, and industry demand.
+Use clear bullet points and finish with “Start your certification journey with ExamBoot.net.”
+Include 3 relevant hashtags.
+Return only the LinkedIn post body.
+""",
+    "engagement_community": """
+Create an engaging LinkedIn post inviting readers to take a quick {certification} from {vendor} quiz.
+Example intro: “Think you know [field topic]? Test yourself with our 5-question {certification} from {vendor} quiz!”
+Add a link {exam_url} to the shareable test and encourage users to share their results.
+Include 3 relevant hashtags and no additional commentary.
+""",
+}
 
 def clean_and_decode_json(content: str) -> dict:
     """
@@ -136,7 +205,22 @@ def _run_completion(prompt: str) -> str:
     return message["content"].strip()
 
 
-def generate_certification_article(certification: str, vendor: str, exam_url: str) -> str:
+def _render_prompt(template_map: dict, topic_type: str, certification: str, vendor: str, exam_url: str) -> str:
+    try:
+        template = template_map[topic_type]
+    except KeyError as exc:  # pragma: no cover - defensive programming
+        raise ValueError(f"Type de sujet inconnu: {topic_type}") from exc
+
+    return template.format(
+        certification=certification,
+        vendor=vendor,
+        exam_url=exam_url,
+    )
+
+
+def generate_certification_article(
+    certification: str, vendor: str, exam_url: str, topic_type: str
+) -> str:
     """Generate the long-form certification article following the required structure."""
 
     if not OPENAI_API_KEY:
@@ -144,15 +228,19 @@ def generate_certification_article(certification: str, vendor: str, exam_url: st
             "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un article."
         )
 
-    prompt = ARTICLE_PROMPT_TEMPLATE.format(
-        certification=certification,
-        vendor=vendor,
-        exam_url=exam_url,
+    prompt = _render_prompt(
+        ARTICLE_PROMPT_TEMPLATES,
+        topic_type,
+        certification,
+        vendor,
+        exam_url,
     )
     return _run_completion(prompt)
 
 
-def generate_certification_tweet(certification: str, vendor: str, exam_url: str) -> str:
+def generate_certification_tweet(
+    certification: str, vendor: str, exam_url: str, topic_type: str
+) -> str:
     """Generate the announcement tweet for the certification launch."""
 
     if not OPENAI_API_KEY:
@@ -160,16 +248,18 @@ def generate_certification_tweet(certification: str, vendor: str, exam_url: str)
             "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un tweet."
         )
 
-    prompt = TWEET_PROMPT_TEMPLATE.format(
-        certification=certification,
-        vendor=vendor,
-        exam_url=exam_url,
+    prompt = _render_prompt(
+        TWEET_PROMPT_TEMPLATES,
+        topic_type,
+        certification,
+        vendor,
+        exam_url,
     )
     return _run_completion(prompt)
 
 
 def generate_certification_linkedin_post(
-    certification: str, vendor: str, exam_url: str
+    certification: str, vendor: str, exam_url: str, topic_type: str
 ) -> str:
     """Generate the LinkedIn announcement post for the certification launch."""
 
@@ -178,10 +268,12 @@ def generate_certification_linkedin_post(
             "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un post LinkedIn."
         )
 
-    prompt = LINKEDIN_POST_PROMPT_TEMPLATE.format(
-        certification=certification,
-        vendor=vendor,
-        exam_url=exam_url,
+    prompt = _render_prompt(
+        LINKEDIN_POST_PROMPT_TEMPLATES,
+        topic_type,
+        certification,
+        vendor,
+        exam_url,
     )
     return _run_completion(prompt)
 
