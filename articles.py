@@ -61,7 +61,6 @@ class SocialPostResult:
     status_code: Optional[int] = None
     error: Optional[str] = None
 
-
 class SocialPublishError(RuntimeError):
     """Exception raised when a social network publication fails.
 
