@@ -26,10 +26,6 @@ from config import (
     LINKEDIN_REFRESH_TOKEN,
     X_API_ACCESS_TOKEN,
     X_API_ACCESS_TOKEN_SECRET,
-    X_API_CLIENT_ID,
-    X_API_CLIENT_SECRET,
-    X_API_REFRESH_TOKEN,
-    X_API_TOKEN_URL,
     X_API_CONSUMER_KEY,
     X_API_CONSUMER_SECRET,
     X_API_TWEET_URL,
@@ -228,27 +224,17 @@ def _publish_tweet(text: str) -> dict:
         )
     )
 
-    if oauth1_credentials:
-        headers = {
-            "Authorization": _build_oauth1_header("POST", X_API_TWEET_URL),
-            "Content-Type": "application/json",
-        }
-    else:
-        oauth2_credentials = all((X_API_CLIENT_ID, X_API_CLIENT_SECRET, X_API_REFRESH_TOKEN))
+    if not oauth1_credentials:
+        raise RuntimeError(
+            "Les identifiants X (Twitter) sont incomplets. Fournissez les clés OAuth 1.0a "
+            "(X_API_CONSUMER_KEY, X_API_CONSUMER_SECRET, X_API_ACCESS_TOKEN, "
+            "X_API_ACCESS_TOKEN_SECRET)."
+        )
 
-        if oauth2_credentials:
-            access_token = _get_x_oauth2_access_token()
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-            }
-        else:
-            raise RuntimeError(
-                "Les identifiants X (Twitter) sont incomplets. Fournissez les clés OAuth 1.0a "
-                "(X_API_CONSUMER_KEY, X_API_CONSUMER_SECRET, X_API_ACCESS_TOKEN, "
-                "X_API_ACCESS_TOKEN_SECRET) ou un trio OAuth 2.0 (X_API_CLIENT_ID, "
-                "X_API_CLIENT_SECRET, X_API_REFRESH_TOKEN)."
-            )
+    headers = {
+        "Authorization": _build_oauth1_header("POST", X_API_TWEET_URL),
+        "Content-Type": "application/json",
+    }
 
     response = requests.post(
         X_API_TWEET_URL,
@@ -262,11 +248,10 @@ def _publish_tweet(text: str) -> dict:
         if response.status_code == 403 and "Unsupported Authentication" in error_message:
             error_message = (
                 "L'API X a rejeté l'authentification utilisée. L'envoi de tweets "
-                "nécessite désormais des identifiants OAuth 1.0a (user context) ou "
-                "un trio OAuth 2.0 user context. Vérifiez la configuration des "
-                "variables X_API_CONSUMER_KEY, X_API_CONSUMER_SECRET, "
-                "X_API_ACCESS_TOKEN, X_API_ACCESS_TOKEN_SECRET ou fournissez "
-                "X_API_CLIENT_ID, X_API_CLIENT_SECRET et X_API_REFRESH_TOKEN."
+                "nécessite désormais des identifiants OAuth 1.0a (user context). "
+                "Vérifiez la configuration des variables X_API_CONSUMER_KEY, "
+                "X_API_CONSUMER_SECRET, X_API_ACCESS_TOKEN et "
+                "X_API_ACCESS_TOKEN_SECRET."
             )
         raise SocialPublishError(
             f"Erreur lors de la publication du tweet ({response.status_code}): {error_message}",
@@ -274,60 +259,6 @@ def _publish_tweet(text: str) -> dict:
         )
 
     return response.json()
-
-
-_X_OAUTH2_TOKEN_CACHE: Optional[Tuple[str, float]] = None
-
-
-def _get_x_oauth2_access_token(force_refresh: bool = False) -> str:
-    """Return a user-context OAuth 2.0 access token for the X API."""
-
-    global _X_OAUTH2_TOKEN_CACHE
-
-    if not force_refresh and _X_OAUTH2_TOKEN_CACHE:
-        token, expires_at = _X_OAUTH2_TOKEN_CACHE
-        if expires_at > time.time():
-            return token
-
-    if not all((X_API_CLIENT_ID, X_API_CLIENT_SECRET, X_API_REFRESH_TOKEN)):
-        raise RuntimeError(
-            "Impossible de rafraîchir le token OAuth 2.0 : configurez X_API_CLIENT_ID, "
-            "X_API_CLIENT_SECRET et X_API_REFRESH_TOKEN."
-        )
-
-    basic_credentials = base64.b64encode(
-        f"{X_API_CLIENT_ID}:{X_API_CLIENT_SECRET}".encode("utf-8")
-    ).decode("utf-8")
-    headers = {
-        "Authorization": f"Basic {basic_credentials}",
-        "Content-Type": "application/x-www-form-urlencoded",
-    }
-    data = {
-        "grant_type": "refresh_token",
-        "refresh_token": X_API_REFRESH_TOKEN,
-    }
-
-    response = requests.post(X_API_TOKEN_URL, headers=headers, data=data, timeout=30)
-    if response.status_code >= 400:
-        raise RuntimeError(
-            "Impossible d'obtenir un token OAuth 2.0 pour X : "
-            f"{response.status_code} {response.text}"
-        )
-
-    payload = response.json()
-    access_token = payload.get("access_token")
-    expires_in = payload.get("expires_in", 0)
-
-    if not access_token:
-        raise RuntimeError(
-            "La réponse du serveur X ne contient pas de champ access_token : "
-            f"{payload}"
-        )
-
-    expires_at = time.time() + max(int(expires_in), 0) - 30
-    _X_OAUTH2_TOKEN_CACHE = (access_token, expires_at)
-
-    return access_token
 
 
 _LINKEDIN_ACCESS_TOKEN_CACHE: Optional[str] = None

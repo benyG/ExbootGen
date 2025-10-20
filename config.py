@@ -41,27 +41,14 @@ API_REQUEST_DELAY = float(os.environ.get("API_REQUEST_DELAY", "1"))
 # X (Twitter) integration
 # ---------------------------------------------------------------------------
 # The X API now requires user-context credentials to publish tweets.  The
-# application supports two authentication methods, checked in the following
-# order:
-#
-# * OAuth 1.0a consumer/access keys (``X_API_CONSUMER_KEY``,
-#   ``X_API_CONSUMER_SECRET``, ``X_API_ACCESS_TOKEN``,
-#   ``X_API_ACCESS_TOKEN_SECRET``)
-# * OAuth 2.0 user-context credentials based on a refresh token
-#   (``X_API_CLIENT_ID``, ``X_API_CLIENT_SECRET``, ``X_API_REFRESH_TOKEN``)
-#
-# If you only possess a Client ID/Client Secret pair you must first perform the
-# OAuth 2.0 authorisation-code flow to obtain a user-context refresh token; only
-# then can the application refresh access tokens automatically.
+# application authenticates requests using OAuth 1.0a consumer/access keys
+# (``X_API_CONSUMER_KEY``, ``X_API_CONSUMER_SECRET``, ``X_API_ACCESS_TOKEN``,
+# ``X_API_ACCESS_TOKEN_SECRET``).
 X_API_TWEET_URL = "https://api.x.com/2/tweets"
 X_API_CONSUMER_KEY = os.environ.get("X_API_CONSUMER_KEY", "")
 X_API_CONSUMER_SECRET = os.environ.get("X_API_CONSUMER_SECRET", "")
 X_API_ACCESS_TOKEN = os.environ.get("X_API_ACCESS_TOKEN", "")
 X_API_ACCESS_TOKEN_SECRET = os.environ.get("X_API_ACCESS_TOKEN_SECRET", "")
-X_API_CLIENT_ID = os.environ.get("X_API_CLIENT_ID", "")
-X_API_CLIENT_SECRET = os.environ.get("X_API_CLIENT_SECRET", "")
-X_API_REFRESH_TOKEN = os.environ.get("X_API_REFRESH_TOKEN", "")
-X_API_TOKEN_URL = "https://api.x.com/2/oauth2/token"
 
 # ---------------------------------------------------------------------------
 # LinkedIn integration
