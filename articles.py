@@ -43,6 +43,17 @@ from openai_api import (
 articles_bp = Blueprint("articles", __name__)
 
 
+TOPIC_TYPE_OPTIONS = [
+    {"value": "certification_presentation", "label": "🎯 Certification presentation"},
+    {"value": "preparation_methodology", "label": "🧠 Preparation & methodology"},
+    {"value": "experience_testimony", "label": "💬 Experience & testimony"},
+    {"value": "career_impact", "label": "📊 Career & impact"},
+    {"value": "engagement_community", "label": "🧩 Engagement & community"},
+]
+
+TOPIC_TYPE_VALUES = {option["value"] for option in TOPIC_TYPE_OPTIONS}
+
+
 @dataclass
 class Selection:
     """Container for the provider and certification names selected by the user."""
@@ -383,18 +394,24 @@ def _publish_linkedin_post(text: str) -> dict:
 def index() -> str:
     """Render the article generator interface."""
 
-    return render_template("article_generator.html")
+    return render_template(
+        "article_generator.html",
+        topic_types=TOPIC_TYPE_OPTIONS,
+    )
 
 
-def _extract_selection_payload(data: dict) -> Tuple[int, int, str]:
+def _extract_selection_payload(data: dict) -> Tuple[int, int, str, str]:
     """Return the validated identifiers and URL from the request payload."""
 
     provider_id = data.get("provider_id")
     certification_id = data.get("certification_id")
     exam_url = (data.get("exam_url") or "").strip()
+    topic_type = (data.get("topic_type") or "").strip()
 
-    if not provider_id or not certification_id or not exam_url:
-        raise ValueError("provider_id, certification_id et exam_url sont requis.")
+    if not provider_id or not certification_id or not exam_url or not topic_type:
+        raise ValueError(
+            "provider_id, certification_id, exam_url et topic_type sont requis."
+        )
 
     try:
         provider_id = int(provider_id)
@@ -402,7 +419,10 @@ def _extract_selection_payload(data: dict) -> Tuple[int, int, str]:
     except (TypeError, ValueError) as exc:  # pragma: no cover - validation only
         raise ValueError("Identifiants invalides.") from exc
 
-    return provider_id, certification_id, exam_url
+    if topic_type not in TOPIC_TYPE_VALUES:
+        raise ValueError("Type de sujet invalide.")
+
+    return provider_id, certification_id, exam_url, topic_type
 
 
 @articles_bp.route("/generate", methods=["POST"])
@@ -412,14 +432,17 @@ def generate_article():
     data = request.get_json() or {}
 
     try:
-        provider_id, certification_id, exam_url = _extract_selection_payload(data)
+        provider_id, certification_id, exam_url, topic_type = _extract_selection_payload(data)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
         article = generate_certification_article(
-            selection.certification_name, selection.provider_name, exam_url
+            selection.certification_name,
+            selection.provider_name,
+            exam_url,
+            topic_type,
         )
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
@@ -440,14 +463,14 @@ def run_playbook():
     data = request.get_json() or {}
 
     try:
-        provider_id, certification_id, exam_url = _extract_selection_payload(data)
+        provider_id, certification_id, exam_url, topic_type = _extract_selection_payload(data)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        tweet_result = _run_tweet_workflow(selection, exam_url)
-        linkedin_result = _run_linkedin_workflow(selection, exam_url)
+        tweet_result = _run_tweet_workflow(selection, exam_url, topic_type)
+        linkedin_result = _run_linkedin_workflow(selection, exam_url, topic_type)
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
@@ -471,11 +494,16 @@ def run_playbook():
     )
 
 
-def _run_tweet_workflow(selection: Selection, exam_url: str) -> SocialPostResult:
+def _run_tweet_workflow(
+    selection: Selection, exam_url: str, topic_type: str
+) -> SocialPostResult:
     """Generate and publish the certification announcement tweet."""
 
     tweet_text = generate_certification_tweet(
-        selection.certification_name, selection.provider_name, exam_url
+        selection.certification_name,
+        selection.provider_name,
+        exam_url,
+        topic_type,
     )
     try:
         response = _publish_tweet(tweet_text)
@@ -495,11 +523,16 @@ def _run_tweet_workflow(selection: Selection, exam_url: str) -> SocialPostResult
     )
 
 
-def _run_linkedin_workflow(selection: Selection, exam_url: str) -> SocialPostResult:
+def _run_linkedin_workflow(
+    selection: Selection, exam_url: str, topic_type: str
+) -> SocialPostResult:
     """Generate and publish the LinkedIn announcement post."""
 
     linkedin_post = generate_certification_linkedin_post(
-        selection.certification_name, selection.provider_name, exam_url
+        selection.certification_name,
+        selection.provider_name,
+        exam_url,
+        topic_type,
     )
     try:
         linkedin_response = _publish_linkedin_post(linkedin_post)
@@ -526,14 +559,17 @@ def generate_tweet():
     data = request.get_json() or {}
 
     try:
-        provider_id, certification_id, exam_url = _extract_selection_payload(data)
+        provider_id, certification_id, exam_url, topic_type = _extract_selection_payload(data)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
         tweet_text = generate_certification_tweet(
-            selection.certification_name, selection.provider_name, exam_url
+            selection.certification_name,
+            selection.provider_name,
+            exam_url,
+            topic_type,
         )
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
@@ -548,14 +584,17 @@ def generate_linkedin():
     data = request.get_json() or {}
 
     try:
-        provider_id, certification_id, exam_url = _extract_selection_payload(data)
+        provider_id, certification_id, exam_url, topic_type = _extract_selection_payload(data)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
         linkedin_post = generate_certification_linkedin_post(
-            selection.certification_name, selection.provider_name, exam_url
+            selection.certification_name,
+            selection.provider_name,
+            exam_url,
+            topic_type,
         )
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
@@ -570,13 +609,13 @@ def publish_tweet():
     data = request.get_json() or {}
 
     try:
-        provider_id, certification_id, exam_url = _extract_selection_payload(data)
+        provider_id, certification_id, exam_url, topic_type = _extract_selection_payload(data)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        tweet_result = _run_tweet_workflow(selection, exam_url)
+        tweet_result = _run_tweet_workflow(selection, exam_url, topic_type)
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
@@ -599,13 +638,13 @@ def publish_linkedin():
     data = request.get_json() or {}
 
     try:
-        provider_id, certification_id, exam_url = _extract_selection_payload(data)
+        provider_id, certification_id, exam_url, topic_type = _extract_selection_payload(data)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        linkedin_result = _run_linkedin_workflow(selection, exam_url)
+        linkedin_result = _run_linkedin_workflow(selection, exam_url, topic_type)
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 

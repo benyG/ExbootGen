@@ -284,6 +284,15 @@
           </select>
         </div>
         <div class="field-group">
+          <label for="topicTypeSelect">Type de sujet</label>
+          <select id="topicTypeSelect">
+            <option value="">Choisir un type de sujet…</option>
+            {% for topic in topic_types %}
+            <option value="{{ topic.value }}">{{ topic.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field-group">
           <label for="examUrl">Lien du test partagé Examboot</label>
           <input type="url" id="examUrl" placeholder="https://" autocomplete="off">
         </div>
@@ -325,6 +334,7 @@
     const certSearch = document.getElementById('certSearch');
     const certSelect = document.getElementById('certSelect');
     const examUrlInput = document.getElementById('examUrl');
+    const topicTypeSelect = document.getElementById('topicTypeSelect');
     const statusArea = document.getElementById('statusArea');
     const generateBtn = document.getElementById('generateBtn');
     const runPlaybookBtn = document.getElementById('runPlaybookBtn');
@@ -354,15 +364,17 @@
       const providerId = providerSelect.value;
       const certificationId = certSelect.value;
       const examUrl = examUrlInput.value.trim();
+      const topicType = topicTypeSelect.value;
 
-      if (!providerId || !certificationId || !examUrl) {
+      if (!providerId || !certificationId || !examUrl || !topicType) {
         return null;
       }
 
       return {
         provider_id: providerId,
         certification_id: certificationId,
-        exam_url: examUrl
+        exam_url: examUrl,
+        topic_type: topicType
       };
     }
 
@@ -447,12 +459,13 @@
 
     certSelect.addEventListener('change', updateActionAvailability);
     examUrlInput.addEventListener('input', updateActionAvailability);
+    topicTypeSelect.addEventListener('change', updateActionAvailability);
 
     generateBtn.addEventListener('click', async () => {
       const selection = getSelectionPayload();
 
       if (!selection) {
-        setStatus('Veuillez sélectionner un provider, une certification et saisir le lien du test.', true);
+        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
         return;
       }
 
@@ -482,7 +495,7 @@
     runPlaybookBtn.addEventListener('click', async () => {
       const selection = getSelectionPayload();
       if (!selection) {
-        setStatus('Veuillez sélectionner un provider, une certification et saisir le lien du test.', true);
+        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
         return;
       }
       try {
@@ -531,7 +544,7 @@
     publishTweetBtn.addEventListener('click', async () => {
       const selection = getSelectionPayload();
       if (!selection) {
-        setStatus('Veuillez sélectionner un provider, une certification et saisir le lien du test.', true);
+        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
         return;
       }
       try {
@@ -571,7 +584,7 @@
     publishLinkedinBtn.addEventListener('click', async () => {
       const selection = getSelectionPayload();
       if (!selection) {
-        setStatus('Veuillez sélectionner un provider, une certification et saisir le lien du test.', true);
+        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
         return;
       }
       try {
