@@ -20,17 +20,12 @@ set "OPENAI_MAX_RETRIES=5"
 set "API_REQUEST_DELAY=1"
 
 REM === Parametres X (Twitter) ===
-REM  Pour publier un tweet, fournissez de preference les identifiants OAuth 1.0a
-REM  suivants (user context). Vous pouvez egalement configurer un trio OAuth 2.0
-REM  (Client ID, Client Secret, Refresh Token) afin que l'application regenere
-REM  automatiquement un access token utilisateur.
+REM  Pour publier un tweet, fournissez les identifiants OAuth 1.0a ci-dessous
+REM  (user context). Ils sont obligatoires pour l'authentification.
 set "X_API_CONSUMER_KEY=votre-consumer-key"
 set "X_API_CONSUMER_SECRET=votre-consumer-secret"
 set "X_API_ACCESS_TOKEN=votre-access-token"
 set "X_API_ACCESS_TOKEN_SECRET=votre-access-token-secret"
-set "X_API_CLIENT_ID=votre-client-id"
-set "X_API_CLIENT_SECRET=votre-client-secret"
-set "X_API_REFRESH_TOKEN=votre-refresh-token"
 
 REM === Paramètres Redis / Celery ===
 set "REDIS_HOST=redis-25453.crce197.us-east-2-1.ec2.redns.redis-cloud.com:15453"
