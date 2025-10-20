@@ -9,7 +9,7 @@ import secrets
 import time
 from dataclasses import dataclass
 from typing import Optional, Tuple
-from urllib.parse import parse_qsl, quote, urlparse
+from urllib.parse import ParseResult, parse_qsl, quote, urlparse
 
 import mysql.connector
 import requests
@@ -84,6 +84,26 @@ def _percent_encode(value: str) -> str:
     return quote(str(value), safe="~-._")
 
 
+def _normalize_base_url(url_parts: ParseResult) -> str:
+    """Return the normalized base string URI as defined by RFC 5849."""
+
+    scheme = (url_parts.scheme or "").lower()
+    hostname = (url_parts.hostname or "").lower()
+
+    if not scheme or not hostname:
+        raise ValueError("L'URL fournie pour la signature OAuth est invalide.")
+
+    port = url_parts.port
+    if port and not ((scheme == "http" and port == 80) or (scheme == "https" and port == 443)):
+        authority = f"{hostname}:{port}"
+    else:
+        authority = hostname
+
+    path = url_parts.path or "/"
+
+    return f"{scheme}://{authority}{path}"
+
+
 def _build_oauth1_header(method: str, url: str) -> str:
     """Return the OAuth 1.0 Authorization header for the given request."""
 
@@ -102,14 +122,17 @@ def _build_oauth1_header(method: str, url: str) -> str:
     url_parts = urlparse(url)
     query_params = parse_qsl(url_parts.query, keep_blank_values=True)
 
-    signature_pairs = [
+    signature_pairs_raw = list(query_params) + list(oauth_params.items())
+    encoded_signature_pairs = [
         (_percent_encode(key), _percent_encode(value))
-        for key, value in list(query_params) + list(oauth_params.items())
+        for key, value in signature_pairs_raw
     ]
-    signature_pairs.sort(key=lambda item: (item[0], item[1]))
-    parameter_string = "&".join(f"{key}={value}" for key, value in signature_pairs)
+    encoded_signature_pairs.sort(key=lambda item: (item[0], item[1]))
+    parameter_string = "&".join(
+        f"{key}={value}" for key, value in encoded_signature_pairs
+    )
 
-    base_url = f"{url_parts.scheme}://{url_parts.netloc}{url_parts.path}"
+    base_url = _normalize_base_url(url_parts)
     base_string = "&".join(
         _percent_encode(part)
         for part in (method.upper(), base_url, parameter_string)
@@ -130,6 +153,30 @@ def _build_oauth1_header(method: str, url: str) -> str:
         for key, value in sorted(oauth_params.items())
     )
     return f"OAuth {header_params}"
+
+
+def render_x_callback() -> str:
+    """Render the callback landing page for the X OAuth 2.0 flow."""
+
+    code = request.args.get("code")
+    state = request.args.get("state")
+    error = request.args.get("error")
+    error_description = request.args.get("error_description")
+
+    return render_template(
+        "x_callback.html",
+        code=code,
+        state=state,
+        error=error,
+        error_description=error_description,
+    )
+
+
+@articles_bp.route("/x/callback")
+def articles_x_callback() -> str:
+    """Expose the callback through the articles blueprint for completeness."""
+
+    return render_x_callback()
 
 
 def _publish_tweet(text: str) -> dict:
