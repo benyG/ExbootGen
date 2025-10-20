@@ -338,6 +338,18 @@
     let certifications = [];
     let isLoading = false;
 
+    function renderSocialBlock(element, text, published, statusCode, error, emptyMessage) {
+      const displayText = text && text.trim() ? text : emptyMessage;
+      let statusText = published ? 'Statut : Publié ✅' : 'Statut : Non publié';
+      if ((published && statusCode && statusCode !== 200) || (!published && statusCode)) {
+        statusText += ` (${statusCode})`;
+      }
+      if (!published && error) {
+        statusText += ` – ${error}`;
+      }
+      element.textContent = `${displayText}\n\n${statusText}`;
+    }
+
     function getSelectionPayload() {
       const providerId = providerSelect.value;
       const certificationId = certSelect.value;
@@ -485,9 +497,30 @@
         if (!response.ok) {
           throw new Error(payload.error || 'Erreur inconnue lors de la publication');
         }
-        tweetOutput.textContent = payload.tweet || 'Aucun tweet généré.';
-        linkedinOutput.textContent = payload.linkedin_post || 'Aucun post LinkedIn généré.';
-        setStatus('Playbook exécuté : tweet et post LinkedIn publiés.');
+
+        renderSocialBlock(
+          tweetOutput,
+          payload.tweet,
+          Boolean(payload.tweet_published),
+          payload.tweet_status_code,
+          payload.tweet_error,
+          'Aucun tweet généré.'
+        );
+
+        renderSocialBlock(
+          linkedinOutput,
+          payload.linkedin_post,
+          Boolean(payload.linkedin_published),
+          payload.linkedin_status_code,
+          payload.linkedin_error,
+          'Aucun post LinkedIn généré.'
+        );
+
+        const statuses = [];
+        statuses.push(`Tweet ${payload.tweet_published ? 'publié' : 'non publié'}`);
+        statuses.push(`LinkedIn ${payload.linkedin_published ? 'publié' : 'non publié'}`);
+        const hasFailure = !payload.tweet_published || !payload.linkedin_published;
+        setStatus(`Playbook terminé – ${statuses.join(' · ')}.`, hasFailure);
       } catch (error) {
         setStatus(error.message, true);
       } finally {
@@ -513,8 +546,21 @@
         if (!response.ok) {
           throw new Error(payload.error || 'Erreur lors de la publication du tweet');
         }
-        tweetOutput.textContent = payload.tweet || 'Aucun tweet généré.';
-        setStatus('Tweet publié avec succès.');
+
+        renderSocialBlock(
+          tweetOutput,
+          payload.tweet,
+          Boolean(payload.tweet_published),
+          payload.tweet_status_code,
+          payload.tweet_error,
+          'Aucun tweet généré.'
+        );
+
+        if (payload.tweet_published) {
+          setStatus('Tweet publié avec succès.');
+        } else {
+          setStatus('Tweet généré mais non publié.', true);
+        }
       } catch (error) {
         setStatus(error.message, true);
       } finally {
@@ -540,8 +586,21 @@
         if (!response.ok) {
           throw new Error(payload.error || 'Erreur lors de la publication du post LinkedIn');
         }
-        linkedinOutput.textContent = payload.linkedin_post || 'Aucun post LinkedIn généré.';
-        setStatus('Post LinkedIn publié avec succès.');
+
+        renderSocialBlock(
+          linkedinOutput,
+          payload.linkedin_post,
+          Boolean(payload.linkedin_published),
+          payload.linkedin_status_code,
+          payload.linkedin_error,
+          'Aucun post LinkedIn généré.'
+        );
+
+        if (payload.linkedin_published) {
+          setStatus('Post LinkedIn publié avec succès.');
+        } else {
+          setStatus('Post LinkedIn généré mais non publié.', true);
+        }
       } catch (error) {
         setStatus(error.message, true);
       } finally {

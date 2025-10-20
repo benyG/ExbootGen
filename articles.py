@@ -51,6 +51,16 @@ class Selection:
     certification_name: str
 
 
+@dataclass
+class SocialPostResult:
+    """Outcome of a social network publication attempt."""
+
+    text: str
+    response: Optional[dict] = None
+    published: bool = False
+    status_code: Optional[int] = None
+    error: Optional[str] = None
+
 class SocialPublishError(RuntimeError):
     """Exception raised when a social network publication fails.
 
@@ -436,40 +446,77 @@ def run_playbook():
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        tweet_text, tweet_response = _run_tweet_workflow(selection, exam_url)
-        linkedin_post, linkedin_response = _run_linkedin_workflow(
-            selection, exam_url
-        )
+        tweet_result = _run_tweet_workflow(selection, exam_url)
+        linkedin_result = _run_linkedin_workflow(selection, exam_url)
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
     return jsonify(
         {
-            "tweet": tweet_text,
-            "tweet_response": tweet_response,
-            "linkedin_post": linkedin_post,
-            "linkedin_response": linkedin_response,
+            "tweet": tweet_result.text,
+            "tweet_response": tweet_result.response,
+            "tweet_published": tweet_result.published,
+            "tweet_status_code": tweet_result.status_code,
+            **({"tweet_error": tweet_result.error} if tweet_result.error else {}),
+            "linkedin_post": linkedin_result.text,
+            "linkedin_response": linkedin_result.response,
+            "linkedin_published": linkedin_result.published,
+            "linkedin_status_code": linkedin_result.status_code,
+            **(
+                {"linkedin_error": linkedin_result.error}
+                if linkedin_result.error
+                else {}
+            ),
         }
     )
 
 
-def _run_tweet_workflow(selection: Selection, exam_url: str) -> Tuple[str, dict]:
+def _run_tweet_workflow(selection: Selection, exam_url: str) -> SocialPostResult:
     """Generate and publish the certification announcement tweet."""
 
     tweet_text = generate_certification_tweet(
         selection.certification_name, selection.provider_name, exam_url
     )
-    return tweet_text, _publish_tweet(tweet_text)
+    try:
+        response = _publish_tweet(tweet_text)
+    except SocialPublishError as exc:
+        return SocialPostResult(
+            text=tweet_text,
+            published=False,
+            status_code=exc.status_code,
+            error=str(exc),
+        )
+
+    return SocialPostResult(
+        text=tweet_text,
+        response=response,
+        published=True,
+        status_code=200,
+    )
 
 
-def _run_linkedin_workflow(selection: Selection, exam_url: str) -> Tuple[str, dict]:
+def _run_linkedin_workflow(selection: Selection, exam_url: str) -> SocialPostResult:
     """Generate and publish the LinkedIn announcement post."""
 
     linkedin_post = generate_certification_linkedin_post(
         selection.certification_name, selection.provider_name, exam_url
     )
-    linkedin_response = _publish_linkedin_post(linkedin_post)
-    return linkedin_post, linkedin_response
+    try:
+        linkedin_response = _publish_linkedin_post(linkedin_post)
+    except SocialPublishError as exc:
+        return SocialPostResult(
+            text=linkedin_post,
+            published=False,
+            status_code=exc.status_code,
+            error=str(exc),
+        )
+
+    return SocialPostResult(
+        text=linkedin_post,
+        response=linkedin_response,
+        published=True,
+        status_code=200,
+    )
 
 
 @articles_bp.route("/generate-tweet", methods=["POST"])
@@ -529,13 +576,20 @@ def publish_tweet():
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        tweet_text, tweet_response = _run_tweet_workflow(selection, exam_url)
-    except SocialPublishError as exc:  # pragma: no cover - return upstream status
-        return jsonify({"error": str(exc)}), exc.status_code
+        tweet_result = _run_tweet_workflow(selection, exam_url)
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
-    return jsonify({"tweet": tweet_text, "tweet_response": tweet_response})
+    payload = {
+        "tweet": tweet_result.text,
+        "tweet_response": tweet_result.response,
+        "tweet_published": tweet_result.published,
+        "tweet_status_code": tweet_result.status_code,
+    }
+    if tweet_result.error:
+        payload["tweet_error"] = tweet_result.error
+
+    return jsonify(payload)
 
 
 @articles_bp.route("/publish-linkedin", methods=["POST"])
@@ -551,12 +605,17 @@ def publish_linkedin():
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        linkedin_post, linkedin_response = _run_linkedin_workflow(selection, exam_url)
-    except SocialPublishError as exc:  # pragma: no cover - return upstream status
-        return jsonify({"error": str(exc)}), exc.status_code
+        linkedin_result = _run_linkedin_workflow(selection, exam_url)
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
-    return jsonify(
-        {"linkedin_post": linkedin_post, "linkedin_response": linkedin_response}
-    )
+    payload = {
+        "linkedin_post": linkedin_result.text,
+        "linkedin_response": linkedin_result.response,
+        "linkedin_published": linkedin_result.published,
+        "linkedin_status_code": linkedin_result.status_code,
+    }
+    if linkedin_result.error:
+        payload["linkedin_error"] = linkedin_result.error
+
+    return jsonify(payload)
