@@ -381,11 +381,13 @@ def _extract_selection_payload(data: dict) -> Tuple[int, int, str, str]:
     provider_id = data.get("provider_id")
     certification_id = data.get("certification_id")
     exam_url = (data.get("exam_url") or "").strip()
+    if not exam_url:
+        exam_url = "https://examboot.net"
     topic_type = (data.get("topic_type") or "").strip()
 
-    if not provider_id or not certification_id or not exam_url or not topic_type:
+    if not provider_id or not certification_id or not topic_type:
         raise ValueError(
-            "provider_id, certification_id, exam_url et topic_type sont requis."
+            "provider_id, certification_id et topic_type sont requis."
         )
 
     try:
