@@ -147,16 +147,17 @@
 
     .actions {
       display: flex;
-      flex-wrap: wrap;
-      gap: 0.8rem;
+      flex-direction: column;
+      gap: 1rem;
       margin-top: 1.4rem;
-      align-items: center;
     }
 
+    .primary-actions,
     .secondary-actions {
       display: flex;
       flex-wrap: wrap;
       gap: 0.8rem;
+      align-items: center;
     }
 
     button {
@@ -185,6 +186,20 @@
       background: rgba(17, 24, 39, 0.75);
       color: var(--text-primary);
       border: 1px solid rgba(124,247,255,0.25);
+    }
+
+    button.dark {
+      background: rgba(4, 7, 17, 0.88);
+      color: var(--text-primary);
+      border: 1px solid rgba(30, 41, 59, 0.65);
+      box-shadow: 0 12px 30px rgba(4, 7, 17, 0.45);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
     }
 
     button:hover:not(:disabled) {
@@ -230,6 +245,20 @@
       min-height: 160px;
       white-space: pre-wrap;
       line-height: 1.55;
+    }
+
+    .block-footer {
+      margin-top: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .helper-text {
+      margin: 0;
+      font-size: 0.8rem;
+      color: var(--text-muted);
     }
 
     .article-output h2,
@@ -298,11 +327,13 @@
         </div>
       </div>
       <div class="actions">
-        <button class="primary" id="generateBtn">Générer l'article</button>
+        <div class="primary-actions">
+          <button class="primary" id="generateArticleBtn">Générer l'article</button>
+          <button class="primary" id="generateTweetBtn">Générer le tweet</button>
+          <button class="primary" id="generateLinkedinBtn">Générer le post LinkedIn</button>
+        </div>
         <div class="secondary-actions">
-          <button class="secondary" id="publishTweetBtn" disabled>Publier le tweet</button>
-          <button class="secondary" id="publishLinkedinBtn" disabled>Publier le post LinkedIn</button>
-          <button class="secondary" id="runPlaybookBtn" disabled>Run playbook</button>
+          <button class="dark" id="runPlaybookBtn" disabled>Run playbook</button>
         </div>
       </div>
       <div class="status" id="statusArea"></div>
@@ -311,6 +342,10 @@
     <section>
       <h2 style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">2. Article généré</h2>
       <div class="article-output" id="articleOutput">L'article généré apparaîtra ici après soumission du formulaire.</div>
+      <div class="block-footer">
+        <button class="secondary" id="publishArticleBtn" disabled>Publier l'article</button>
+        <p class="helper-text">La publication sera bientôt disponible.</p>
+      </div>
     </section>
 
     <section>
@@ -319,10 +354,16 @@
         <div>
           <h3>Tweet</h3>
           <div class="social-block" id="tweetOutput">Le tweet généré apparaîtra ici après l'action correspondante.</div>
+          <div class="block-footer">
+            <button class="secondary" id="publishTweetBtn" disabled>Publier le tweet</button>
+          </div>
         </div>
         <div>
           <h3>Post LinkedIn</h3>
           <div class="social-block" id="linkedinOutput">Le post LinkedIn généré apparaîtra ici après l'action correspondante.</div>
+          <div class="block-footer">
+            <button class="secondary" id="publishLinkedinBtn" disabled>Publier le post LinkedIn</button>
+          </div>
         </div>
       </div>
     </section>
@@ -336,17 +377,37 @@
     const examUrlInput = document.getElementById('examUrl');
     const topicTypeSelect = document.getElementById('topicTypeSelect');
     const statusArea = document.getElementById('statusArea');
-    const generateBtn = document.getElementById('generateBtn');
+    const generateArticleBtn = document.getElementById('generateArticleBtn');
+    const generateTweetBtn = document.getElementById('generateTweetBtn');
+    const generateLinkedinBtn = document.getElementById('generateLinkedinBtn');
     const runPlaybookBtn = document.getElementById('runPlaybookBtn');
+    const publishArticleBtn = document.getElementById('publishArticleBtn');
     const publishTweetBtn = document.getElementById('publishTweetBtn');
     const publishLinkedinBtn = document.getElementById('publishLinkedinBtn');
     const articleOutput = document.getElementById('articleOutput');
     const tweetOutput = document.getElementById('tweetOutput');
     const linkedinOutput = document.getElementById('linkedinOutput');
 
+    const DEFAULT_ARTICLE_TEXT = articleOutput.textContent;
+    const DEFAULT_TWEET_TEXT = tweetOutput.textContent;
+    const DEFAULT_LINKEDIN_TEXT = linkedinOutput.textContent;
+
     let providers = [];
     let certifications = [];
     let isLoading = false;
+    let generatedArticle = '';
+    let generatedTweet = '';
+    let generatedLinkedin = '';
+
+    function resetGeneratedContent() {
+      generatedArticle = '';
+      generatedTweet = '';
+      generatedLinkedin = '';
+      articleOutput.textContent = DEFAULT_ARTICLE_TEXT;
+      tweetOutput.textContent = DEFAULT_TWEET_TEXT;
+      linkedinOutput.textContent = DEFAULT_LINKEDIN_TEXT;
+      updateActionAvailability();
+    }
 
     function renderSocialBlock(element, text, published, statusCode, error, emptyMessage) {
       const displayText = text && text.trim() ? text : emptyMessage;
@@ -383,9 +444,13 @@
         return;
       }
       const hasSelection = Boolean(getSelectionPayload());
+      generateArticleBtn.disabled = !hasSelection;
+      generateTweetBtn.disabled = !hasSelection;
+      generateLinkedinBtn.disabled = !hasSelection;
       runPlaybookBtn.disabled = !hasSelection;
-      publishTweetBtn.disabled = !hasSelection;
-      publishLinkedinBtn.disabled = !hasSelection;
+      publishArticleBtn.disabled = true;
+      publishTweetBtn.disabled = !hasSelection || !generatedTweet;
+      publishLinkedinBtn.disabled = !hasSelection || !generatedLinkedin;
     }
 
     async function fetchProviders() {
@@ -429,6 +494,7 @@
 
     providerSelect.addEventListener('change', async () => {
       const providerId = providerSelect.value;
+      resetGeneratedContent();
       certSearch.value = '';
       certifications = [];
       certSelect.disabled = !providerId;
@@ -448,7 +514,7 @@
       } catch (error) {
         setStatus(error.message, true);
       }
-      updateActionAvailability();
+      // reset already handled at the beginning of the handler
     });
 
     certSearch.addEventListener('input', () => {
@@ -457,11 +523,15 @@
       renderCertifications(filtered);
     });
 
-    certSelect.addEventListener('change', updateActionAvailability);
+    certSelect.addEventListener('change', () => {
+      resetGeneratedContent();
+    });
     examUrlInput.addEventListener('input', updateActionAvailability);
-    topicTypeSelect.addEventListener('change', updateActionAvailability);
+    topicTypeSelect.addEventListener('change', () => {
+      resetGeneratedContent();
+    });
 
-    generateBtn.addEventListener('click', async () => {
+    generateArticleBtn.addEventListener('click', async () => {
       const selection = getSelectionPayload();
 
       if (!selection) {
@@ -481,14 +551,95 @@
         if (!response.ok) {
           throw new Error(payload.error || 'Erreur inconnue lors de la génération');
         }
-        articleOutput.textContent = payload.article || 'Aucun contenu généré.';
+        generatedArticle = payload.article || '';
+        articleOutput.textContent = generatedArticle || 'Aucun contenu généré.';
         setStatus('Article généré avec succès.');
 
       } catch (error) {
         setStatus(error.message, true);
         articleOutput.textContent = 'L\'article n\'a pas pu être généré.';
+        generatedArticle = '';
       } finally {
         toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    generateTweetBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+
+      if (!selection) {
+        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        return;
+      }
+
+      try {
+        toggleLoading(true);
+        setStatus('Génération du tweet en cours…');
+        const response = await fetch('/articles/generate-tweet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selection)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur inconnue lors de la génération du tweet');
+        }
+        generatedTweet = payload.tweet || '';
+        renderSocialBlock(
+          tweetOutput,
+          generatedTweet,
+          false,
+          null,
+          null,
+          'Aucun tweet généré.'
+        );
+        setStatus('Tweet généré, prêt à être publié.');
+      } catch (error) {
+        setStatus(error.message, true);
+        generatedTweet = '';
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    generateLinkedinBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+
+      if (!selection) {
+        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        return;
+      }
+
+      try {
+        toggleLoading(true);
+        setStatus('Génération du post LinkedIn en cours…');
+        const response = await fetch('/articles/generate-linkedin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selection)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur inconnue lors de la génération du post LinkedIn');
+        }
+        generatedLinkedin = payload.linkedin_post || '';
+        renderSocialBlock(
+          linkedinOutput,
+          generatedLinkedin,
+          false,
+          null,
+          null,
+          'Aucun post LinkedIn généré.'
+        );
+        setStatus('Post LinkedIn généré, prêt à être publié.');
+      } catch (error) {
+        setStatus(error.message, true);
+        generatedLinkedin = '';
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
       }
     });
 
@@ -511,18 +662,23 @@
           throw new Error(payload.error || 'Erreur inconnue lors de la publication');
         }
 
+        generatedArticle = payload.article || '';
+        articleOutput.textContent = generatedArticle || 'Aucun contenu généré.';
+
+        generatedTweet = payload.tweet || '';
         renderSocialBlock(
           tweetOutput,
-          payload.tweet,
+          generatedTweet,
           Boolean(payload.tweet_published),
           payload.tweet_status_code,
           payload.tweet_error,
           'Aucun tweet généré.'
         );
 
+        generatedLinkedin = payload.linkedin_post || '';
         renderSocialBlock(
           linkedinOutput,
-          payload.linkedin_post,
+          generatedLinkedin,
           Boolean(payload.linkedin_published),
           payload.linkedin_status_code,
           payload.linkedin_error,
@@ -530,14 +686,17 @@
         );
 
         const statuses = [];
+        statuses.push(`Article généré`);
         statuses.push(`Tweet ${payload.tweet_published ? 'publié' : 'non publié'}`);
         statuses.push(`LinkedIn ${payload.linkedin_published ? 'publié' : 'non publié'}`);
         const hasFailure = !payload.tweet_published || !payload.linkedin_published;
         setStatus(`Playbook terminé – ${statuses.join(' · ')}.`, hasFailure);
       } catch (error) {
         setStatus(error.message, true);
+        generatedArticle = '';
       } finally {
         toggleLoading(false);
+        updateActionAvailability();
       }
     });
 
@@ -547,13 +706,17 @@
         setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
         return;
       }
+      if (!generatedTweet) {
+        setStatus('Générez d\'abord le tweet avant de le publier.', true);
+        return;
+      }
       try {
         toggleLoading(true);
         setStatus('Publication du tweet en cours…');
         const response = await fetch('/articles/publish-tweet', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(selection)
+          body: JSON.stringify({ ...selection, tweet_text: generatedTweet })
         });
         const payload = await response.json();
         if (!response.ok) {
@@ -569,6 +732,8 @@
           'Aucun tweet généré.'
         );
 
+        generatedTweet = payload.tweet || generatedTweet;
+
         if (payload.tweet_published) {
           setStatus('Tweet publié avec succès.');
         } else {
@@ -578,6 +743,7 @@
         setStatus(error.message, true);
       } finally {
         toggleLoading(false);
+        updateActionAvailability();
       }
     });
 
@@ -587,13 +753,17 @@
         setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
         return;
       }
+      if (!generatedLinkedin) {
+        setStatus('Générez d\'abord le post LinkedIn avant de le publier.', true);
+        return;
+      }
       try {
         toggleLoading(true);
         setStatus('Publication du post LinkedIn en cours…');
         const response = await fetch('/articles/publish-linkedin', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(selection)
+          body: JSON.stringify({ ...selection, linkedin_post: generatedLinkedin })
         });
         const payload = await response.json();
         if (!response.ok) {
@@ -609,6 +779,8 @@
           'Aucun post LinkedIn généré.'
         );
 
+        generatedLinkedin = payload.linkedin_post || generatedLinkedin;
+
         if (payload.linkedin_published) {
           setStatus('Post LinkedIn publié avec succès.');
         } else {
@@ -618,18 +790,20 @@
         setStatus(error.message, true);
       } finally {
         toggleLoading(false);
+        updateActionAvailability();
       }
     });
 
     function toggleLoading(state) {
       isLoading = Boolean(state);
       if (isLoading) {
-        generateBtn.disabled = true;
+        generateArticleBtn.disabled = true;
+        generateTweetBtn.disabled = true;
+        generateLinkedinBtn.disabled = true;
         runPlaybookBtn.disabled = true;
         publishTweetBtn.disabled = true;
         publishLinkedinBtn.disabled = true;
       } else {
-        generateBtn.disabled = false;
         updateActionAvailability();
       }
     }

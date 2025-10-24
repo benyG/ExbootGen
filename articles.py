@@ -415,12 +415,7 @@ def generate_article():
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        article = generate_certification_article(
-            selection.certification_name,
-            selection.provider_name,
-            exam_url,
-            topic_type,
-        )
+        article = _generate_article_content(selection, exam_url, topic_type)
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
@@ -446,13 +441,27 @@ def run_playbook():
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        tweet_result = _run_tweet_workflow(selection, exam_url, topic_type)
-        linkedin_result = _run_linkedin_workflow(selection, exam_url, topic_type)
+        article = _generate_article_content(selection, exam_url, topic_type)
+        tweet_text = _generate_tweet_text(selection, exam_url, topic_type)
+        tweet_result = _run_tweet_workflow(
+            selection,
+            exam_url,
+            topic_type,
+            tweet_text=tweet_text,
+        )
+        linkedin_text = _generate_linkedin_text(selection, exam_url, topic_type)
+        linkedin_result = _run_linkedin_workflow(
+            selection,
+            exam_url,
+            topic_type,
+            linkedin_post=linkedin_text,
+        )
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
     return jsonify(
         {
+            "article": article,
             "tweet": tweet_result.text,
             "tweet_response": tweet_result.response,
             "tweet_published": tweet_result.published,
@@ -471,17 +480,56 @@ def run_playbook():
     )
 
 
-def _run_tweet_workflow(
+def _generate_article_content(
     selection: Selection, exam_url: str, topic_type: str
-) -> SocialPostResult:
-    """Generate and publish the certification announcement tweet."""
+) -> str:
+    """Return the generated certification article content."""
 
-    tweet_text = generate_certification_tweet(
+    return generate_certification_article(
         selection.certification_name,
         selection.provider_name,
         exam_url,
         topic_type,
     )
+
+
+def _generate_tweet_text(
+    selection: Selection, exam_url: str, topic_type: str
+) -> str:
+    """Return the generated tweet announcing the certification article."""
+
+    return generate_certification_tweet(
+        selection.certification_name,
+        selection.provider_name,
+        exam_url,
+        topic_type,
+    )
+
+
+def _generate_linkedin_text(
+    selection: Selection, exam_url: str, topic_type: str
+) -> str:
+    """Return the generated LinkedIn announcement post."""
+
+    return generate_certification_linkedin_post(
+        selection.certification_name,
+        selection.provider_name,
+        exam_url,
+        topic_type,
+    )
+
+
+def _run_tweet_workflow(
+    selection: Selection,
+    exam_url: str,
+    topic_type: str,
+    *,
+    tweet_text: Optional[str] = None,
+) -> SocialPostResult:
+    """Generate (if necessary) and publish the certification announcement tweet."""
+
+    if tweet_text is None:
+        tweet_text = _generate_tweet_text(selection, exam_url, topic_type)
     try:
         response = _publish_tweet(tweet_text)
     except SocialPublishError as exc:
@@ -501,16 +549,16 @@ def _run_tweet_workflow(
 
 
 def _run_linkedin_workflow(
-    selection: Selection, exam_url: str, topic_type: str
+    selection: Selection,
+    exam_url: str,
+    topic_type: str,
+    *,
+    linkedin_post: Optional[str] = None,
 ) -> SocialPostResult:
-    """Generate and publish the LinkedIn announcement post."""
+    """Generate (if necessary) and publish the LinkedIn announcement post."""
 
-    linkedin_post = generate_certification_linkedin_post(
-        selection.certification_name,
-        selection.provider_name,
-        exam_url,
-        topic_type,
-    )
+    if linkedin_post is None:
+        linkedin_post = _generate_linkedin_text(selection, exam_url, topic_type)
     try:
         linkedin_response = _publish_linkedin_post(linkedin_post)
     except SocialPublishError as exc:
@@ -542,12 +590,7 @@ def generate_tweet():
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        tweet_text = generate_certification_tweet(
-            selection.certification_name,
-            selection.provider_name,
-            exam_url,
-            topic_type,
-        )
+        tweet_text = _generate_tweet_text(selection, exam_url, topic_type)
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
@@ -567,12 +610,7 @@ def generate_linkedin():
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        linkedin_post = generate_certification_linkedin_post(
-            selection.certification_name,
-            selection.provider_name,
-            exam_url,
-            topic_type,
-        )
+        linkedin_post = _generate_linkedin_text(selection, exam_url, topic_type)
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
@@ -592,7 +630,13 @@ def publish_tweet():
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        tweet_result = _run_tweet_workflow(selection, exam_url, topic_type)
+        tweet_text = (data.get("tweet_text") or "").strip()
+        tweet_result = _run_tweet_workflow(
+            selection,
+            exam_url,
+            topic_type,
+            tweet_text=tweet_text if tweet_text else None,
+        )
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
@@ -621,7 +665,13 @@ def publish_linkedin():
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        linkedin_result = _run_linkedin_workflow(selection, exam_url, topic_type)
+        linkedin_text = (data.get("linkedin_post") or "").strip()
+        linkedin_result = _run_linkedin_workflow(
+            selection,
+            exam_url,
+            topic_type,
+            linkedin_post=linkedin_text if linkedin_text else None,
+        )
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
