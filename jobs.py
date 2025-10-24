@@ -380,15 +380,18 @@ class RedisJobStore(BaseJobStore):
 
         max_connections_env = os.getenv("JOB_STORE_MAX_CONNECTIONS")
         connection_kwargs = {"decode_responses": True}
-        if max_connections_env:
+        if max_connections_env is not None:
             try:
                 max_connections = int(max_connections_env)
             except ValueError as exc:
                 raise JobStoreError(
-                    "JOB_STORE_MAX_CONNECTIONS doit être un entier positif."
+                    "JOB_STORE_MAX_CONNECTIONS doit être un entier non négatif."
                 ) from exc
             if max_connections > 0:
                 connection_kwargs["max_connections"] = max_connections
+        else:
+            cpu_count = os.cpu_count() or 1
+            connection_kwargs["max_connections"] = max(4, min(cpu_count, 16))
 
         self._redis = redis.Redis.from_url(url, **connection_kwargs)
         self._ns = namespace
