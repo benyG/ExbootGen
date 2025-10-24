@@ -159,6 +159,22 @@
       gap: 0.8rem;
     }
 
+    .image-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      padding-left: 0.2rem;
+    }
+
+    .image-toggle input[type="checkbox"] {
+      width: 1.05rem;
+      height: 1.05rem;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
     button {
       cursor: pointer;
       border: none;
@@ -304,6 +320,10 @@
           <button class="secondary" id="publishLinkedinBtn" disabled>Publier le post LinkedIn</button>
           <button class="secondary" id="runPlaybookBtn" disabled>Run playbook</button>
         </div>
+        <label class="image-toggle">
+          <input type="checkbox" id="addImageCheckbox">
+          <span>Ajouter une image</span>
+        </label>
       </div>
       <div class="status" id="statusArea"></div>
     </section>
@@ -343,12 +363,13 @@
     const articleOutput = document.getElementById('articleOutput');
     const tweetOutput = document.getElementById('tweetOutput');
     const linkedinOutput = document.getElementById('linkedinOutput');
+    const addImageCheckbox = document.getElementById('addImageCheckbox');
 
     let providers = [];
     let certifications = [];
     let isLoading = false;
 
-    function renderSocialBlock(element, text, published, statusCode, error, emptyMessage) {
+    function renderSocialBlock(element, text, published, statusCode, error, emptyMessage, imageName) {
       const displayText = text && text.trim() ? text : emptyMessage;
       let statusText = published ? 'Statut : Publié ✅' : 'Statut : Non publié';
       if ((published && statusCode && statusCode !== 200) || (!published && statusCode)) {
@@ -357,7 +378,12 @@
       if (!published && error) {
         statusText += ` – ${error}`;
       }
-      element.textContent = `${displayText}\n\n${statusText}`;
+      const metadata = [];
+      if (imageName) {
+        metadata.push(`Image : ${imageName}`);
+      }
+      metadata.push(statusText);
+      element.textContent = `${displayText}\n\n${metadata.join('\n')}`;
     }
 
     function getSelectionPayload() {
@@ -498,6 +524,7 @@
         setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
         return;
       }
+      selection.add_image = addImageCheckbox.checked;
       try {
         toggleLoading(true);
         setStatus('Exécution du playbook : génération et publication en cours…');
@@ -517,7 +544,8 @@
           Boolean(payload.tweet_published),
           payload.tweet_status_code,
           payload.tweet_error,
-          'Aucun tweet généré.'
+          'Aucun tweet généré.',
+          payload.tweet_image
         );
 
         renderSocialBlock(
@@ -526,7 +554,8 @@
           Boolean(payload.linkedin_published),
           payload.linkedin_status_code,
           payload.linkedin_error,
-          'Aucun post LinkedIn généré.'
+          'Aucun post LinkedIn généré.',
+          payload.linkedin_image
         );
 
         const statuses = [];
@@ -547,6 +576,7 @@
         setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
         return;
       }
+      selection.add_image = addImageCheckbox.checked;
       try {
         toggleLoading(true);
         setStatus('Publication du tweet en cours…');
@@ -566,7 +596,8 @@
           Boolean(payload.tweet_published),
           payload.tweet_status_code,
           payload.tweet_error,
-          'Aucun tweet généré.'
+          'Aucun tweet généré.',
+          payload.tweet_image
         );
 
         if (payload.tweet_published) {
@@ -587,6 +618,7 @@
         setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
         return;
       }
+      selection.add_image = addImageCheckbox.checked;
       try {
         toggleLoading(true);
         setStatus('Publication du post LinkedIn en cours…');
@@ -606,7 +638,8 @@
           Boolean(payload.linkedin_published),
           payload.linkedin_status_code,
           payload.linkedin_error,
-          'Aucun post LinkedIn généré.'
+          'Aucun post LinkedIn généré.',
+          payload.linkedin_image
         );
 
         if (payload.linkedin_published) {
