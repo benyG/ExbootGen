@@ -5,9 +5,12 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import mimetypes
+import random
 import secrets
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional, Tuple
 from urllib.parse import ParseResult, parse_qsl, quote, urlparse
 
@@ -19,6 +22,7 @@ from config import (
     DB_CONFIG,
     LINKEDIN_ACCESS_TOKEN,
     LINKEDIN_ACCESS_TOKEN_URL,
+    LINKEDIN_ASSET_REGISTER_URL,
     LINKEDIN_CLIENT_ID,
     LINKEDIN_CLIENT_SECRET,
     LINKEDIN_ORGANIZATION_URN,
@@ -28,6 +32,7 @@ from config import (
     X_API_ACCESS_TOKEN_SECRET,
     X_API_CONSUMER_KEY,
     X_API_CONSUMER_SECRET,
+    X_API_MEDIA_UPLOAD_URL,
     X_API_TWEET_URL,
 )
 from openai_api import (
@@ -67,6 +72,15 @@ class SocialPostResult:
     published: bool = False
     status_code: Optional[int] = None
     error: Optional[str] = None
+    media_filename: Optional[str] = None
+
+
+SOCIAL_IMAGE_DIR = Path(__file__).resolve().parent / "images"
+SOCIAL_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+
+class SocialImageError(RuntimeError):
+    """Raised when a social image cannot be selected."""
 
 class SocialPublishError(RuntimeError):
     """Exception raised when a social network publication fails.
@@ -185,6 +199,32 @@ def _build_oauth1_header(method: str, url: str) -> str:
     return f"OAuth {header_params}"
 
 
+def _list_social_images() -> list[Path]:
+    """Return the list of social images available on disk."""
+
+    if not SOCIAL_IMAGE_DIR.exists():
+        return []
+
+    return [
+        path
+        for path in SOCIAL_IMAGE_DIR.iterdir()
+        if path.is_file() and path.suffix.lower() in SOCIAL_IMAGE_EXTENSIONS
+    ]
+
+
+def _pick_random_social_image() -> Path:
+    """Return a random image path from the social images directory."""
+
+    images = _list_social_images()
+    if not images:
+        raise SocialImageError(
+            "Aucune image n'est disponible dans le dossier 'images'. Ajoutez des fichiers "
+            "(.png, .jpg, .jpeg, .gif ou .webp) pour activer cette fonctionnalité."
+        )
+
+    return random.choice(images)
+
+
 def render_x_callback() -> str:
     """Render the callback landing page for the X OAuth 2.0 flow."""
 
@@ -209,7 +249,45 @@ def articles_x_callback() -> str:
     return render_x_callback()
 
 
-def _publish_tweet(text: str) -> dict:
+def _upload_twitter_media(image_path: Path) -> str:
+    """Upload an image to X (Twitter) and return the media identifier."""
+
+    if not image_path.exists():
+        raise SocialPublishError(
+            f"Le fichier image '{image_path}' est introuvable.", status_code=400
+        )
+
+    headers = {
+        "Authorization": _build_oauth1_header("POST", X_API_MEDIA_UPLOAD_URL),
+    }
+
+    with image_path.open("rb") as file_handle:
+        response = requests.post(
+            X_API_MEDIA_UPLOAD_URL,
+            headers=headers,
+            files={"media": file_handle},
+            timeout=30,
+        )
+
+    if response.status_code >= 400:
+        raise SocialPublishError(
+            "Erreur lors du téléversement de l'image sur X "
+            f"({response.status_code}): {response.text}",
+            status_code=response.status_code,
+        )
+
+    payload = response.json()
+    media_id = payload.get("media_id_string") or payload.get("media_id")
+    if not media_id:
+        raise SocialPublishError(
+            "Réponse inattendue de l'API X lors du téléversement de l'image.",
+            status_code=response.status_code or 500,
+        )
+
+    return str(media_id)
+
+
+def _publish_tweet(text: str, media_path: Optional[Path] = None) -> dict:
     """Publish a tweet using the X (Twitter) v2 API."""
 
     if not text.strip():
@@ -231,15 +309,23 @@ def _publish_tweet(text: str) -> dict:
             "X_API_ACCESS_TOKEN_SECRET)."
         )
 
+    media_ids = None
+    if media_path:
+        media_ids = [_upload_twitter_media(media_path)]
+
     headers = {
         "Authorization": _build_oauth1_header("POST", X_API_TWEET_URL),
         "Content-Type": "application/json",
     }
 
+    payload = {"text": text}
+    if media_ids:
+        payload["media"] = {"media_ids": media_ids}
+
     response = requests.post(
         X_API_TWEET_URL,
         headers=headers,
-        json={"text": text},
+        json=payload,
         timeout=30,
     )
 
@@ -316,7 +402,108 @@ def _get_linkedin_access_token(force_refresh: bool = False) -> str:
     return token
 
 
-def _publish_linkedin_post(text: str) -> dict:
+def _upload_linkedin_image(image_path: Path) -> str:
+    """Upload an image to LinkedIn and return the asset URN."""
+
+    if not image_path.exists():
+        raise SocialPublishError(
+            f"Le fichier image '{image_path}' est introuvable.", status_code=400
+        )
+
+    if not LINKEDIN_ORGANIZATION_URN:
+        raise SocialPublishError(
+            "LINKEDIN_ORGANIZATION_URN doit être configuré pour envoyer des images LinkedIn.",
+            status_code=400,
+        )
+
+    image_bytes = image_path.read_bytes()
+    mime_type, _ = mimetypes.guess_type(str(image_path))
+    content_type = mime_type or "application/octet-stream"
+
+    last_error: Optional[SocialPublishError] = None
+    for force_refresh in (False, True):
+        token = _get_linkedin_access_token(force_refresh=force_refresh)
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "X-Restli-Protocol-Version": "2.0.0",
+        }
+        register_response = requests.post(
+            LINKEDIN_ASSET_REGISTER_URL,
+            headers=headers,
+            json={
+                "registerUploadRequest": {
+                    "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
+                    "owner": LINKEDIN_ORGANIZATION_URN,
+                    "serviceRelationships": [
+                        {
+                            "relationshipType": "OWNER",
+                            "identifier": "urn:li:userGeneratedContent",
+                        }
+                    ],
+                }
+            },
+            timeout=30,
+        )
+
+        if register_response.status_code == 401 and not force_refresh:
+            continue
+        if register_response.status_code >= 400:
+            last_error = SocialPublishError(
+                "Erreur lors de l'enregistrement de l'image LinkedIn "
+                f"({register_response.status_code}): {register_response.text}",
+                status_code=register_response.status_code,
+            )
+            break
+
+        value = register_response.json().get("value", {})
+        asset_urn = value.get("asset")
+        upload_mechanism = value.get("uploadMechanism", {})
+        upload_request = upload_mechanism.get(
+            "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest", {}
+        )
+        upload_url = upload_request.get("uploadUrl")
+
+        if not asset_urn or not upload_url:
+            last_error = SocialPublishError(
+                "Réponse LinkedIn invalide lors de l'enregistrement de l'image.",
+                status_code=register_response.status_code or 500,
+            )
+            break
+
+        upload_headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": content_type,
+        }
+        upload_response = requests.put(
+            upload_url,
+            headers=upload_headers,
+            data=image_bytes,
+            timeout=30,
+        )
+
+        if upload_response.status_code == 401 and not force_refresh:
+            continue
+        if upload_response.status_code >= 400:
+            last_error = SocialPublishError(
+                "Erreur lors du téléversement de l'image sur LinkedIn "
+                f"({upload_response.status_code}): {upload_response.text}",
+                status_code=upload_response.status_code,
+            )
+            break
+
+        return asset_urn
+
+    if last_error:
+        raise last_error
+
+    raise SocialPublishError(
+        "Impossible de téléverser l'image sur LinkedIn après nouvelle tentative.",
+        status_code=500,
+    )
+
+
+def _publish_linkedin_post(text: str, media_asset: Optional[str] = None) -> dict:
     """Publish a post to the configured LinkedIn organisation page."""
 
     if not text.strip():
@@ -333,15 +520,22 @@ def _publish_linkedin_post(text: str) -> dict:
             "Content-Type": "application/json",
             "X-Restli-Protocol-Version": "2.0.0",
         }
+        share_content = {
+            "shareCommentary": {"text": text},
+            "shareMediaCategory": "IMAGE" if media_asset else "NONE",
+        }
+        if media_asset:
+            share_content["media"] = [
+                {
+                    "status": "READY",
+                    "media": media_asset,
+                    "title": {"text": "Publication ExBoot"},
+                }
+            ]
         payload = {
             "author": LINKEDIN_ORGANIZATION_URN,
             "lifecycleState": "PUBLISHED",
-            "specificContent": {
-                "com.linkedin.ugc.ShareContent": {
-                    "shareCommentary": {"text": text},
-                    "shareMediaCategory": "NONE",
-                }
-            },
+            "specificContent": {"com.linkedin.ugc.ShareContent": share_content},
             "visibility": {
                 "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
             },
@@ -446,8 +640,13 @@ def run_playbook():
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        tweet_result = _run_tweet_workflow(selection, exam_url, topic_type)
-        linkedin_result = _run_linkedin_workflow(selection, exam_url, topic_type)
+        attach_image = bool(data.get("add_image"))
+        tweet_result = _run_tweet_workflow(
+            selection, exam_url, topic_type, attach_image=attach_image
+        )
+        linkedin_result = _run_linkedin_workflow(
+            selection, exam_url, topic_type, attach_image=attach_image
+        )
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
@@ -457,11 +656,21 @@ def run_playbook():
             "tweet_response": tweet_result.response,
             "tweet_published": tweet_result.published,
             "tweet_status_code": tweet_result.status_code,
+            **(
+                {"tweet_image": tweet_result.media_filename}
+                if tweet_result.media_filename
+                else {}
+            ),
             **({"tweet_error": tweet_result.error} if tweet_result.error else {}),
             "linkedin_post": linkedin_result.text,
             "linkedin_response": linkedin_result.response,
             "linkedin_published": linkedin_result.published,
             "linkedin_status_code": linkedin_result.status_code,
+            **(
+                {"linkedin_image": linkedin_result.media_filename}
+                if linkedin_result.media_filename
+                else {}
+            ),
             **(
                 {"linkedin_error": linkedin_result.error}
                 if linkedin_result.error
@@ -472,7 +681,10 @@ def run_playbook():
 
 
 def _run_tweet_workflow(
-    selection: Selection, exam_url: str, topic_type: str
+    selection: Selection,
+    exam_url: str,
+    topic_type: str,
+    attach_image: bool = False,
 ) -> SocialPostResult:
     """Generate and publish the certification announcement tweet."""
 
@@ -482,14 +694,28 @@ def _run_tweet_workflow(
         exam_url,
         topic_type,
     )
+    media_path: Optional[Path] = None
+    media_filename: Optional[str] = None
+    if attach_image:
+        try:
+            media_path = _pick_random_social_image()
+            media_filename = media_path.name
+        except SocialImageError as exc:
+            return SocialPostResult(
+                text=tweet_text,
+                published=False,
+                status_code=400,
+                error=str(exc),
+            )
     try:
-        response = _publish_tweet(tweet_text)
+        response = _publish_tweet(tweet_text, media_path=media_path)
     except SocialPublishError as exc:
         return SocialPostResult(
             text=tweet_text,
             published=False,
             status_code=exc.status_code,
             error=str(exc),
+            media_filename=media_filename,
         )
 
     return SocialPostResult(
@@ -497,11 +723,15 @@ def _run_tweet_workflow(
         response=response,
         published=True,
         status_code=200,
+        media_filename=media_filename,
     )
 
 
 def _run_linkedin_workflow(
-    selection: Selection, exam_url: str, topic_type: str
+    selection: Selection,
+    exam_url: str,
+    topic_type: str,
+    attach_image: bool = False,
 ) -> SocialPostResult:
     """Generate and publish the LinkedIn announcement post."""
 
@@ -511,14 +741,39 @@ def _run_linkedin_workflow(
         exam_url,
         topic_type,
     )
+    media_asset: Optional[str] = None
+    media_filename: Optional[str] = None
+    if attach_image:
+        try:
+            media_path = _pick_random_social_image()
+            media_filename = media_path.name
+            media_asset = _upload_linkedin_image(media_path)
+        except SocialImageError as exc:
+            return SocialPostResult(
+                text=linkedin_post,
+                published=False,
+                status_code=400,
+                error=str(exc),
+            )
+        except SocialPublishError as exc:
+            return SocialPostResult(
+                text=linkedin_post,
+                published=False,
+                status_code=exc.status_code,
+                error=str(exc),
+                media_filename=media_filename,
+            )
     try:
-        linkedin_response = _publish_linkedin_post(linkedin_post)
+        linkedin_response = _publish_linkedin_post(
+            linkedin_post, media_asset=media_asset
+        )
     except SocialPublishError as exc:
         return SocialPostResult(
             text=linkedin_post,
             published=False,
             status_code=exc.status_code,
             error=str(exc),
+            media_filename=media_filename,
         )
 
     return SocialPostResult(
@@ -526,6 +781,7 @@ def _run_linkedin_workflow(
         response=linkedin_response,
         published=True,
         status_code=200,
+        media_filename=media_filename,
     )
 
 
@@ -592,7 +848,12 @@ def publish_tweet():
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        tweet_result = _run_tweet_workflow(selection, exam_url, topic_type)
+        tweet_result = _run_tweet_workflow(
+            selection,
+            exam_url,
+            topic_type,
+            attach_image=bool(data.get("add_image")),
+        )
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
@@ -602,6 +863,8 @@ def publish_tweet():
         "tweet_published": tweet_result.published,
         "tweet_status_code": tweet_result.status_code,
     }
+    if tweet_result.media_filename:
+        payload["tweet_image"] = tweet_result.media_filename
     if tweet_result.error:
         payload["tweet_error"] = tweet_result.error
 
@@ -621,7 +884,12 @@ def publish_linkedin():
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        linkedin_result = _run_linkedin_workflow(selection, exam_url, topic_type)
+        linkedin_result = _run_linkedin_workflow(
+            selection,
+            exam_url,
+            topic_type,
+            attach_image=bool(data.get("add_image")),
+        )
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
@@ -631,6 +899,8 @@ def publish_linkedin():
         "linkedin_published": linkedin_result.published,
         "linkedin_status_code": linkedin_result.status_code,
     }
+    if linkedin_result.media_filename:
+        payload["linkedin_image"] = linkedin_result.media_filename
     if linkedin_result.error:
         payload["linkedin_error"] = linkedin_result.error
 

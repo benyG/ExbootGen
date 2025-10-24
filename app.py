@@ -187,6 +187,48 @@ def make_celery() -> Celery:
 
 
 celery_app = make_celery()
+_INITIAL_TASK_ALWAYS_EAGER = bool(getattr(celery_app.conf, "task_always_eager", False))
+_INITIAL_TASK_EAGER_PROPAGATES = bool(
+    getattr(celery_app.conf, "task_eager_propagates", False)
+)
+
+_TASK_QUEUE_LOCK = Lock()
+_TASK_QUEUE_DISABLED = False
+
+
+def _is_task_queue_disabled() -> bool:
+    with _TASK_QUEUE_LOCK:
+        return _TASK_QUEUE_DISABLED
+
+
+def _disable_task_queue(reason: str | Exception) -> None:
+    """Disable the distributed task queue after a fatal connection error."""
+
+    global _TASK_QUEUE_DISABLED
+    with _TASK_QUEUE_LOCK:
+        if _TASK_QUEUE_DISABLED:
+            return
+        _TASK_QUEUE_DISABLED = True
+
+    celery_app.conf.task_always_eager = True
+    celery_app.conf.task_eager_propagates = True
+    app.logger.warning(
+        "Task queue disabled after failure (%s). Population jobs will now run locally until the application is restarted.",
+        reason,
+    )
+
+
+def _reset_task_queue_state_for_testing() -> None:  # pragma: no cover - test helper
+    """Re-enable the task queue; used exclusively by the unit test suite."""
+
+    global _TASK_QUEUE_DISABLED
+    with _TASK_QUEUE_LOCK:
+        _TASK_QUEUE_DISABLED = False
+
+    celery_app.conf.task_always_eager = _INITIAL_TASK_ALWAYS_EAGER
+    celery_app.conf.task_eager_propagates = _INITIAL_TASK_EAGER_PROPAGATES
+
+
 job_store = create_job_store()
 
 QUEUE_EXCEPTIONS = (CeleryError, OperationalError, ConnectionError, OSError)
@@ -973,6 +1015,45 @@ def _run_population_thread(job_id: str, provider_id: int, cert_id: int) -> threa
     return thread
 
 
+def _start_population_locally(
+    job_id: str,
+    provider_id: int,
+    cert_id: int,
+    *,
+    error: Exception | None = None,
+):
+    """Execute the population workflow locally and return an HTTP response."""
+
+    try:
+        _run_population_thread(job_id, provider_id, cert_id)
+    except Exception:  # pragma: no cover - fallback may still fail
+        failure_message = (
+            "Impossible de démarrer le traitement : la file d'attente des tâches est indisponible."
+        )
+        if error is not None:
+            failure_message += f" ({error})"
+        set_cached_status(job_id, "failed", error=str(error) if error else failure_message)
+        job_store.set_status(job_id, "failed", error=str(error) if error else failure_message)
+        return (
+            jsonify({"error": failure_message}),
+            500,
+        )
+
+    if error is None:
+        app.logger.info(
+            "Population job %s running in local thread because the task queue is disabled.",
+            job_id,
+        )
+    else:
+        app.logger.warning(
+            "Population job %s running in local thread because the task queue is unavailable.",
+            job_id,
+        )
+
+    payload = {"status": "queued", "job_id": job_id, "mode": "local"}
+    return jsonify(payload)
+
+
 def _ensure_job_marked_running(job_id: str, metadata: Dict[str, int]) -> None:
     set_cached_status(job_id, "running")
     try:
@@ -1012,31 +1093,17 @@ def populate_process():
         metadata={"provider_id": provider_id, "cert_id": cert_id},
     )
 
+    if _is_task_queue_disabled():
+        return _start_population_locally(job_id, provider_id, cert_id)
+
     try:
         run_population_job.apply_async(args=(provider_id, cert_id), task_id=job_id)
     except QUEUE_EXCEPTIONS as exc:  # pragma: no cover - defensive, surfaced to client
         app.logger.exception(
             "Unable to enqueue population job: provider_id=%s cert_id=%s", provider_id, cert_id
         )
-        try:
-            _run_population_thread(job_id, provider_id, cert_id)
-        except Exception:  # pragma: no cover - fallback may still fail
-            set_cached_status(job_id, "failed", error=str(exc))
-            job_store.set_status(job_id, "failed", error=str(exc))
-            return (
-                jsonify(
-                    {
-                        "error": "Impossible de démarrer le traitement : "
-                        "la file d'attente des tâches est indisponible."
-                    }
-                ),
-                500,
-            )
-        app.logger.warning(
-            "Population job %s running in local thread because the task queue is unavailable.",
-            job_id,
-        )
-        return jsonify({"status": "queued", "job_id": job_id, "mode": "local"})
+        _disable_task_queue(str(exc))
+        return _start_population_locally(job_id, provider_id, cert_id, error=exc)
     except Exception as exc:
         if getattr(celery_app.conf, "task_always_eager", False):
             app.logger.exception(

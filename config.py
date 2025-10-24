@@ -45,6 +45,9 @@ API_REQUEST_DELAY = float(os.environ.get("API_REQUEST_DELAY", "1"))
 # (``X_API_CONSUMER_KEY``, ``X_API_CONSUMER_SECRET``, ``X_API_ACCESS_TOKEN``,
 # ``X_API_ACCESS_TOKEN_SECRET``).
 X_API_TWEET_URL = "https://api.x.com/2/tweets"
+X_API_MEDIA_UPLOAD_URL = os.environ.get(
+    "X_API_MEDIA_UPLOAD_URL", "https://upload.twitter.com/1.1/media/upload.json"
+)
 X_API_CONSUMER_KEY = os.environ.get("X_API_CONSUMER_KEY", "")
 X_API_CONSUMER_SECRET = os.environ.get("X_API_CONSUMER_SECRET", "")
 X_API_ACCESS_TOKEN = os.environ.get("X_API_ACCESS_TOKEN", "")
@@ -63,6 +66,10 @@ LINKEDIN_POST_URL = os.environ.get(
 )
 LINKEDIN_ACCESS_TOKEN_URL = os.environ.get(
     "LINKEDIN_ACCESS_TOKEN_URL", "https://www.linkedin.com/oauth/v2/accessToken"
+)
+LINKEDIN_ASSET_REGISTER_URL = os.environ.get(
+    "LINKEDIN_ASSET_REGISTER_URL",
+    "https://api.linkedin.com/v2/assets?action=registerUpload",
 )
 
 # ---------------------------------------------------------------------------

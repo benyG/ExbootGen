@@ -203,5 +203,48 @@ class JobStatusFallbackTest(unittest.TestCase):
         self.assertIn("Started", payload["log"])
         self.assertEqual(payload["counters"].get("progress"), 1)
 
+
+class PopulateQueueDisableTest(unittest.TestCase):
+    def setUp(self):
+        app._reset_task_queue_state_for_testing()
+        self.client = app.app.test_client()
+
+    def tearDown(self) -> None:
+        app._reset_task_queue_state_for_testing()
+        with jobs._JOB_CACHE._lock:
+            jobs._JOB_CACHE._jobs.clear()
+        return super().tearDown()
+
+    def test_queue_disabled_after_operational_error(self):
+        with patch.object(
+            app.run_population_job,
+            "apply_async",
+            side_effect=app.OperationalError("max clients"),
+        ), patch.object(app, "_run_population_thread") as run_thread:
+            run_thread.return_value = None
+            response = self.client.post(
+                "/populate/process",
+                data={"provider_id": "1", "cert_id": "2"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["mode"], "local")
+        self.assertTrue(app._is_task_queue_disabled())
+        run_thread.assert_called_once()
+
+        with patch.object(app.run_population_job, "apply_async") as apply_mock, \
+             patch.object(app, "_run_population_thread") as run_thread_again:
+            run_thread_again.return_value = None
+            response_again = self.client.post(
+                "/populate/process",
+                data={"provider_id": "1", "cert_id": "2"},
+            )
+
+        apply_mock.assert_not_called()
+        run_thread_again.assert_called_once()
+        self.assertEqual(response_again.status_code, 200)
+        self.assertEqual(response_again.get_json()["mode"], "local")
+
 if __name__ == '__main__':
     unittest.main()
