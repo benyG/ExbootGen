@@ -629,7 +629,7 @@ def generate_article():
 
 @articles_bp.route("/run-playbook", methods=["POST"])
 def run_playbook():
-    """Run the social playbook: publish tweet and LinkedIn post."""
+    """Run the social playbook: generate content and publish announcements."""
 
     data = request.get_json() or {}
 
@@ -641,17 +641,46 @@ def run_playbook():
     try:
         selection = _fetch_selection(provider_id, certification_id)
         attach_image = bool(data.get("add_image"))
+        article = generate_certification_article(
+            selection.certification_name,
+            selection.provider_name,
+            exam_url,
+            topic_type,
+        )
+        tweet_text = generate_certification_tweet(
+            selection.certification_name,
+            selection.provider_name,
+            exam_url,
+            topic_type,
+        )
         tweet_result = _run_tweet_workflow(
-            selection, exam_url, topic_type, attach_image=attach_image
+            selection,
+            exam_url,
+            topic_type,
+            attach_image=attach_image,
+            tweet_text=tweet_text,
+        )
+        linkedin_post = generate_certification_linkedin_post(
+            selection.certification_name,
+            selection.provider_name,
+            exam_url,
+            topic_type,
         )
         linkedin_result = _run_linkedin_workflow(
-            selection, exam_url, topic_type, attach_image=attach_image
+            selection,
+            exam_url,
+            topic_type,
+            attach_image=attach_image,
+            linkedin_post=linkedin_post,
         )
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
     return jsonify(
         {
+            "article": article,
+            "provider_name": selection.provider_name,
+            "certification_name": selection.certification_name,
             "tweet": tweet_result.text,
             "tweet_response": tweet_result.response,
             "tweet_published": tweet_result.published,
@@ -685,14 +714,19 @@ def _run_tweet_workflow(
     exam_url: str,
     topic_type: str,
     attach_image: bool = False,
+    tweet_text: Optional[str] = None,
 ) -> SocialPostResult:
     """Generate and publish the certification announcement tweet."""
 
-    tweet_text = generate_certification_tweet(
-        selection.certification_name,
-        selection.provider_name,
-        exam_url,
-        topic_type,
+    tweet_body = (
+        tweet_text
+        if tweet_text and tweet_text.strip()
+        else generate_certification_tweet(
+            selection.certification_name,
+            selection.provider_name,
+            exam_url,
+            topic_type,
+        )
     )
     media_path: Optional[Path] = None
     media_filename: Optional[str] = None
@@ -702,16 +736,16 @@ def _run_tweet_workflow(
             media_filename = media_path.name
         except SocialImageError as exc:
             return SocialPostResult(
-                text=tweet_text,
+                text=tweet_body,
                 published=False,
                 status_code=400,
                 error=str(exc),
             )
     try:
-        response = _publish_tweet(tweet_text, media_path=media_path)
+        response = _publish_tweet(tweet_body, media_path=media_path)
     except SocialPublishError as exc:
         return SocialPostResult(
-            text=tweet_text,
+            text=tweet_body,
             published=False,
             status_code=exc.status_code,
             error=str(exc),
@@ -719,7 +753,7 @@ def _run_tweet_workflow(
         )
 
     return SocialPostResult(
-        text=tweet_text,
+        text=tweet_body,
         response=response,
         published=True,
         status_code=200,
@@ -732,14 +766,19 @@ def _run_linkedin_workflow(
     exam_url: str,
     topic_type: str,
     attach_image: bool = False,
+    linkedin_post: Optional[str] = None,
 ) -> SocialPostResult:
     """Generate and publish the LinkedIn announcement post."""
 
-    linkedin_post = generate_certification_linkedin_post(
-        selection.certification_name,
-        selection.provider_name,
-        exam_url,
-        topic_type,
+    linkedin_body = (
+        linkedin_post
+        if linkedin_post and linkedin_post.strip()
+        else generate_certification_linkedin_post(
+            selection.certification_name,
+            selection.provider_name,
+            exam_url,
+            topic_type,
+        )
     )
     media_asset: Optional[str] = None
     media_filename: Optional[str] = None
@@ -750,14 +789,14 @@ def _run_linkedin_workflow(
             media_asset = _upload_linkedin_image(media_path)
         except SocialImageError as exc:
             return SocialPostResult(
-                text=linkedin_post,
+                text=linkedin_body,
                 published=False,
                 status_code=400,
                 error=str(exc),
             )
         except SocialPublishError as exc:
             return SocialPostResult(
-                text=linkedin_post,
+                text=linkedin_body,
                 published=False,
                 status_code=exc.status_code,
                 error=str(exc),
@@ -765,11 +804,11 @@ def _run_linkedin_workflow(
             )
     try:
         linkedin_response = _publish_linkedin_post(
-            linkedin_post, media_asset=media_asset
+            linkedin_body, media_asset=media_asset
         )
     except SocialPublishError as exc:
         return SocialPostResult(
-            text=linkedin_post,
+            text=linkedin_body,
             published=False,
             status_code=exc.status_code,
             error=str(exc),
@@ -777,7 +816,7 @@ def _run_linkedin_workflow(
         )
 
     return SocialPostResult(
-        text=linkedin_post,
+        text=linkedin_body,
         response=linkedin_response,
         published=True,
         status_code=200,
@@ -853,6 +892,7 @@ def publish_tweet():
             exam_url,
             topic_type,
             attach_image=bool(data.get("add_image")),
+            tweet_text=data.get("tweet"),
         )
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
@@ -889,6 +929,7 @@ def publish_linkedin():
             exam_url,
             topic_type,
             attach_image=bool(data.get("add_image")),
+            linkedin_post=data.get("linkedin_post"),
         )
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
