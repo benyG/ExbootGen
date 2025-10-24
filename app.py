@@ -124,15 +124,14 @@ def make_celery() -> Celery:
 
     broker_url = os.getenv("CELERY_BROKER_URL")
     result_backend = os.getenv("CELERY_RESULT_BACKEND")
-    pool_limit_env = os.getenv("CELERY_POOL_LIMIT")
+    pool_limit_env = os.getenv("CELERY_POOL_LIMIT") or os.getenv("CELERY_BROKER_POOL_LIMIT")
     if pool_limit_env is not None:
         try:
             pool_limit = max(int(pool_limit_env), 1)
         except ValueError:
             raise ValueError("CELERY_POOL_LIMIT doit être un entier positif") from None
     else:
-        cpu_count = os.cpu_count() or 1
-        pool_limit = max(cpu_count, 4)
+        pool_limit = max(_default_parallelism(maximum=8), 2)
 
     if eager:
         broker_url = broker_url or "memory://"
@@ -178,6 +177,9 @@ def make_celery() -> Celery:
 
     if redis_max_connections is not None and redis_max_connections > 0:
         celery_app.conf.redis_max_connections = redis_max_connections
+    celery_app.conf.broker_connection_retry_on_startup = _env_flag(
+        "CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP", "1"
+    )
 
     if eager:
         celery_app.conf.task_always_eager = True
