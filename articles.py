@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import json
 import mimetypes
 import random
 import secrets
@@ -16,7 +17,7 @@ from urllib.parse import ParseResult, parse_qsl, quote, urlparse
 
 import mysql.connector
 import requests
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, Response, jsonify, render_template, request, stream_with_context
 
 from config import (
     DB_CONFIG,
@@ -38,6 +39,7 @@ from config import (
 from openai_api import (
     generate_certification_article,
     generate_certification_linkedin_post,
+    generate_certification_presentation_brief,
     generate_certification_tweet,
 )
 
@@ -791,7 +793,7 @@ def run_playbook():
     data = request.get_json() or {}
 
     try:
-        provider_id, certification_id, exam_url, topic_type = _extract_selection_payload(data)
+        provider_id, certification_id, _exam_url, topic_type = _extract_selection_payload(data)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -828,6 +830,7 @@ def run_playbook():
     try:
         tweet_result = _run_tweet_workflow(
             selection,
+            certification_id,
             exam_url,
             topic_type,
             attach_image=attach_image,
@@ -838,7 +841,38 @@ def run_playbook():
             topic_type,
             attach_image=attach_image,
         )
-    except Exception as exc:  # pragma: no cover - propagated to client for visibility
+
+    if not isinstance(brief_payload["prerequisites"], list) or not isinstance(
+        brief_payload["targeted_profession"], list
+    ):
+        return jsonify({"error": "Les champs 'prerequisites' et 'targeted_profession' doivent être des listes."}), 400
+
+    if not isinstance(brief_payload["studytip"], str):
+        return jsonify({"error": "Le champ 'studytip' doit être une chaîne de caractères."}), 400
+
+    brief_payload["prerequisites"] = [
+        str(item).strip() for item in brief_payload["prerequisites"] if str(item).strip()
+    ]
+    brief_payload["targeted_profession"] = [
+        str(item).strip()
+        for item in brief_payload["targeted_profession"]
+        if str(item).strip()
+    ]
+    brief_payload["prerequisites"] = brief_payload["prerequisites"][:3]
+    brief_payload["targeted_profession"] = brief_payload["targeted_profession"][:3]
+    brief_payload["studytip"] = brief_payload["studytip"].strip()
+
+    if not brief_payload["prerequisites"] or not brief_payload["targeted_profession"] or not brief_payload["studytip"]:
+        return jsonify({"error": "Le JSON doit contenir des valeurs pour toutes les clés."}), 400
+
+    try:
+        selection = _fetch_selection(provider_id, certification_id)
+        _persist_certification_brief(provider_id, certification_id, brief_payload)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except Exception as exc:  # pragma: no cover - defensive fallback
         return jsonify({"error": str(exc)}), 500
 
     payload = {
@@ -855,6 +889,194 @@ def run_playbook():
     payload.update(_serialize_social_result("linkedin", linkedin_result))
 
     return jsonify(payload)
+
+
+@articles_bp.route("/run-playbook", methods=["POST"])
+def run_playbook():
+    """Run the publication playbook and stream progress updates."""
+
+    data = request.get_json() or {}
+
+    try:
+        provider_id, certification_id, exam_url, topic_type = _extract_selection_payload(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    try:
+        selection = _fetch_selection(provider_id, certification_id)
+    except Exception as exc:  # pragma: no cover - propagated for visibility
+        return jsonify({"error": str(exc)}), 500
+
+    attach_image = bool(data.get("add_image"))
+    include_brief = topic_type == "certification_presentation"
+    total_steps = 6 if include_brief else 4
+
+    article_text: str = ""
+    blog_id: Optional[int] = None
+    blog_title: str = ""
+    brief_payload: Optional[dict] = None
+    linkedin_post_body: str = ""
+    linkedin_result: Optional[SocialPostResult] = None
+
+    def _ndjson_event(payload: dict) -> str:
+        return json.dumps(payload, ensure_ascii=False) + "\n"
+
+    def event_stream():
+        nonlocal article_text, blog_id, blog_title, brief_payload, linkedin_post_body, linkedin_result
+
+        completed_steps = 0
+
+        def progress_event(message: str) -> str:
+            label = message
+            if completed_steps:
+                label = f"Étape {completed_steps}/{total_steps} · {message}"
+            progress_value = round(completed_steps / total_steps, 4)
+            return _ndjson_event(
+                {
+                    "type": "progress",
+                    "message": label,
+                    "step": completed_steps,
+                    "total_steps": total_steps,
+                    "progress": progress_value,
+                }
+            )
+
+        try:
+            yield _ndjson_event(
+                {
+                    "type": "progress",
+                    "message": "Démarrage du runbook…",
+                    "step": completed_steps,
+                    "total_steps": total_steps,
+                    "progress": 0,
+                }
+            )
+
+            article_text = generate_certification_article(
+                selection.certification_name,
+                selection.provider_name,
+                exam_url,
+                topic_type,
+            )
+            completed_steps += 1
+            yield progress_event("Article généré.")
+
+            blog_id, blog_title = _persist_article(
+                selection,
+                certification_id,
+                exam_url,
+                topic_type,
+                article_text,
+            )
+            completed_steps += 1
+            article_published_message = "Article publié."
+            if blog_id:
+                article_published_message = f"Article publié (ID {blog_id})."
+            yield progress_event(article_published_message)
+
+            if include_brief:
+                brief_payload = generate_certification_presentation_brief(
+                    selection.certification_name,
+                    selection.provider_name,
+                )
+                completed_steps += 1
+                yield progress_event("Résumé JSON généré.")
+
+                _persist_certification_brief(
+                    provider_id,
+                    certification_id,
+                    brief_payload,
+                )
+                completed_steps += 1
+                yield progress_event(
+                    "Résumé JSON publié dans la fiche certification."
+                )
+
+            linkedin_post_body = generate_certification_linkedin_post(
+                selection.certification_name,
+                selection.provider_name,
+                exam_url,
+                topic_type,
+            )
+            completed_steps += 1
+            yield progress_event("Post LinkedIn généré.")
+
+            linkedin_result = _run_linkedin_workflow(
+                selection,
+                exam_url,
+                topic_type,
+                attach_image=attach_image,
+                linkedin_post=linkedin_post_body,
+            )
+            if not linkedin_result.published:
+                error_message = (
+                    linkedin_result.error
+                    or "La publication LinkedIn a échoué."
+                )
+                raise RuntimeError(error_message)
+
+            completed_steps += 1
+            yield progress_event("Post LinkedIn publié.")
+
+            completed_steps = total_steps
+            yield _ndjson_event(
+                {
+                    "type": "complete",
+                    "message": "Runbook terminé avec succès.",
+                    "step": completed_steps,
+                    "total_steps": total_steps,
+                    "progress": 1.0,
+                    "success": True,
+                    "provider_name": selection.provider_name,
+                    "certification_name": selection.certification_name,
+                    "article": article_text,
+                    "blog_id": blog_id,
+                    "blog_title": blog_title,
+                    "brief": brief_payload,
+                    "brief_included": include_brief,
+                    "brief_published": bool(brief_payload) if include_brief else False,
+                    "linkedin_post": linkedin_result.text if linkedin_result else "",
+                    "linkedin_published": bool(
+                        linkedin_result.published if linkedin_result else False
+                    ),
+                    "linkedin_status_code": (
+                        linkedin_result.status_code if linkedin_result else None
+                    ),
+                    "linkedin_error": (
+                        linkedin_result.error if linkedin_result else None
+                    ),
+                    "linkedin_image": (
+                        linkedin_result.media_filename if linkedin_result else None
+                    ),
+                    "linkedin_response": (
+                        linkedin_result.response if linkedin_result else None
+                    ),
+                }
+            )
+        except Exception as exc:  # pragma: no cover - surfaced to clients
+            error_message = (
+                f"Échec à l'étape {completed_steps + 1}/{total_steps} : {exc}"
+                if completed_steps < total_steps
+                else str(exc)
+            )
+            yield _ndjson_event(
+                {
+                    "type": "error",
+                    "message": error_message,
+                    "step": completed_steps,
+                    "total_steps": total_steps,
+                    "progress": round(completed_steps / total_steps, 4)
+                    if total_steps
+                    else 0,
+                }
+            )
+
+    headers = {"Cache-Control": "no-cache"}
+    return Response(
+        stream_with_context(event_stream()),
+        mimetype="application/x-ndjson",
+        headers=headers,
+    )
 
 
 def _run_tweet_workflow(
