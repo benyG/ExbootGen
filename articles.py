@@ -241,6 +241,37 @@ def _persist_article(
     return blog_id, title
 
 
+def _persist_certification_brief(
+    provider_id: int,
+    certification_id: int,
+    brief_payload: dict,
+) -> None:
+    """Store the certification brief JSON in the ``courses.art`` column."""
+
+    serialized = json.dumps(brief_payload, ensure_ascii=False)
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE courses SET art = %s WHERE id = %s AND prov = %s",
+            (serialized, certification_id, provider_id),
+        )
+        if cursor.rowcount == 0:
+            raise RuntimeError(
+                "Impossible de mettre à jour la fiche certification (cours introuvable)."
+            )
+        conn.commit()
+    except mysql.connector.Error as exc:
+        conn.rollback()
+        raise RuntimeError(
+            "Erreur lors de l'enregistrement de la fiche certification."
+        ) from exc
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def _percent_encode(value: str) -> str:
     """Return a string percent-encoded according to RFC 3986."""
 
@@ -746,6 +777,45 @@ def generate_article():
     )
 
 
+@articles_bp.route("/generate-brief", methods=["POST"])
+def generate_certification_brief():
+    """Generate the certification presentation brief as JSON."""
+
+    data = request.get_json() or {}
+
+    try:
+        provider_id, certification_id, _exam_url, topic_type = _extract_selection_payload(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if topic_type != "certification_presentation":
+        return (
+            jsonify(
+                {
+                    "error": "La fiche JSON n'est disponible que pour le type 'certification_presentation'."
+                }
+            ),
+            400,
+        )
+
+    try:
+        selection = _fetch_selection(provider_id, certification_id)
+        brief = generate_certification_presentation_brief(
+            selection.certification_name,
+            selection.provider_name,
+        )
+    except Exception as exc:  # pragma: no cover - surfaced to clients
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify(
+        {
+            "brief": brief,
+            "provider_name": selection.provider_name,
+            "certification_name": selection.certification_name,
+        }
+    )
+
+
 @articles_bp.route("/publish", methods=["POST"])
 def publish_article():
     """Persist the generated article and link it to the certification."""
@@ -786,9 +856,9 @@ def publish_article():
     )
 
 
-@articles_bp.route("/run-playbook", methods=["POST"])
-def run_playbook():
-    """Run the social playbook: generate content and publish announcements."""
+@articles_bp.route("/publish-brief", methods=["POST"])
+def publish_certification_brief():
+    """Store the certification presentation brief into the course record."""
 
     data = request.get_json() or {}
 
@@ -797,73 +867,69 @@ def run_playbook():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    persist_article = bool(data.get("persist_article", True))
-
-    try:
-        selection = _fetch_selection(provider_id, certification_id)
-        attach_image = bool(data.get("add_image"))
-        article = generate_certification_article(
-            selection.certification_name,
-            selection.provider_name,
-            exam_url,
-            topic_type,
+    if topic_type != "certification_presentation":
+        return (
+            jsonify(
+                {
+                    "error": "La publication du JSON est réservée au type 'certification_presentation'."
+                }
+            ),
+            400,
         )
-    except Exception as exc:  # pragma: no cover - propagated to client for visibility
-        return jsonify({"error": str(exc)}), 500
 
-    blog_id: Optional[int] = None
-    blog_title: Optional[str] = None
-    if persist_article:
+    brief_payload = data.get("brief")
+    if isinstance(brief_payload, str):
         try:
-            blog_id, blog_title = _persist_article(
-                selection,
-                certification_id,
-                exam_url,
-                topic_type,
-                article,
-            )
-        except ValueError as exc:
-            return jsonify({"error": str(exc)}), 400
-        except RuntimeError as exc:
-            return jsonify({"error": str(exc)}), 500
+            brief_payload = json.loads(brief_payload)
+        except json.JSONDecodeError as exc:
+            return jsonify({"error": f"JSON invalide fourni: {exc}"}), 400
 
-    try:
-        tweet_result = _run_tweet_workflow(
-            selection,
-            certification_id,
-            exam_url,
-            topic_type,
-            attach_image=attach_image,
-        )
-        linkedin_result = _run_linkedin_workflow(
-            selection,
-            exam_url,
-            topic_type,
-            attach_image=attach_image,
+    if not isinstance(brief_payload, dict):
+        return jsonify({"error": "La fiche JSON fournie est invalide."}), 400
+
+    expected_keys = {"prerequisites", "targeted_profession", "studytip"}
+    missing = expected_keys.difference(brief_payload.keys())
+    if missing:
+        return (
+            jsonify(
+                {
+                    "error": "Clés manquantes dans la fiche JSON: "
+                    + ", ".join(sorted(missing))
+                }
+            ),
+            400,
         )
 
-    if not isinstance(brief_payload["prerequisites"], list) or not isinstance(
-        brief_payload["targeted_profession"], list
-    ):
-        return jsonify({"error": "Les champs 'prerequisites' et 'targeted_profession' doivent être des listes."}), 400
+    prerequisites = brief_payload.get("prerequisites")
+    targeted_profession = brief_payload.get("targeted_profession")
+    studytip = brief_payload.get("studytip")
 
-    if not isinstance(brief_payload["studytip"], str):
+    if not isinstance(prerequisites, list):
+        return jsonify({"error": "Le champ 'prerequisites' doit être une liste."}), 400
+
+    if not isinstance(targeted_profession, list):
+        return jsonify({"error": "Le champ 'targeted_profession' doit être une liste."}), 400
+
+    if not isinstance(studytip, str):
         return jsonify({"error": "Le champ 'studytip' doit être une chaîne de caractères."}), 400
 
-    brief_payload["prerequisites"] = [
-        str(item).strip() for item in brief_payload["prerequisites"] if str(item).strip()
-    ]
-    brief_payload["targeted_profession"] = [
+    cleaned_prerequisites = [str(item).strip() for item in prerequisites if str(item).strip()]
+    cleaned_targeted_profession = [
         str(item).strip()
-        for item in brief_payload["targeted_profession"]
+        for item in targeted_profession
         if str(item).strip()
     ]
-    brief_payload["prerequisites"] = brief_payload["prerequisites"][:3]
-    brief_payload["targeted_profession"] = brief_payload["targeted_profession"][:3]
-    brief_payload["studytip"] = brief_payload["studytip"].strip()
+    cleaned_studytip = studytip.strip()
 
-    if not brief_payload["prerequisites"] or not brief_payload["targeted_profession"] or not brief_payload["studytip"]:
+    cleaned_prerequisites = cleaned_prerequisites[:3]
+    cleaned_targeted_profession = cleaned_targeted_profession[:3]
+
+    if not cleaned_prerequisites or not cleaned_targeted_profession or not cleaned_studytip:
         return jsonify({"error": "Le JSON doit contenir des valeurs pour toutes les clés."}), 400
+
+    brief_payload["prerequisites"] = cleaned_prerequisites
+    brief_payload["targeted_profession"] = cleaned_targeted_profession
+    brief_payload["studytip"] = cleaned_studytip
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
@@ -875,20 +941,13 @@ def run_playbook():
     except Exception as exc:  # pragma: no cover - defensive fallback
         return jsonify({"error": str(exc)}), 500
 
-    payload = {
-        "article": article,
-        "provider_name": selection.provider_name,
-        "certification_name": selection.certification_name,
-    }
-    if blog_id is not None:
-        payload["blog_id"] = blog_id
-    if blog_title:
-        payload["blog_title"] = blog_title
-
-    payload.update(_serialize_social_result("tweet", tweet_result))
-    payload.update(_serialize_social_result("linkedin", linkedin_result))
-
-    return jsonify(payload)
+    return jsonify(
+        {
+            "provider_name": selection.provider_name,
+            "certification_name": selection.certification_name,
+            "brief": brief_payload,
+        }
+    )
 
 
 @articles_bp.route("/run-playbook", methods=["POST"])

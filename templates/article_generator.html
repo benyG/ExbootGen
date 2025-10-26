@@ -198,6 +198,31 @@
       transition: transform 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease;
     }
 
+    button.is-loading {
+      position: relative;
+      pointer-events: none;
+      opacity: 0.75;
+    }
+
+    button.is-loading::after {
+      content: '';
+      position: absolute;
+      right: 1.2rem;
+      top: 50%;
+      width: 0.9rem;
+      height: 0.9rem;
+      margin-top: -0.45rem;
+      border-radius: 999px;
+      border: 2px solid rgba(248, 250, 252, 0.35);
+      border-top-color: var(--accent);
+      animation: button-spin 0.8s linear infinite;
+    }
+
+    @keyframes button-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
     button.primary {
       background: linear-gradient(135deg, rgba(71,245,192,0.85), rgba(124,247,255,0.9));
       color: #041221;
@@ -443,8 +468,8 @@
       <p style="margin-top:0;margin-bottom:1rem;color:var(--text-muted);font-size:0.9rem">Disponible uniquement lorsque le type de sujet « Certification presentation » est sélectionné. Génère et publie le JSON dans le champ <code>art</code> de la certification.</p>
       <div class="json-output" id="certBriefOutput">Le JSON généré apparaîtra ici lorsque disponible.</div>
       <div class="block-actions" style="gap:0.6rem;justify-content:flex-end;flex-wrap:wrap">
-        <button class="secondary" id="generateBriefBtn">Générer le JSON</button>
-        <button class="secondary" id="publishBriefBtn" disabled>Publier le JSON</button>
+        <button type="button" class="secondary" id="generateBriefBtn">Générer le JSON</button>
+        <button type="button" class="secondary" id="publishBriefBtn" disabled>Publier le JSON</button>
       </div>
     </section>
 
@@ -677,7 +702,8 @@
       updateActionAvailability();
     });
 
-    generateBriefBtn.addEventListener('click', async () => {
+    generateBriefBtn.addEventListener('click', async (event) => {
+      event.preventDefault();
       const selection = getSelectionPayload();
       if (!selection) {
         setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
@@ -689,6 +715,8 @@
       }
 
       try {
+        setButtonLoading(generateBriefBtn, true, 'Génération…');
+        certBriefOutput.textContent = 'Génération du JSON en cours…';
         toggleLoading(true);
         setStatus('Génération du JSON en cours…');
         const response = await fetch('/articles/generate-brief', {
@@ -712,11 +740,13 @@
         setStatus(message, true);
       } finally {
         toggleLoading(false);
+        setButtonLoading(generateBriefBtn, false);
         updateActionAvailability();
       }
     });
 
-    publishBriefBtn.addEventListener('click', async () => {
+    publishBriefBtn.addEventListener('click', async (event) => {
+      event.preventDefault();
       const selection = getSelectionPayload();
       if (!selection) {
         setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
@@ -728,6 +758,7 @@
       }
 
       try {
+        setButtonLoading(publishBriefBtn, true, 'Publication…');
         toggleLoading(true);
         setStatus('Publication du JSON en cours…');
         const response = await fetch('/articles/publish-brief', {
@@ -745,6 +776,7 @@
         setStatus(message, true);
       } finally {
         toggleLoading(false);
+        setButtonLoading(publishBriefBtn, false);
         updateActionAvailability();
       }
     });
@@ -927,7 +959,11 @@
         return;
       }
       selection.add_image = addImageCheckbox.checked;
-      selection.persist_article = true;
+
+      let reader;
+      let streamCompleted = false;
+      let streamFailed = false;
+
       try {
         toggleLoading(true);
         resetProgress();
@@ -947,18 +983,92 @@
           throw new Error(payload.error || 'Flux de progression indisponible.');
         }
 
-        const articleStatusParts = ['article généré'];
-        if (payload.blog_id) {
-          articleStatusParts.push(`enregistré (ID ${payload.blog_id})`);
+        reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (!line) {
+              continue;
+            }
+
+            let event;
+            try {
+              event = JSON.parse(line);
+            } catch (parseError) {
+              console.warn('Événement runbook invalide:', parseError, line);
+              continue;
+            }
+
+            if (event.type === 'progress') {
+              const ratio = typeof event.progress === 'number'
+                ? event.progress
+                : (event.total_steps ? event.step / event.total_steps : 0);
+              setProgress(ratio, event.message || '', false);
+              if (event.message) {
+                setStatus(event.message);
+              }
+            } else if (event.type === 'complete') {
+              const ratio = typeof event.progress === 'number' ? event.progress : 1;
+              setProgress(ratio, event.message || 'Runbook terminé.', false);
+              setStatus(event.message || 'Runbook terminé.');
+
+              currentArticle = event.article || '';
+              articleOutput.textContent = currentArticle || 'Aucun contenu généré.';
+
+              if (event.brief_included) {
+                currentBriefData = event.brief || null;
+                currentBriefText = currentBriefData
+                  ? JSON.stringify(currentBriefData, null, 2)
+                  : '';
+                certBriefOutput.textContent = currentBriefText || 'Aucun JSON généré.';
+              } else {
+                currentBriefData = null;
+                currentBriefText = '';
+                certBriefOutput.textContent = DEFAULT_BRIEF_TEXT;
+              }
+
+              currentLinkedinDraft = event.linkedin_post || '';
+              renderSocialBlock(
+                linkedinOutput,
+                currentLinkedinDraft,
+                Boolean(event.linkedin_published),
+                event.linkedin_status_code,
+                event.linkedin_error,
+                'Aucun post LinkedIn généré.',
+                event.linkedin_image
+              );
+
+              streamCompleted = true;
+            } else if (event.type === 'error') {
+              const ratio = typeof event.progress === 'number'
+                ? event.progress
+                : (event.total_steps ? event.step / event.total_steps : 0);
+              setProgress(ratio, event.message || 'Erreur lors du runbook.', true);
+              setStatus(event.message || 'Erreur lors du runbook.', true);
+              streamFailed = true;
+            }
+
+            if (streamCompleted || streamFailed) {
+              break;
+            }
+          }
+
+          if (streamCompleted || streamFailed) {
+            break;
+          }
         }
-        const statuses = [];
-        statuses.push(`Tweet ${payload.tweet_published ? 'publié' : 'non publié'}`);
-        statuses.push(`LinkedIn ${payload.linkedin_published ? 'publié' : 'non publié'}`);
-        const hasFailure = !payload.tweet_published || !payload.linkedin_published;
-        setStatus(
-          `Playbook terminé – ${articleStatusParts.join(' · ')} · ${statuses.join(' · ')}.`,
-          hasFailure
-        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setStatus(message, true);
@@ -1119,6 +1229,26 @@
     function setStatus(message, isError = false) {
       statusArea.textContent = message;
       statusArea.style.color = isError ? '#f87171' : 'var(--text-muted)';
+    }
+
+    function setButtonLoading(button, isLoading, loadingLabel) {
+      if (!button) {
+        return;
+      }
+
+      if (isLoading) {
+        if (!button.dataset.originalLabel) {
+          button.dataset.originalLabel = button.textContent;
+        }
+        button.textContent = loadingLabel || button.dataset.originalLabel;
+        button.classList.add('is-loading');
+      } else {
+        const original = button.dataset.originalLabel;
+        if (original) {
+          button.textContent = original;
+        }
+        button.classList.remove('is-loading');
+      }
     }
 
     fetchProviders();

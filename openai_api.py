@@ -99,6 +99,22 @@ RULES:
 """,
 }
 
+CERTIFICATION_PRESENTATION_JSON_PROMPT = """
+You are an expert certification advisor helping candidates understand {certification} from {vendor}.
+Produce a JSON object describing the certification with the following exact structure:
+{{
+  "prerequisites": ["text1", "text2", "text3"],
+  "targeted_profession": ["job title1", "job title2", "job title3"],
+  "studytip": "In 20-25 words tell here how ExamBoot.net can help to prepare for the certification"
+}}
+Guidelines:
+- Return exactly three concise bullet-style strings in both arrays, each 6-12 words.
+- Mention specific skills, knowledge, or credentials relevant to {certification} in the prerequisites.
+- Mention realistic job titles aligned with the certification outcome in the targeted_profession list.
+- The studytip MUST be a single sentence of 20-25 words, highlight ExamBoot.net, and stay actionable.
+- Respond with valid JSON only, no explanations or Markdown.
+"""
+
 TWEET_PROMPT_TEMPLATES = {
     "certification_presentation": """
 Compose a short, punchy tweet introducing the certification: {certification} from {vendor}.
