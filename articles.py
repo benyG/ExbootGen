@@ -53,6 +53,14 @@ TOPIC_TYPE_OPTIONS = [
 ]
 
 TOPIC_TYPE_VALUES = {option["value"] for option in TOPIC_TYPE_OPTIONS}
+TOPIC_TYPE_LABELS = {option["value"]: option["label"] for option in TOPIC_TYPE_OPTIONS}
+TOPIC_TYPE_CODES = {
+    "certification_presentation": 1,
+    "preparation_methodology": 2,
+    "experience_testimony": 3,
+    "career_impact": 4,
+    "engagement_community": 5,
+}
 
 
 @dataclass
@@ -95,6 +103,29 @@ class SocialPublishError(RuntimeError):
         self.status_code = status_code
 
 
+def _serialize_social_result(
+    prefix: str, result: Optional[SocialPostResult]
+) -> dict[str, object]:
+    """Return a JSON-serialisable payload for a social publication result."""
+
+    if not result:
+        return {}
+
+    payload: dict[str, object] = {
+        prefix: result.text,
+        f"{prefix}_response": result.response,
+        f"{prefix}_published": result.published,
+        f"{prefix}_status_code": result.status_code,
+    }
+
+    if result.media_filename:
+        payload[f"{prefix}_image"] = result.media_filename
+    if result.error:
+        payload[f"{prefix}_error"] = result.error
+
+    return payload
+
+
 def _fetch_selection(provider_id: int, certification_id: int) -> Selection:
     """Return the provider and certification names for the given identifiers."""
 
@@ -120,6 +151,92 @@ def _fetch_selection(provider_id: int, certification_id: int) -> Selection:
         provider_name=provider_row["name"],
         certification_name=certification_row["name"],
     )
+
+
+def _derive_article_title(article: str, selection: Selection, topic_type: str) -> str:
+    """Return a title for the blog post using the article body as source."""
+
+    first_meaningful_line = ""
+    for line in article.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        first_meaningful_line = stripped.lstrip("# ").strip()
+        if first_meaningful_line:
+            break
+
+    if not first_meaningful_line:
+        topic_label = TOPIC_TYPE_LABELS.get(topic_type, "")
+        if topic_label:
+            # Remove the leading emoji (if present) to avoid storing it twice.
+            parts = topic_label.split(" ", 1)
+            topic_label = parts[1] if len(parts) > 1 else parts[0]
+        fallback_title = selection.certification_name
+        if topic_label:
+            fallback_title = f"{fallback_title} · {topic_label}"
+        first_meaningful_line = fallback_title
+
+    return first_meaningful_line[:500]
+
+
+def _summarize_article(article: str) -> str:
+    """Return a compact summary used to populate the legacy ``res`` column."""
+
+    collapsed = " ".join(article.split())
+    summary = collapsed[:1000]
+    return summary or "Article généré automatiquement."
+
+
+def _persist_article(
+    selection: Selection,
+    certification_id: int,
+    exam_url: str,
+    topic_type: str,
+    article: str,
+) -> Tuple[int, str]:
+    """Insert the generated article and link it to the certification."""
+
+    if topic_type not in TOPIC_TYPE_CODES:
+        raise ValueError("Type de sujet invalide.")
+
+    clean_article = article.strip()
+    if not clean_article:
+        raise ValueError("Le contenu de l'article est vide.")
+
+    topic_code = TOPIC_TYPE_CODES[topic_type]
+    title = _derive_article_title(clean_article, selection, topic_type)
+    summary = _summarize_article(clean_article)
+    url_value = exam_url.strip() or None
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO blogs (title, topic_type, img, res, article, url, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
+            """,
+            (title, topic_code, None, summary, clean_article, url_value),
+        )
+        blog_id = cursor.lastrowid
+        cursor.execute(
+            """
+            INSERT INTO blog_courses (blog, course, created_at, updated_at)
+            VALUES (%s, %s, NOW(), NOW())
+            """,
+            (blog_id, certification_id),
+        )
+        conn.commit()
+    except mysql.connector.Error as exc:
+        conn.rollback()
+        raise RuntimeError(
+            "Erreur lors de l'enregistrement de l'article en base de données."
+        ) from exc
+    finally:
+        cursor.close()
+        conn.close()
+
+    return blog_id, title
 
 
 def _percent_encode(value: str) -> str:
@@ -627,6 +744,46 @@ def generate_article():
     )
 
 
+@articles_bp.route("/publish", methods=["POST"])
+def publish_article():
+    """Persist the generated article and link it to the certification."""
+
+    data = request.get_json() or {}
+
+    try:
+        provider_id, certification_id, exam_url, topic_type = _extract_selection_payload(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    article = (data.get("article") or "").strip()
+    if not article:
+        return jsonify({"error": "Le contenu de l'article est requis pour la publication."}), 400
+
+    try:
+        selection = _fetch_selection(provider_id, certification_id)
+        blog_id, title = _persist_article(
+            selection,
+            certification_id,
+            exam_url,
+            topic_type,
+            article,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify(
+        {
+            "blog_id": blog_id,
+            "title": title,
+            "topic_type": topic_type,
+        }
+    )
+
+
 @articles_bp.route("/run-playbook", methods=["POST"])
 def run_playbook():
     """Run the social playbook: generate content and publish announcements."""
@@ -638,6 +795,8 @@ def run_playbook():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
+    persist_article = bool(data.get("persist_article", True))
+
     try:
         selection = _fetch_selection(provider_id, certification_id)
         attach_image = bool(data.get("add_image"))
@@ -647,66 +806,55 @@ def run_playbook():
             exam_url,
             topic_type,
         )
-        tweet_text = generate_certification_tweet(
-            selection.certification_name,
-            selection.provider_name,
-            exam_url,
-            topic_type,
-        )
+    except Exception as exc:  # pragma: no cover - propagated to client for visibility
+        return jsonify({"error": str(exc)}), 500
+
+    blog_id: Optional[int] = None
+    blog_title: Optional[str] = None
+    if persist_article:
+        try:
+            blog_id, blog_title = _persist_article(
+                selection,
+                certification_id,
+                exam_url,
+                topic_type,
+                article,
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except RuntimeError as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    try:
         tweet_result = _run_tweet_workflow(
             selection,
             exam_url,
             topic_type,
             attach_image=attach_image,
-            tweet_text=tweet_text,
-        )
-        linkedin_post = generate_certification_linkedin_post(
-            selection.certification_name,
-            selection.provider_name,
-            exam_url,
-            topic_type,
         )
         linkedin_result = _run_linkedin_workflow(
             selection,
             exam_url,
             topic_type,
             attach_image=attach_image,
-            linkedin_post=linkedin_post,
         )
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
-    return jsonify(
-        {
-            "article": article,
-            "provider_name": selection.provider_name,
-            "certification_name": selection.certification_name,
-            "tweet": tweet_result.text,
-            "tweet_response": tweet_result.response,
-            "tweet_published": tweet_result.published,
-            "tweet_status_code": tweet_result.status_code,
-            **(
-                {"tweet_image": tweet_result.media_filename}
-                if tweet_result.media_filename
-                else {}
-            ),
-            **({"tweet_error": tweet_result.error} if tweet_result.error else {}),
-            "linkedin_post": linkedin_result.text,
-            "linkedin_response": linkedin_result.response,
-            "linkedin_published": linkedin_result.published,
-            "linkedin_status_code": linkedin_result.status_code,
-            **(
-                {"linkedin_image": linkedin_result.media_filename}
-                if linkedin_result.media_filename
-                else {}
-            ),
-            **(
-                {"linkedin_error": linkedin_result.error}
-                if linkedin_result.error
-                else {}
-            ),
-        }
-    )
+    payload = {
+        "article": article,
+        "provider_name": selection.provider_name,
+        "certification_name": selection.certification_name,
+    }
+    if blog_id is not None:
+        payload["blog_id"] = blog_id
+    if blog_title:
+        payload["blog_title"] = blog_title
+
+    payload.update(_serialize_social_result("tweet", tweet_result))
+    payload.update(_serialize_social_result("linkedin", linkedin_result))
+
+    return jsonify(payload)
 
 
 def _run_tweet_workflow(
@@ -897,18 +1045,7 @@ def publish_tweet():
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
-    payload = {
-        "tweet": tweet_result.text,
-        "tweet_response": tweet_result.response,
-        "tweet_published": tweet_result.published,
-        "tweet_status_code": tweet_result.status_code,
-    }
-    if tweet_result.media_filename:
-        payload["tweet_image"] = tweet_result.media_filename
-    if tweet_result.error:
-        payload["tweet_error"] = tweet_result.error
-
-    return jsonify(payload)
+    return jsonify(_serialize_social_result("tweet", tweet_result))
 
 
 @articles_bp.route("/publish-linkedin", methods=["POST"])
@@ -934,15 +1071,4 @@ def publish_linkedin():
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
-    payload = {
-        "linkedin_post": linkedin_result.text,
-        "linkedin_response": linkedin_result.response,
-        "linkedin_published": linkedin_result.published,
-        "linkedin_status_code": linkedin_result.status_code,
-    }
-    if linkedin_result.media_filename:
-        payload["linkedin_image"] = linkedin_result.media_filename
-    if linkedin_result.error:
-        payload["linkedin_error"] = linkedin_result.error
-
-    return jsonify(payload)
+    return jsonify(_serialize_social_result("linkedin", linkedin_result))
