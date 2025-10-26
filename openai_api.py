@@ -76,6 +76,22 @@ Insert a call to action with the link to start a free ExamBoot test: {exam_url}.
 """,
 }
 
+CERTIFICATION_PRESENTATION_JSON_PROMPT = """
+You are an expert certification advisor helping candidates understand {certification} from {vendor}.
+Produce a JSON object describing the certification with the following exact structure:
+{{
+  "prerequisites": ["text1", "text2", "text3"],
+  "targeted_profession": ["job title1", "job title2", "job title3"],
+  "studytip": "In 20-25 words tell here how ExamBoot.net can help to prepare for the certification"
+}}
+Guidelines:
+- Return exactly three concise bullet-style strings in both arrays, each 6-12 words.
+- Mention specific skills, knowledge, or credentials relevant to {certification} in the prerequisites.
+- Mention realistic job titles aligned with the certification outcome in the targeted_profession list.
+- The studytip MUST be a single sentence of 20-25 words, highlight ExamBoot.net, and stay actionable.
+- Respond with valid JSON only, no explanations or Markdown.
+"""
+
 TWEET_PROMPT_TEMPLATES = {
     "certification_presentation": """
 Compose a short, punchy tweet introducing the certification: {certification} from {vendor}.
@@ -276,6 +292,36 @@ def generate_certification_linkedin_post(
         exam_url,
     )
     return _run_completion(prompt)
+
+
+def generate_certification_presentation_brief(
+    certification: str, vendor: str
+) -> dict:
+    """Generate a structured JSON brief for certification presentations."""
+
+    if not OPENAI_API_KEY:
+        raise Exception(
+            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer la fiche JSON."
+        )
+
+    prompt = CERTIFICATION_PRESENTATION_JSON_PROMPT.format(
+        certification=certification,
+        vendor=vendor,
+    )
+
+    content = _run_completion(prompt)
+    decoded = clean_and_decode_json(content)
+    if not isinstance(decoded, dict):
+        raise ValueError("La réponse du modèle n'est pas un objet JSON valide.")
+
+    expected_keys = {"prerequisites", "targeted_profession", "studytip"}
+    missing = expected_keys.difference(decoded.keys())
+    if missing:
+        raise ValueError(
+            "Réponse JSON incomplète. Clés manquantes: " + ", ".join(sorted(missing))
+        )
+
+    return decoded
 
 
 def _post_with_retry(payload: dict) -> requests.Response:
