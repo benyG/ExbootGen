@@ -105,6 +105,29 @@ class SocialPublishError(RuntimeError):
         self.status_code = status_code
 
 
+def _serialize_social_result(
+    prefix: str, result: Optional[SocialPostResult]
+) -> dict[str, object]:
+    """Return a JSON-serialisable payload for a social publication result."""
+
+    if not result:
+        return {}
+
+    payload: dict[str, object] = {
+        prefix: result.text,
+        f"{prefix}_response": result.response,
+        f"{prefix}_published": result.published,
+        f"{prefix}_status_code": result.status_code,
+    }
+
+    if result.media_filename:
+        payload[f"{prefix}_image"] = result.media_filename
+    if result.error:
+        payload[f"{prefix}_error"] = result.error
+
+    return payload
+
+
 def _fetch_selection(provider_id: int, certification_id: int) -> Selection:
     """Return the provider and certification names for the given identifiers."""
 
@@ -216,37 +239,6 @@ def _persist_article(
         conn.close()
 
     return blog_id, title
-
-
-def _persist_certification_brief(
-    provider_id: int,
-    certification_id: int,
-    brief_payload: dict,
-) -> None:
-    """Store the certification brief JSON in the ``courses.art`` column."""
-
-    serialized = json.dumps(brief_payload, ensure_ascii=False)
-
-    conn = mysql.connector.connect(**DB_CONFIG)
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            "UPDATE courses SET art = %s WHERE id = %s AND prov = %s",
-            (serialized, certification_id, provider_id),
-        )
-        if cursor.rowcount == 0:
-            raise RuntimeError(
-                "Impossible de mettre à jour la fiche certification (cours introuvable)."
-            )
-        conn.commit()
-    except mysql.connector.Error as exc:
-        conn.rollback()
-        raise RuntimeError(
-            "Erreur lors de l'enregistrement de la fiche certification."
-        ) from exc
-    finally:
-        cursor.close()
-        conn.close()
 
 
 def _percent_encode(value: str) -> str:
@@ -754,45 +746,6 @@ def generate_article():
     )
 
 
-@articles_bp.route("/generate-brief", methods=["POST"])
-def generate_certification_brief():
-    """Generate the certification presentation brief as JSON."""
-
-    data = request.get_json() or {}
-
-    try:
-        provider_id, certification_id, _exam_url, topic_type = _extract_selection_payload(data)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-    if topic_type != "certification_presentation":
-        return (
-            jsonify(
-                {
-                    "error": "La fiche JSON n'est disponible que pour le type 'certification_presentation'."
-                }
-            ),
-            400,
-        )
-
-    try:
-        selection = _fetch_selection(provider_id, certification_id)
-        brief = generate_certification_presentation_brief(
-            selection.certification_name,
-            selection.provider_name,
-        )
-    except Exception as exc:  # pragma: no cover - surfaced to clients
-        return jsonify({"error": str(exc)}), 500
-
-    return jsonify(
-        {
-            "brief": brief,
-            "provider_name": selection.provider_name,
-            "certification_name": selection.certification_name,
-        }
-    )
-
-
 @articles_bp.route("/publish", methods=["POST"])
 def publish_article():
     """Persist the generated article and link it to the certification."""
@@ -833,9 +786,9 @@ def publish_article():
     )
 
 
-@articles_bp.route("/publish-brief", methods=["POST"])
-def publish_certification_brief():
-    """Store the certification presentation brief into the course record."""
+@articles_bp.route("/run-playbook", methods=["POST"])
+def run_playbook():
+    """Run the social playbook: generate content and publish announcements."""
 
     data = request.get_json() or {}
 
@@ -844,37 +797,49 @@ def publish_certification_brief():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    if topic_type != "certification_presentation":
-        return (
-            jsonify(
-                {
-                    "error": "La publication du JSON est réservée au type 'certification_presentation'."
-                }
-            ),
-            400,
+    persist_article = bool(data.get("persist_article", True))
+
+    try:
+        selection = _fetch_selection(provider_id, certification_id)
+        attach_image = bool(data.get("add_image"))
+        article = generate_certification_article(
+            selection.certification_name,
+            selection.provider_name,
+            exam_url,
+            topic_type,
         )
+    except Exception as exc:  # pragma: no cover - propagated to client for visibility
+        return jsonify({"error": str(exc)}), 500
 
-    brief_payload = data.get("brief")
-    if isinstance(brief_payload, str):
+    blog_id: Optional[int] = None
+    blog_title: Optional[str] = None
+    if persist_article:
         try:
-            brief_payload = json.loads(brief_payload)
-        except json.JSONDecodeError as exc:
-            return jsonify({"error": f"JSON invalide fourni: {exc}"}), 400
+            blog_id, blog_title = _persist_article(
+                selection,
+                certification_id,
+                exam_url,
+                topic_type,
+                article,
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except RuntimeError as exc:
+            return jsonify({"error": str(exc)}), 500
 
-    if not isinstance(brief_payload, dict):
-        return jsonify({"error": "La fiche JSON fournie est invalide."}), 400
-
-    expected_keys = {"prerequisites", "targeted_profession", "studytip"}
-    missing = expected_keys.difference(brief_payload.keys())
-    if missing:
-        return (
-            jsonify(
-                {
-                    "error": "Clés manquantes dans la fiche JSON: "
-                    + ", ".join(sorted(missing))
-                }
-            ),
-            400,
+    try:
+        tweet_result = _run_tweet_workflow(
+            selection,
+            certification_id,
+            exam_url,
+            topic_type,
+            attach_image=attach_image,
+        )
+        linkedin_result = _run_linkedin_workflow(
+            selection,
+            exam_url,
+            topic_type,
+            attach_image=attach_image,
         )
 
     if not isinstance(brief_payload["prerequisites"], list) or not isinstance(
@@ -910,13 +875,20 @@ def publish_certification_brief():
     except Exception as exc:  # pragma: no cover - defensive fallback
         return jsonify({"error": str(exc)}), 500
 
-    return jsonify(
-        {
-            "provider_name": selection.provider_name,
-            "certification_name": selection.certification_name,
-            "brief": brief_payload,
-        }
-    )
+    payload = {
+        "article": article,
+        "provider_name": selection.provider_name,
+        "certification_name": selection.certification_name,
+    }
+    if blog_id is not None:
+        payload["blog_id"] = blog_id
+    if blog_title:
+        payload["blog_title"] = blog_title
+
+    payload.update(_serialize_social_result("tweet", tweet_result))
+    payload.update(_serialize_social_result("linkedin", linkedin_result))
+
+    return jsonify(payload)
 
 
 @articles_bp.route("/run-playbook", methods=["POST"])
@@ -1295,18 +1267,7 @@ def publish_tweet():
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
-    payload = {
-        "tweet": tweet_result.text,
-        "tweet_response": tweet_result.response,
-        "tweet_published": tweet_result.published,
-        "tweet_status_code": tweet_result.status_code,
-    }
-    if tweet_result.media_filename:
-        payload["tweet_image"] = tweet_result.media_filename
-    if tweet_result.error:
-        payload["tweet_error"] = tweet_result.error
-
-    return jsonify(payload)
+    return jsonify(_serialize_social_result("tweet", tweet_result))
 
 
 @articles_bp.route("/publish-linkedin", methods=["POST"])
@@ -1332,15 +1293,4 @@ def publish_linkedin():
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
-    payload = {
-        "linkedin_post": linkedin_result.text,
-        "linkedin_response": linkedin_result.response,
-        "linkedin_published": linkedin_result.published,
-        "linkedin_status_code": linkedin_result.status_code,
-    }
-    if linkedin_result.media_filename:
-        payload["linkedin_image"] = linkedin_result.media_filename
-    if linkedin_result.error:
-        payload["linkedin_error"] = linkedin_result.error
-
-    return jsonify(payload)
+    return jsonify(_serialize_social_result("linkedin", linkedin_result))

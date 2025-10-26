@@ -927,11 +927,7 @@
         return;
       }
       selection.add_image = addImageCheckbox.checked;
-
-      let reader;
-      let streamCompleted = false;
-      let streamFailed = false;
-
+      selection.persist_article = true;
       try {
         toggleLoading(true);
         resetProgress();
@@ -951,92 +947,18 @@
           throw new Error(payload.error || 'Flux de progression indisponible.');
         }
 
-        reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) {
-            break;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const rawLine of lines) {
-            const line = rawLine.trim();
-            if (!line) {
-              continue;
-            }
-
-            let event;
-            try {
-              event = JSON.parse(line);
-            } catch (parseError) {
-              console.warn('Événement runbook invalide:', parseError, line);
-              continue;
-            }
-
-            if (event.type === 'progress') {
-              const ratio = typeof event.progress === 'number'
-                ? event.progress
-                : (event.total_steps ? event.step / event.total_steps : 0);
-              setProgress(ratio, event.message || '', false);
-              if (event.message) {
-                setStatus(event.message);
-              }
-            } else if (event.type === 'complete') {
-              const ratio = typeof event.progress === 'number' ? event.progress : 1;
-              setProgress(ratio, event.message || 'Runbook terminé.', false);
-              setStatus(event.message || 'Runbook terminé.');
-
-              currentArticle = event.article || '';
-              articleOutput.textContent = currentArticle || 'Aucun contenu généré.';
-
-              if (event.brief_included) {
-                currentBriefData = event.brief || null;
-                currentBriefText = currentBriefData
-                  ? JSON.stringify(currentBriefData, null, 2)
-                  : '';
-                certBriefOutput.textContent = currentBriefText || 'Aucun JSON généré.';
-              } else {
-                currentBriefData = null;
-                currentBriefText = '';
-                certBriefOutput.textContent = DEFAULT_BRIEF_TEXT;
-              }
-
-              currentLinkedinDraft = event.linkedin_post || '';
-              renderSocialBlock(
-                linkedinOutput,
-                currentLinkedinDraft,
-                Boolean(event.linkedin_published),
-                event.linkedin_status_code,
-                event.linkedin_error,
-                'Aucun post LinkedIn généré.',
-                event.linkedin_image
-              );
-
-              streamCompleted = true;
-            } else if (event.type === 'error') {
-              const ratio = typeof event.progress === 'number'
-                ? event.progress
-                : (event.total_steps ? event.step / event.total_steps : 0);
-              setProgress(ratio, event.message || 'Erreur lors du runbook.', true);
-              setStatus(event.message || 'Erreur lors du runbook.', true);
-              streamFailed = true;
-            }
-
-            if (streamCompleted || streamFailed) {
-              break;
-            }
-          }
-
-          if (streamCompleted || streamFailed) {
-            break;
-          }
+        const articleStatusParts = ['article généré'];
+        if (payload.blog_id) {
+          articleStatusParts.push(`enregistré (ID ${payload.blog_id})`);
         }
+        const statuses = [];
+        statuses.push(`Tweet ${payload.tweet_published ? 'publié' : 'non publié'}`);
+        statuses.push(`LinkedIn ${payload.linkedin_published ? 'publié' : 'non publié'}`);
+        const hasFailure = !payload.tweet_published || !payload.linkedin_published;
+        setStatus(
+          `Playbook terminé – ${articleStatusParts.join(' · ')} · ${statuses.join(' · ')}.`,
+          hasFailure
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setStatus(message, true);
