@@ -53,6 +53,14 @@ TOPIC_TYPE_OPTIONS = [
 ]
 
 TOPIC_TYPE_VALUES = {option["value"] for option in TOPIC_TYPE_OPTIONS}
+TOPIC_TYPE_LABELS = {option["value"]: option["label"] for option in TOPIC_TYPE_OPTIONS}
+TOPIC_TYPE_CODES = {
+    "certification_presentation": 1,
+    "preparation_methodology": 2,
+    "experience_testimony": 3,
+    "career_impact": 4,
+    "engagement_community": 5,
+}
 
 
 @dataclass
@@ -120,6 +128,92 @@ def _fetch_selection(provider_id: int, certification_id: int) -> Selection:
         provider_name=provider_row["name"],
         certification_name=certification_row["name"],
     )
+
+
+def _derive_article_title(article: str, selection: Selection, topic_type: str) -> str:
+    """Return a title for the blog post using the article body as source."""
+
+    first_meaningful_line = ""
+    for line in article.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        first_meaningful_line = stripped.lstrip("# ").strip()
+        if first_meaningful_line:
+            break
+
+    if not first_meaningful_line:
+        topic_label = TOPIC_TYPE_LABELS.get(topic_type, "")
+        if topic_label:
+            # Remove the leading emoji (if present) to avoid storing it twice.
+            parts = topic_label.split(" ", 1)
+            topic_label = parts[1] if len(parts) > 1 else parts[0]
+        fallback_title = selection.certification_name
+        if topic_label:
+            fallback_title = f"{fallback_title} · {topic_label}"
+        first_meaningful_line = fallback_title
+
+    return first_meaningful_line[:500]
+
+
+def _summarize_article(article: str) -> str:
+    """Return a compact summary used to populate the legacy ``res`` column."""
+
+    collapsed = " ".join(article.split())
+    summary = collapsed[:1000]
+    return summary or "Article généré automatiquement."
+
+
+def _persist_article(
+    selection: Selection,
+    certification_id: int,
+    exam_url: str,
+    topic_type: str,
+    article: str,
+) -> Tuple[int, str]:
+    """Insert the generated article and link it to the certification."""
+
+    if topic_type not in TOPIC_TYPE_CODES:
+        raise ValueError("Type de sujet invalide.")
+
+    clean_article = article.strip()
+    if not clean_article:
+        raise ValueError("Le contenu de l'article est vide.")
+
+    topic_code = TOPIC_TYPE_CODES[topic_type]
+    title = _derive_article_title(clean_article, selection, topic_type)
+    summary = _summarize_article(clean_article)
+    url_value = exam_url.strip() or None
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO blogs (title, topic_type, img, res, article, url, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
+            """,
+            (title, topic_code, None, summary, clean_article, url_value),
+        )
+        blog_id = cursor.lastrowid
+        cursor.execute(
+            """
+            INSERT INTO blog_courses (blog, course, created_at, updated_at)
+            VALUES (%s, %s, NOW(), NOW())
+            """,
+            (blog_id, certification_id),
+        )
+        conn.commit()
+    except mysql.connector.Error as exc:
+        conn.rollback()
+        raise RuntimeError(
+            "Erreur lors de l'enregistrement de l'article en base de données."
+        ) from exc
+    finally:
+        cursor.close()
+        conn.close()
+
+    return blog_id, title
 
 
 def _percent_encode(value: str) -> str:
@@ -623,6 +717,46 @@ def generate_article():
             "article": article,
             "provider_name": selection.provider_name,
             "certification_name": selection.certification_name,
+        }
+    )
+
+
+@articles_bp.route("/publish", methods=["POST"])
+def publish_article():
+    """Persist the generated article and link it to the certification."""
+
+    data = request.get_json() or {}
+
+    try:
+        provider_id, certification_id, exam_url, topic_type = _extract_selection_payload(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    article = (data.get("article") or "").strip()
+    if not article:
+        return jsonify({"error": "Le contenu de l'article est requis pour la publication."}), 400
+
+    try:
+        selection = _fetch_selection(provider_id, certification_id)
+        blog_id, title = _persist_article(
+            selection,
+            certification_id,
+            exam_url,
+            topic_type,
+            article,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify(
+        {
+            "blog_id": blog_id,
+            "title": title,
+            "topic_type": topic_type,
         }
     )
 

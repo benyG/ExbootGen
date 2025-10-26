@@ -480,6 +480,7 @@
       generateTweetBtn.disabled = !hasSelection;
       generateLinkedinBtn.disabled = !hasSelection;
       runPlaybookBtn.disabled = !hasSelection;
+      publishArticleBtn.disabled = !hasSelection || !currentArticle;
       publishTweetBtn.disabled = !hasSelection || !currentTweetDraft;
       publishLinkedinBtn.disabled = !hasSelection || !currentLinkedinDraft;
     }
@@ -712,6 +713,43 @@
       }
     });
 
+    publishArticleBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+      if (!selection) {
+        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        return;
+      }
+      if (!currentArticle) {
+        setStatus('Veuillez générer l\'article avant de le publier.', true);
+        return;
+      }
+
+      const payloadToSend = { ...selection, article: currentArticle };
+
+      try {
+        toggleLoading(true);
+        setStatus('Publication de l\'article en cours…');
+        const response = await fetch('/articles/publish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payloadToSend)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la publication de l\'article');
+        }
+
+        const articleIdInfo = payload.blog_id ? ` (ID ${payload.blog_id})` : '';
+        setStatus(`Article publié avec succès${articleIdInfo}.`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(message, true);
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
     runPlaybookBtn.addEventListener('click', async () => {
       const selection = getSelectionPayload();
       if (!selection) {
@@ -877,6 +915,7 @@
         generateTweetBtn.disabled = true;
         generateLinkedinBtn.disabled = true;
         runPlaybookBtn.disabled = true;
+        publishArticleBtn.disabled = true;
         publishTweetBtn.disabled = true;
         publishLinkedinBtn.disabled = true;
       } else {
