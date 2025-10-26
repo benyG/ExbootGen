@@ -41,6 +41,10 @@
       justify-content: center;
     }
 
+    .hidden {
+      display: none !important;
+    }
+
     main {
       width: min(1100px, 100%);
       display: grid;
@@ -194,6 +198,31 @@
       transition: transform 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease;
     }
 
+    button.is-loading {
+      position: relative;
+      pointer-events: none;
+      opacity: 0.75;
+    }
+
+    button.is-loading::after {
+      content: '';
+      position: absolute;
+      right: 1.2rem;
+      top: 50%;
+      width: 0.9rem;
+      height: 0.9rem;
+      margin-top: -0.45rem;
+      border-radius: 999px;
+      border: 2px solid rgba(248, 250, 252, 0.35);
+      border-top-color: var(--accent);
+      animation: button-spin 0.8s linear infinite;
+    }
+
+    @keyframes button-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
     button.primary {
       background: linear-gradient(135deg, rgba(71,245,192,0.85), rgba(124,247,255,0.9));
       color: #041221;
@@ -223,11 +252,54 @@
       transform: translateY(-2px);
     }
 
-    .status {
+    .status-wrapper {
       margin-top: 0.8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .status {
+      margin: 0;
       min-height: 1.2rem;
       font-size: 0.9rem;
       color: var(--text-muted);
+    }
+
+    .progress {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 0.6rem;
+      background: rgba(148, 163, 184, 0.18);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+      border-radius: 999px;
+      transition: width 0.35s ease;
+    }
+
+    .progress-bar.error {
+      background: linear-gradient(90deg, #f87171, #fb7185);
+    }
+
+    .progress-label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      min-height: 1rem;
+    }
+
+    .progress-label.error {
+      color: #fda4af;
     }
 
     .article-output {
@@ -239,6 +311,20 @@
       line-height: 1.65;
       max-height: 540px;
       overflow-y: auto;
+    }
+
+    .json-output {
+      background: rgba(12, 17, 31, 0.86);
+      border: 1px solid rgba(124, 247, 255, 0.18);
+      border-radius: var(--radius-md);
+      padding: 1.2rem 1.4rem;
+      white-space: pre-wrap;
+      line-height: 1.6;
+      min-height: 160px;
+      max-height: 400px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Consolas, monospace;
+      font-size: 0.9rem;
     }
 
     .social-output {
@@ -358,7 +444,15 @@
           </label>
         </div>
       </div>
-      <div class="status" id="statusArea"></div>
+      <div class="status-wrapper">
+        <div class="status" id="statusArea"></div>
+        <div class="progress hidden" id="runbookProgress">
+          <div class="progress-track">
+            <div class="progress-bar" id="runbookProgressBar"></div>
+          </div>
+          <div class="progress-label" id="runbookProgressLabel"></div>
+        </div>
+      </div>
     </section>
 
     <section>
@@ -369,8 +463,18 @@
       </div>
     </section>
 
+    <section id="certBriefSection" class="hidden">
+      <h2 style="margin-top:0;margin-bottom:0.6rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">3. Résumé JSON de la certification</h2>
+      <p style="margin-top:0;margin-bottom:1rem;color:var(--text-muted);font-size:0.9rem">Disponible uniquement lorsque le type de sujet « Certification presentation » est sélectionné. Génère et publie le JSON dans le champ <code>art</code> de la certification.</p>
+      <div class="json-output" id="certBriefOutput">Le JSON généré apparaîtra ici lorsque disponible.</div>
+      <div class="block-actions" style="gap:0.6rem;justify-content:flex-end;flex-wrap:wrap">
+        <button class="secondary" id="generateBriefBtn">Générer le JSON</button>
+        <button class="secondary" id="publishBriefBtn" disabled>Publier le JSON</button>
+      </div>
+    </section>
+
     <section>
-      <h2 style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">3. Annonces sociales</h2>
+      <h2 style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">4. Annonces sociales</h2>
       <div class="social-output">
         <div class="social-item">
           <h3>Tweet</h3>
@@ -409,6 +513,13 @@
     const tweetOutput = document.getElementById('tweetOutput');
     const linkedinOutput = document.getElementById('linkedinOutput');
     const addImageCheckbox = document.getElementById('addImageCheckbox');
+    const certBriefSection = document.getElementById('certBriefSection');
+    const certBriefOutput = document.getElementById('certBriefOutput');
+    const generateBriefBtn = document.getElementById('generateBriefBtn');
+    const publishBriefBtn = document.getElementById('publishBriefBtn');
+    const runbookProgress = document.getElementById('runbookProgress');
+    const runbookProgressBar = document.getElementById('runbookProgressBar');
+    const runbookProgressLabel = document.getElementById('runbookProgressLabel');
 
     let providers = [];
     let certifications = [];
@@ -417,10 +528,13 @@
     const DEFAULT_ARTICLE_TEXT = articleOutput.textContent;
     const DEFAULT_TWEET_TEXT = tweetOutput.textContent;
     const DEFAULT_LINKEDIN_TEXT = linkedinOutput.textContent;
+    const DEFAULT_BRIEF_TEXT = certBriefOutput.textContent;
 
     let currentArticle = '';
     let currentTweetDraft = '';
     let currentLinkedinDraft = '';
+    let currentBriefData = null;
+    let currentBriefText = '';
 
     publishArticleBtn.disabled = true;
 
@@ -472,6 +586,9 @@
     }
 
     function updateActionAvailability() {
+      const isCertPresentation = topicTypeSelect.value === 'certification_presentation';
+      certBriefSection.classList.toggle('hidden', !isCertPresentation);
+
       if (isLoading) {
         return;
       }
@@ -483,6 +600,8 @@
       publishArticleBtn.disabled = !hasSelection || !currentArticle;
       publishTweetBtn.disabled = !hasSelection || !currentTweetDraft;
       publishLinkedinBtn.disabled = !hasSelection || !currentLinkedinDraft;
+      generateBriefBtn.disabled = !hasSelection || !isCertPresentation;
+      publishBriefBtn.disabled = !hasSelection || !currentBriefText || !isCertPresentation;
     }
 
     async function fetchProviders() {
@@ -503,9 +622,13 @@
       currentArticle = '';
       currentTweetDraft = '';
       currentLinkedinDraft = '';
+      currentBriefData = null;
+      currentBriefText = '';
       articleOutput.textContent = DEFAULT_ARTICLE_TEXT;
       tweetOutput.textContent = DEFAULT_TWEET_TEXT;
       linkedinOutput.textContent = DEFAULT_LINKEDIN_TEXT;
+      certBriefOutput.textContent = DEFAULT_BRIEF_TEXT;
+      resetProgress();
       updateActionAvailability();
     }
 
@@ -577,6 +700,83 @@
     topicTypeSelect.addEventListener('change', () => {
       resetGeneratedContent();
       updateActionAvailability();
+    });
+
+    generateBriefBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+      if (!selection) {
+        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        return;
+      }
+      if (selection.topic_type !== 'certification_presentation') {
+        setStatus('La génération du JSON est réservée au type « Certification presentation ».', true);
+        return;
+      }
+
+      try {
+        setButtonLoading(generateBriefBtn, true, 'Génération…');
+        certBriefOutput.textContent = 'Génération du JSON en cours…';
+        toggleLoading(true);
+        setStatus('Génération du JSON en cours…');
+        const response = await fetch('/articles/generate-brief', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selection)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la génération du JSON.');
+        }
+        currentBriefData = payload.brief || null;
+        currentBriefText = currentBriefData ? JSON.stringify(currentBriefData, null, 2) : '';
+        certBriefOutput.textContent = currentBriefText || 'Aucun JSON généré.';
+        setStatus('Résumé JSON généré avec succès.');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        currentBriefData = null;
+        currentBriefText = '';
+        certBriefOutput.textContent = DEFAULT_BRIEF_TEXT;
+        setStatus(message, true);
+      } finally {
+        toggleLoading(false);
+        setButtonLoading(generateBriefBtn, false);
+        updateActionAvailability();
+      }
+    });
+
+    publishBriefBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+      if (!selection) {
+        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        return;
+      }
+      if (!currentBriefData) {
+        setStatus('Veuillez générer le JSON avant de le publier.', true);
+        return;
+      }
+
+      try {
+        setButtonLoading(publishBriefBtn, true, 'Publication…');
+        toggleLoading(true);
+        setStatus('Publication du JSON en cours…');
+        const response = await fetch('/articles/publish-brief', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...selection, brief: currentBriefData })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la publication du JSON.');
+        }
+        setStatus('Résumé JSON publié avec succès dans la certification.');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(message, true);
+      } finally {
+        toggleLoading(false);
+        setButtonLoading(publishBriefBtn, false);
+        updateActionAvailability();
+      }
     });
 
     generateArticleBtn.addEventListener('click', async () => {
@@ -757,54 +957,130 @@
         return;
       }
       selection.add_image = addImageCheckbox.checked;
+
+      let reader;
+      let streamCompleted = false;
+      let streamFailed = false;
+
       try {
         toggleLoading(true);
-        setStatus('Exécution du playbook : génération et publication en cours…');
+        resetProgress();
+        setProgress(0, 'Démarrage du runbook…');
+        setStatus('Démarrage du runbook…');
         const response = await fetch('/articles/run-playbook', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(selection)
         });
-        const payload = await response.json();
         if (!response.ok) {
-          throw new Error(payload.error || 'Erreur inconnue lors de la publication');
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || 'Erreur inconnue lors du runbook.');
         }
-        currentArticle = payload.article || '';
-        articleOutput.textContent = currentArticle || 'Aucun contenu généré.';
+        if (!response.body || typeof response.body.getReader !== 'function') {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || 'Flux de progression indisponible.');
+        }
 
-        currentTweetDraft = payload.tweet || '';
-        renderSocialBlock(
-          tweetOutput,
-          currentTweetDraft,
-          Boolean(payload.tweet_published),
-          payload.tweet_status_code,
-          payload.tweet_error,
-          'Aucun tweet généré.',
-          payload.tweet_image
-        );
+        reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-        currentLinkedinDraft = payload.linkedin_post || '';
-        renderSocialBlock(
-          linkedinOutput,
-          currentLinkedinDraft,
-          Boolean(payload.linkedin_published),
-          payload.linkedin_status_code,
-          payload.linkedin_error,
-          'Aucun post LinkedIn généré.',
-          payload.linkedin_image
-        );
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) {
+            break;
+          }
 
-        const statuses = [];
-        statuses.push(`Tweet ${payload.tweet_published ? 'publié' : 'non publié'}`);
-        statuses.push(`LinkedIn ${payload.linkedin_published ? 'publié' : 'non publié'}`);
-        const hasFailure = !payload.tweet_published || !payload.linkedin_published;
-        setStatus(`Playbook terminé – article généré · ${statuses.join(' · ')}.`, hasFailure);
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (!line) {
+              continue;
+            }
+
+            let event;
+            try {
+              event = JSON.parse(line);
+            } catch (parseError) {
+              console.warn('Événement runbook invalide:', parseError, line);
+              continue;
+            }
+
+            if (event.type === 'progress') {
+              const ratio = typeof event.progress === 'number'
+                ? event.progress
+                : (event.total_steps ? event.step / event.total_steps : 0);
+              setProgress(ratio, event.message || '', false);
+              if (event.message) {
+                setStatus(event.message);
+              }
+            } else if (event.type === 'complete') {
+              const ratio = typeof event.progress === 'number' ? event.progress : 1;
+              setProgress(ratio, event.message || 'Runbook terminé.', false);
+              setStatus(event.message || 'Runbook terminé.');
+
+              currentArticle = event.article || '';
+              articleOutput.textContent = currentArticle || 'Aucun contenu généré.';
+
+              if (event.brief_included) {
+                currentBriefData = event.brief || null;
+                currentBriefText = currentBriefData
+                  ? JSON.stringify(currentBriefData, null, 2)
+                  : '';
+                certBriefOutput.textContent = currentBriefText || 'Aucun JSON généré.';
+              } else {
+                currentBriefData = null;
+                currentBriefText = '';
+                certBriefOutput.textContent = DEFAULT_BRIEF_TEXT;
+              }
+
+              currentLinkedinDraft = event.linkedin_post || '';
+              renderSocialBlock(
+                linkedinOutput,
+                currentLinkedinDraft,
+                Boolean(event.linkedin_published),
+                event.linkedin_status_code,
+                event.linkedin_error,
+                'Aucun post LinkedIn généré.',
+                event.linkedin_image
+              );
+
+              streamCompleted = true;
+            } else if (event.type === 'error') {
+              const ratio = typeof event.progress === 'number'
+                ? event.progress
+                : (event.total_steps ? event.step / event.total_steps : 0);
+              setProgress(ratio, event.message || 'Erreur lors du runbook.', true);
+              setStatus(event.message || 'Erreur lors du runbook.', true);
+              streamFailed = true;
+            }
+
+            if (streamCompleted || streamFailed) {
+              break;
+            }
+          }
+
+          if (streamCompleted || streamFailed) {
+            break;
+          }
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setStatus(message, true);
+        setProgress(0, message, true);
+        streamFailed = true;
       } finally {
+        if (reader) {
+          try {
+            await reader.cancel();
+          } catch (cancelError) {
+            console.warn('Impossible d\'annuler le flux du runbook:', cancelError);
+          }
+        }
         toggleLoading(false);
-        updateActionAvailability();
       }
     });
 
@@ -908,6 +1184,29 @@
       }
     });
 
+    function resetProgress() {
+      if (!runbookProgress || !runbookProgressBar || !runbookProgressLabel) {
+        return;
+      }
+      runbookProgressBar.style.width = '0%';
+      runbookProgressBar.classList.remove('error');
+      runbookProgressLabel.textContent = '';
+      runbookProgressLabel.classList.remove('error');
+      runbookProgress.classList.add('hidden');
+    }
+
+    function setProgress(value, message = '', isError = false) {
+      if (!runbookProgress || !runbookProgressBar || !runbookProgressLabel) {
+        return;
+      }
+      const ratio = Math.max(0, Math.min(1, Number(value) || 0));
+      runbookProgress.classList.remove('hidden');
+      runbookProgressBar.style.width = `${Math.round(ratio * 100)}%`;
+      runbookProgressBar.classList.toggle('error', Boolean(isError));
+      runbookProgressLabel.textContent = message || '';
+      runbookProgressLabel.classList.toggle('error', Boolean(isError));
+    }
+
     function toggleLoading(state) {
       isLoading = Boolean(state);
       if (isLoading) {
@@ -918,6 +1217,8 @@
         publishArticleBtn.disabled = true;
         publishTweetBtn.disabled = true;
         publishLinkedinBtn.disabled = true;
+        generateBriefBtn.disabled = true;
+        publishBriefBtn.disabled = true;
       } else {
         updateActionAvailability();
       }
@@ -926,6 +1227,26 @@
     function setStatus(message, isError = false) {
       statusArea.textContent = message;
       statusArea.style.color = isError ? '#f87171' : 'var(--text-muted)';
+    }
+
+    function setButtonLoading(button, isLoading, loadingLabel) {
+      if (!button) {
+        return;
+      }
+
+      if (isLoading) {
+        if (!button.dataset.originalLabel) {
+          button.dataset.originalLabel = button.textContent;
+        }
+        button.textContent = loadingLabel || button.dataset.originalLabel;
+        button.classList.add('is-loading');
+      } else {
+        const original = button.dataset.originalLabel;
+        if (original) {
+          button.textContent = original;
+        }
+        button.classList.remove('is-loading');
+      }
     }
 
     fetchProviders();
