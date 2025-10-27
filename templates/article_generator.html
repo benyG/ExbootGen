@@ -432,12 +432,12 @@
       </div>
       <div class="actions">
         <div class="primary-actions">
-          <button class="primary" id="generateArticleBtn">Générer l'article</button>
-          <button class="secondary" id="generateTweetBtn">Générer le tweet</button>
-          <button class="secondary" id="generateLinkedinBtn">Générer le post LinkedIn</button>
+          <button type="button" class="primary" id="generateArticleBtn">Générer l'article</button>
+          <button type="button" class="secondary" id="generateTweetBtn">Générer le tweet</button>
+          <button type="button" class="secondary" id="generateLinkedinBtn">Générer le post LinkedIn</button>
         </div>
         <div class="secondary-actions">
-          <button class="playbook" id="runPlaybookBtn" disabled>Run playbook</button>
+          <button type="button" class="playbook" id="runPlaybookBtn" disabled>Run playbook</button>
           <label class="image-toggle">
             <input type="checkbox" id="addImageCheckbox">
             <span>Ajouter une image</span>
@@ -459,7 +459,7 @@
       <h2 style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">2. Article généré</h2>
       <div class="article-output" id="articleOutput">L'article généré apparaîtra ici après soumission du formulaire.</div>
       <div class="block-actions">
-        <button class="secondary" id="publishArticleBtn" disabled>Publier</button>
+        <button type="button" class="secondary" id="publishArticleBtn" disabled>Publier</button>
       </div>
     </section>
 
@@ -480,14 +480,14 @@
           <h3>Tweet</h3>
           <div class="social-block" id="tweetOutput">Le tweet généré apparaîtra ici après l'action correspondante.</div>
           <div class="block-actions">
-            <button class="secondary" id="publishTweetBtn" disabled>Publier</button>
+            <button type="button" class="secondary" id="publishTweetBtn" disabled>Publier</button>
           </div>
         </div>
         <div class="social-item">
           <h3>Post LinkedIn</h3>
           <div class="social-block" id="linkedinOutput">Le post LinkedIn généré apparaîtra ici après l'action correspondante.</div>
           <div class="block-actions">
-            <button class="secondary" id="publishLinkedinBtn" disabled>Publier</button>
+            <button type="button" class="secondary" id="publishLinkedinBtn" disabled>Publier</button>
           </div>
         </div>
       </div>
@@ -520,6 +520,40 @@
     const runbookProgress = document.getElementById('runbookProgress');
     const runbookProgressBar = document.getElementById('runbookProgressBar');
     const runbookProgressLabel = document.getElementById('runbookProgressLabel');
+
+    const requiredElements = [
+      ['providerSearch', providerSearch],
+      ['providerSelect', providerSelect],
+      ['certSearch', certSearch],
+      ['certSelect', certSelect],
+      ['examUrlInput', examUrlInput],
+      ['topicTypeSelect', topicTypeSelect],
+      ['statusArea', statusArea],
+      ['generateArticleBtn', generateArticleBtn],
+      ['generateTweetBtn', generateTweetBtn],
+      ['generateLinkedinBtn', generateLinkedinBtn],
+      ['runPlaybookBtn', runPlaybookBtn],
+      ['publishArticleBtn', publishArticleBtn],
+      ['publishTweetBtn', publishTweetBtn],
+      ['publishLinkedinBtn', publishLinkedinBtn],
+      ['articleOutput', articleOutput],
+      ['tweetOutput', tweetOutput],
+      ['linkedinOutput', linkedinOutput],
+      ['addImageCheckbox', addImageCheckbox],
+      ['certBriefSection', certBriefSection],
+      ['certBriefOutput', certBriefOutput],
+      ['generateBriefBtn', generateBriefBtn],
+      ['publishBriefBtn', publishBriefBtn],
+    ];
+
+    const missingElements = requiredElements
+      .filter(([, element]) => !element)
+      .map(([name]) => name);
+
+    if (missingElements.length) {
+      console.error('Initialisation impossible: éléments introuvables', missingElements.join(', '));
+      return;
+    }
 
     let providers = [];
     let certifications = [];
