@@ -76,6 +76,21 @@ Insert a call to action with the link to start a free ExamBoot test: {exam_url}.
 """,
 }
 
+COURSE_ART_PROMPT_TEMPLATE = """
+Generate a concise JSON profile for the certification exam {certification} from vendor {vendor}.
+Return **only** valid JSON following exactly this structure:
+{{
+  "prerequisites": ["text1", "text2", "text3"],
+  "targeted_profession": ["job title1", "job title2", "job title3"],
+  "studytip": "20-25 word sentence explaining how ExamBoot.net helps candidates prepare"
+}}
+Rules:
+- Provide exactly three distinct, specific prerequisite statements.
+- Provide exactly three targeted job titles that match real professional roles.
+- The studytip must be a single sentence of 20-25 words that clearly states how ExamBoot.net supports certification preparation.
+- Use double quotes for every string and return valid JSON without additional commentary or code fences.
+"""
+
 TWEET_PROMPT_TEMPLATES = {
     "certification_presentation": """
 Compose a short, punchy tweet introducing the certification: {certification} from {vendor}.
@@ -276,6 +291,22 @@ def generate_certification_linkedin_post(
         exam_url,
     )
     return _run_completion(prompt)
+
+
+def generate_certification_course_art(certification: str, vendor: str) -> dict:
+    """Generate structured JSON describing the certification course."""
+
+    if not OPENAI_API_KEY:
+        raise Exception(
+            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer la fiche certification."
+        )
+
+    prompt = COURSE_ART_PROMPT_TEMPLATE.format(
+        certification=certification,
+        vendor=vendor,
+    )
+    raw_content = _run_completion(prompt)
+    return clean_and_decode_json(raw_content)
 
 
 def _post_with_retry(payload: dict) -> requests.Response:
