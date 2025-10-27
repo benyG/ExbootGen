@@ -968,12 +968,14 @@ def run_playbook():
 
     attach_image = bool(data.get("add_image"))
     include_brief = topic_type == "certification_presentation"
-    total_steps = 6 if include_brief else 4
+    total_steps = 8 if include_brief else 6
 
     article_text: str = ""
     blog_id: Optional[int] = None
     blog_title: str = ""
     brief_payload: Optional[dict] = None
+    tweet_body: str = ""
+    tweet_result: Optional[SocialPostResult] = None
     linkedin_post_body: str = ""
     linkedin_result: Optional[SocialPostResult] = None
 
@@ -981,7 +983,7 @@ def run_playbook():
         return json.dumps(payload, ensure_ascii=False) + "\n"
 
     def event_stream():
-        nonlocal article_text, blog_id, blog_title, brief_payload, linkedin_post_body, linkedin_result
+        nonlocal article_text, blog_id, blog_title, brief_payload, tweet_body, tweet_result, linkedin_post_body, linkedin_result
 
         completed_steps = 0
 
@@ -1051,6 +1053,29 @@ def run_playbook():
                     "Résumé JSON publié dans la fiche certification."
                 )
 
+            tweet_body = generate_certification_tweet(
+                selection.certification_name,
+                selection.provider_name,
+                exam_url,
+                topic_type,
+            )
+            completed_steps += 1
+            yield progress_event("Tweet généré.")
+
+            tweet_result = _run_tweet_workflow(
+                selection,
+                exam_url,
+                topic_type,
+                attach_image=attach_image,
+                tweet_text=tweet_body,
+            )
+            if not tweet_result.published:
+                error_message = tweet_result.error or "La publication Twitter a échoué."
+                raise RuntimeError(error_message)
+
+            completed_steps += 1
+            yield progress_event("Tweet publié.")
+
             linkedin_post_body = generate_certification_linkedin_post(
                 selection.certification_name,
                 selection.provider_name,
@@ -1094,6 +1119,14 @@ def run_playbook():
                     "brief": brief_payload,
                     "brief_included": include_brief,
                     "brief_published": bool(brief_payload) if include_brief else False,
+                    "tweet": tweet_result.text if tweet_result else "",
+                    "tweet_published": bool(tweet_result.published)
+                    if tweet_result
+                    else False,
+                    "tweet_status_code": tweet_result.status_code if tweet_result else None,
+                    "tweet_error": tweet_result.error if tweet_result else None,
+                    "tweet_image": tweet_result.media_filename if tweet_result else None,
+                    "tweet_response": tweet_result.response if tweet_result else None,
                     "linkedin_post": linkedin_result.text if linkedin_result else "",
                     "linkedin_published": bool(
                         linkedin_result.published if linkedin_result else False
