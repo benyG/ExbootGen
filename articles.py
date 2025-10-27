@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import json
 import mimetypes
 import random
 import secrets
@@ -37,6 +38,7 @@ from config import (
 )
 from openai_api import (
     generate_certification_article,
+    generate_certification_course_art,
     generate_certification_linkedin_post,
     generate_certification_tweet,
 )
@@ -53,6 +55,23 @@ TOPIC_TYPE_OPTIONS = [
 ]
 
 TOPIC_TYPE_VALUES = {option["value"] for option in TOPIC_TYPE_OPTIONS}
+
+TOPIC_TYPE_DB_VALUES = {
+    "certification_presentation": 1,
+    "preparation_methodology": 2,
+    "experience_testimony": 3,
+    "career_impact": 4,
+    "engagement_community": 5,
+}
+
+TOPIC_TYPE_TEXT_LABELS = {
+    option["value"]: option["label"].split(" ", 1)[1]
+    if " " in option["label"]
+    else option["label"]
+    for option in TOPIC_TYPE_OPTIONS
+}
+
+COURSE_ART_TOPIC = "certification_presentation"
 
 
 @dataclass
@@ -120,6 +139,76 @@ def _fetch_selection(provider_id: int, certification_id: int) -> Selection:
         provider_name=provider_row["name"],
         certification_name=certification_row["name"],
     )
+
+
+def _map_topic_type_to_db_value(topic_type: str) -> int:
+    """Translate the topic type identifier to its database value."""
+
+    try:
+        return TOPIC_TYPE_DB_VALUES[topic_type]
+    except KeyError as exc:  # pragma: no cover - defensive programming
+        raise ValueError("Type de sujet inconnu pour l'enregistrement.") from exc
+
+
+def _build_article_summary(article_text: str) -> str:
+    """Construct a concise summary from the generated article."""
+
+    paragraphs = [line.strip() for line in article_text.splitlines() if line.strip()]
+    if not paragraphs:
+        return ""
+
+    summary_parts = []
+    current_length = 0
+    for paragraph in paragraphs:
+        summary_parts.append(paragraph)
+        current_length += len(paragraph)
+        if current_length >= 400:
+            break
+
+    summary = " ".join(summary_parts)
+    summary = summary.strip()
+    if len(summary) > 500:
+        summary = summary[:497].rstrip() + "…"
+    return summary
+
+
+def _persist_blog_article(
+    title: str,
+    topic_type_value: int,
+    summary: str,
+    article_text: str,
+    exam_url: str,
+    certification_id: int,
+) -> int:
+    """Insert the blog article and its course association in the database."""
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    try:
+        conn.start_transaction()
+        cursor.execute(
+            """
+            INSERT INTO blogs (title, topic_type, res, article, url, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
+            """,
+            (title, topic_type_value, summary, article_text, exam_url),
+        )
+        blog_id = cursor.lastrowid
+        cursor.execute(
+            """
+            INSERT INTO blog_courses (blog, course, created_at, updated_at)
+            VALUES (%s, %s, NOW(), NOW())
+            """,
+            (blog_id, certification_id),
+        )
+        conn.commit()
+        return int(blog_id)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def _percent_encode(value: str) -> str:
@@ -627,6 +716,67 @@ def generate_article():
     )
 
 
+@articles_bp.route("/publish-article", methods=["POST"])
+def publish_article():
+    """Persist the generated article and link it to the certification."""
+
+    data = request.get_json() or {}
+
+    try:
+        provider_id, certification_id, exam_url, topic_type = _extract_selection_payload(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    article_text = (data.get("article") or "").strip()
+    if not article_text:
+        return jsonify({"error": "Le contenu de l'article est requis pour la publication."}), 400
+
+    try:
+        selection = _fetch_selection(provider_id, certification_id)
+        topic_type_value = _map_topic_type_to_db_value(topic_type)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    title = (data.get("title") or "").strip()
+    summary = (data.get("summary") or "").strip()
+
+    if not title:
+        topic_label = TOPIC_TYPE_TEXT_LABELS.get(
+            topic_type, topic_type.replace("_", " ").title()
+        )
+        title = f"{selection.certification_name} – {topic_label}"
+
+    if not summary:
+        summary = _build_article_summary(article_text)
+    if not summary:
+        summary = selection.certification_name
+
+    try:
+        blog_id = _persist_blog_article(
+            title,
+            topic_type_value,
+            summary,
+            article_text,
+            exam_url,
+            certification_id,
+        )
+    except mysql.connector.Error as exc:  # pragma: no cover - database error path
+        return jsonify({"error": f"Erreur lors de l'enregistrement de l'article: {exc}"}), 500
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify(
+        {
+            "blog_id": blog_id,
+            "title": title,
+            "summary": summary,
+            "topic_type": topic_type,
+            "provider_name": selection.provider_name,
+            "certification_name": selection.certification_name,
+        }
+    )
+
+
 @articles_bp.route("/run-playbook", methods=["POST"])
 def run_playbook():
     """Run the social playbook: generate content and publish announcements."""
@@ -874,6 +1024,39 @@ def generate_linkedin():
     return jsonify({"linkedin_post": linkedin_post})
 
 
+@articles_bp.route("/generate-course-art", methods=["POST"])
+def generate_course_art():
+    """Generate the structured course information when available."""
+
+    data = request.get_json() or {}
+
+    try:
+        provider_id, certification_id, exam_url, topic_type = _extract_selection_payload(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if topic_type != COURSE_ART_TOPIC:
+        return (
+            jsonify(
+                {
+                    "error": "La fiche certification ne peut être générée que pour une présentation de certification.",
+                }
+            ),
+            400,
+        )
+
+    try:
+        selection = _fetch_selection(provider_id, certification_id)
+        course_art = generate_certification_course_art(
+            selection.certification_name,
+            selection.provider_name,
+        )
+    except Exception as exc:  # pragma: no cover - propagated for visibility
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"course_art": course_art})
+
+
 @articles_bp.route("/publish-tweet", methods=["POST"])
 def publish_tweet():
     """Generate and publish the announcement tweet."""
@@ -946,3 +1129,65 @@ def publish_linkedin():
         payload["linkedin_error"] = linkedin_result.error
 
     return jsonify(payload)
+
+
+@articles_bp.route("/publish-course-art", methods=["POST"])
+def publish_course_art():
+    """Persist the generated course JSON to the certification record."""
+
+    data = request.get_json() or {}
+
+    try:
+        provider_id, certification_id, exam_url, topic_type = _extract_selection_payload(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if topic_type != COURSE_ART_TOPIC:
+        return (
+            jsonify(
+                {
+                    "error": "La publication de la fiche n'est possible que pour le type présentation de certification.",
+                }
+            ),
+            400,
+        )
+
+    course_art_payload = data.get("course_art")
+    if isinstance(course_art_payload, str):
+        try:
+            course_art_payload = json.loads(course_art_payload)
+        except json.JSONDecodeError as exc:
+            return jsonify({"error": f"JSON de fiche invalide: {exc}"}), 400
+
+    if not isinstance(course_art_payload, dict):
+        return jsonify({"error": "Le contenu de la fiche doit être un objet JSON."}), 400
+
+    try:
+        selection = _fetch_selection(provider_id, certification_id)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    course_art_json = json.dumps(course_art_payload, ensure_ascii=False)
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE courses SET art = %s WHERE id = %s",
+            (course_art_json, certification_id),
+        )
+        conn.commit()
+    except mysql.connector.Error as exc:  # pragma: no cover - database error path
+        conn.rollback()
+        return jsonify({"error": f"Erreur lors de l'enregistrement de la fiche: {exc}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+    return jsonify(
+        {
+            "course_art": course_art_payload,
+            "provider_name": selection.provider_name,
+            "certification_name": selection.certification_name,
+        }
+    )

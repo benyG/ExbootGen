@@ -241,6 +241,19 @@
       overflow-y: auto;
     }
 
+    .json-output {
+      background: var(--glass-strong);
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(124, 247, 255, 0.2);
+      padding: 1.2rem 1.4rem;
+      white-space: pre-wrap;
+      font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', monospace;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      max-height: 360px;
+      overflow-y: auto;
+    }
+
     .social-output {
       display: grid;
       gap: 1.3rem;
@@ -273,6 +286,8 @@
     .block-actions {
       display: flex;
       justify-content: flex-end;
+      gap: 0.8rem;
+      flex-wrap: wrap;
     }
 
     .block-actions button {
@@ -369,8 +384,17 @@
       </div>
     </section>
 
+    <section id="courseArtSection" hidden>
+      <h2 id="courseArtHeading" style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">3. Fiche certification (type présentation uniquement)</h2>
+      <pre class="json-output" id="courseArtOutput">La fiche certification générée apparaîtra ici lorsque le type « présentation de certification » est sélectionné.</pre>
+      <div class="block-actions">
+        <button class="secondary" id="generateCourseArtBtn" disabled>Générer la fiche</button>
+        <button class="secondary" id="publishCourseArtBtn" disabled>Publier la fiche</button>
+      </div>
+    </section>
+
     <section>
-      <h2 style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">3. Annonces sociales</h2>
+      <h2 id="socialHeading" style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">3. Annonces sociales</h2>
       <div class="social-output">
         <div class="social-item">
           <h3>Tweet</h3>
@@ -391,6 +415,8 @@
   </main>
 
   <script>
+    const COURSE_ART_TOPIC = 'certification_presentation';
+
     const providerSearch = document.getElementById('providerSearch');
     const providerSelect = document.getElementById('providerSelect');
     const certSearch = document.getElementById('certSearch');
@@ -406,6 +432,11 @@
     const publishTweetBtn = document.getElementById('publishTweetBtn');
     const publishLinkedinBtn = document.getElementById('publishLinkedinBtn');
     const articleOutput = document.getElementById('articleOutput');
+    const courseArtSection = document.getElementById('courseArtSection');
+    const socialHeading = document.getElementById('socialHeading');
+    const courseArtOutput = document.getElementById('courseArtOutput');
+    const generateCourseArtBtn = document.getElementById('generateCourseArtBtn');
+    const publishCourseArtBtn = document.getElementById('publishCourseArtBtn');
     const tweetOutput = document.getElementById('tweetOutput');
     const linkedinOutput = document.getElementById('linkedinOutput');
     const addImageCheckbox = document.getElementById('addImageCheckbox');
@@ -415,14 +446,28 @@
     let isLoading = false;
 
     const DEFAULT_ARTICLE_TEXT = articleOutput.textContent;
+    const DEFAULT_COURSE_ART_TEXT = courseArtOutput.textContent;
     const DEFAULT_TWEET_TEXT = tweetOutput.textContent;
     const DEFAULT_LINKEDIN_TEXT = linkedinOutput.textContent;
 
     let currentArticle = '';
+    let currentCourseArt = null;
     let currentTweetDraft = '';
     let currentLinkedinDraft = '';
 
     publishArticleBtn.disabled = true;
+    generateCourseArtBtn.disabled = true;
+    publishCourseArtBtn.disabled = true;
+
+    function updateCourseArtSection() {
+      const isCourseArtTopic = topicTypeSelect.value === COURSE_ART_TOPIC;
+      courseArtSection.hidden = !isCourseArtTopic;
+      socialHeading.textContent = isCourseArtTopic ? '4. Annonces sociales' : '3. Annonces sociales';
+      if (!isCourseArtTopic) {
+        currentCourseArt = null;
+        courseArtOutput.textContent = DEFAULT_COURSE_ART_TEXT;
+      }
+    }
 
     function renderSocialBlock(element, text, published, statusCode, error, emptyMessage, imageName) {
       const hasText = Boolean(text && text.trim());
@@ -480,6 +525,10 @@
       generateTweetBtn.disabled = !hasSelection;
       generateLinkedinBtn.disabled = !hasSelection;
       runPlaybookBtn.disabled = !hasSelection;
+      publishArticleBtn.disabled = !hasSelection || !currentArticle;
+      const isCourseArtTopic = hasSelection && topicTypeSelect.value === COURSE_ART_TOPIC;
+      generateCourseArtBtn.disabled = !isCourseArtTopic;
+      publishCourseArtBtn.disabled = !isCourseArtTopic || !currentCourseArt;
       publishTweetBtn.disabled = !hasSelection || !currentTweetDraft;
       publishLinkedinBtn.disabled = !hasSelection || !currentLinkedinDraft;
     }
@@ -500,11 +549,14 @@
         return;
       }
       currentArticle = '';
+      currentCourseArt = null;
       currentTweetDraft = '';
       currentLinkedinDraft = '';
       articleOutput.textContent = DEFAULT_ARTICLE_TEXT;
+      courseArtOutput.textContent = DEFAULT_COURSE_ART_TEXT;
       tweetOutput.textContent = DEFAULT_TWEET_TEXT;
       linkedinOutput.textContent = DEFAULT_LINKEDIN_TEXT;
+      updateCourseArtSection();
       updateActionAvailability();
     }
 
@@ -575,6 +627,7 @@
     examUrlInput.addEventListener('change', resetGeneratedContent);
     topicTypeSelect.addEventListener('change', () => {
       resetGeneratedContent();
+      updateCourseArtSection();
       updateActionAvailability();
     });
 
@@ -606,6 +659,41 @@
         setStatus(error.message, true);
         currentArticle = '';
         articleOutput.textContent = 'L\'article n\'a pas pu être généré.';
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    publishArticleBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+
+      if (!selection) {
+        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        return;
+      }
+
+      if (!currentArticle || !currentArticle.trim()) {
+        setStatus('Aucun article à publier. Générez un article avant la publication.', true);
+        return;
+      }
+
+      try {
+        toggleLoading(true);
+        setStatus("Publication de l'article en cours…");
+        const response = await fetch('/articles/publish-article', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...selection, article: currentArticle })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || "Erreur lors de la publication de l'article");
+        }
+        setStatus(`Article publié avec succès (ID ${payload.blog_id}).`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(message, true);
       } finally {
         toggleLoading(false);
         updateActionAvailability();
@@ -705,6 +793,93 @@
           'Aucun post LinkedIn généré.',
           null
         );
+        setStatus(message, true);
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    generateCourseArtBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+
+      if (!selection) {
+        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        return;
+      }
+
+      if (topicTypeSelect.value !== COURSE_ART_TOPIC) {
+        setStatus('La fiche certification est uniquement disponible pour le type présentation.', true);
+        return;
+      }
+
+      try {
+        toggleLoading(true);
+        setStatus('Génération de la fiche certification en cours…');
+        const response = await fetch('/articles/generate-course-art', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selection)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la génération de la fiche certification');
+        }
+        currentCourseArt = payload.course_art || null;
+        if (currentCourseArt) {
+          courseArtOutput.textContent = JSON.stringify(currentCourseArt, null, 2);
+          setStatus('Fiche certification générée avec succès.');
+        } else {
+          currentCourseArt = null;
+          courseArtOutput.textContent = DEFAULT_COURSE_ART_TEXT;
+          setStatus('La fiche générée est vide.', true);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        currentCourseArt = null;
+        courseArtOutput.textContent = `${DEFAULT_COURSE_ART_TEXT}\n\nErreur : ${message}`;
+        setStatus(message, true);
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    publishCourseArtBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+
+      if (!selection) {
+        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        return;
+      }
+
+      if (topicTypeSelect.value !== COURSE_ART_TOPIC) {
+        setStatus('La publication de la fiche est réservée au type présentation de certification.', true);
+        return;
+      }
+
+      if (!currentCourseArt) {
+        setStatus('Aucune fiche à publier. Générez une fiche avant la publication.', true);
+        return;
+      }
+
+      try {
+        toggleLoading(true);
+        setStatus('Publication de la fiche certification en cours…');
+        const response = await fetch('/articles/publish-course-art', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...selection, course_art: currentCourseArt })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la publication de la fiche certification');
+        }
+        currentCourseArt = payload.course_art || currentCourseArt;
+        courseArtOutput.textContent = JSON.stringify(currentCourseArt, null, 2);
+        setStatus('Fiche certification publiée avec succès.');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         setStatus(message, true);
       } finally {
         toggleLoading(false);
@@ -877,6 +1052,9 @@
         generateTweetBtn.disabled = true;
         generateLinkedinBtn.disabled = true;
         runPlaybookBtn.disabled = true;
+        publishArticleBtn.disabled = true;
+        generateCourseArtBtn.disabled = true;
+        publishCourseArtBtn.disabled = true;
         publishTweetBtn.disabled = true;
         publishLinkedinBtn.disabled = true;
       } else {
@@ -889,6 +1067,7 @@
       statusArea.style.color = isError ? '#f87171' : 'var(--text-muted)';
     }
 
+    updateCourseArtSection();
     fetchProviders();
     updateActionAvailability();
   </script>
