@@ -12,7 +12,7 @@ import secrets
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Iterable, Optional, Tuple
 from urllib.parse import ParseResult, parse_qsl, quote, urlparse
 
 import mysql.connector
@@ -153,6 +153,58 @@ def _fetch_selection(provider_id: int, certification_id: int) -> Selection:
         provider_name=provider_row["name"],
         certification_name=certification_row["name"],
     )
+
+
+def _sanitize_lookup_rows(rows: Iterable[dict]) -> list[dict[str, object]]:
+    """Return lookup rows containing only valid ``id``/``name`` pairs."""
+
+    sanitized: list[dict[str, object]] = []
+    for row in rows:
+        raw_id = row.get("id") if isinstance(row, dict) else None
+        name = "" if not isinstance(row, dict) else (row.get("name") or "")
+        name = name.strip() if isinstance(name, str) else ""
+        if raw_id is None or not name:
+            continue
+        try:
+            identifier = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        sanitized.append({"id": identifier, "name": name})
+
+    return sanitized
+
+
+def _fetch_providers_list() -> list[dict[str, object]]:
+    """Return the list of providers available in the catalogue."""
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id, name FROM provs ORDER BY name")
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    return _sanitize_lookup_rows(rows)
+
+
+def _fetch_certifications_list(provider_id: int) -> list[dict[str, object]]:
+    """Return the certifications associated with a provider."""
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id, name FROM courses WHERE prov = %s ORDER BY name",
+            (provider_id,),
+        )
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    return _sanitize_lookup_rows(rows)
 
 
 def _derive_article_title(article: str, selection: Selection, topic_type: str) -> str:
@@ -717,6 +769,38 @@ def index() -> str:
         "article_generator.html",
         topic_types=TOPIC_TYPE_OPTIONS,
     )
+
+
+@articles_bp.route("/api/providers")
+def list_providers() -> Response:
+    """Return the dropdown-ready provider list used by the UI."""
+
+    try:
+        providers = _fetch_providers_list()
+    except mysql.connector.Error as exc:  # pragma: no cover - surfaced to the UI
+        message = (
+            "Erreur lors de la récupération des providers. "
+            f"{exc.msg if hasattr(exc, 'msg') else exc}"
+        )
+        return jsonify({"error": message}), 500
+
+    return jsonify(providers)
+
+
+@articles_bp.route("/api/certifications/<int:provider_id>")
+def list_certifications(provider_id: int) -> Response:
+    """Return the certifications belonging to the selected provider."""
+
+    try:
+        certifications = _fetch_certifications_list(provider_id)
+    except mysql.connector.Error as exc:  # pragma: no cover - surfaced to the UI
+        message = (
+            "Erreur lors de la récupération des certifications. "
+            f"{exc.msg if hasattr(exc, 'msg') else exc}"
+        )
+        return jsonify({"error": message}), 500
+
+    return jsonify(certifications)
 
 
 def _extract_selection_payload(data: dict) -> Tuple[int, int, str, str]:

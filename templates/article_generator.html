@@ -527,6 +527,8 @@
     const certBriefOutput = document.getElementById('certBriefOutput');
     const generateBriefBtn = document.getElementById('generateBriefBtn');
     const publishBriefBtn = document.getElementById('publishBriefBtn');
+    const providersEndpoint = {{ url_for('articles.list_providers')|tojson }};
+    const certificationsEndpointBase = {{ url_for('articles.list_certifications', provider_id=0)|tojson }}.replace(/0$/, '');
     const runbookProgress = document.getElementById('runbookProgress');
     const runbookProgressBar = document.getElementById('runbookProgressBar');
     const runbookProgressLabel = document.getElementById('runbookProgressLabel');
@@ -650,9 +652,18 @@
 
     async function fetchProviders() {
       try {
-        const response = await fetch('/quest/api/providers');
-        if (!response.ok) throw new Error('Impossible de récupérer les providers');
-        providers = await response.json();
+        const response = await fetch(providersEndpoint);
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch (_) {
+          payload = null;
+        }
+        if (!response.ok) {
+          const message = payload && payload.error ? payload.error : 'Impossible de récupérer les providers';
+          throw new Error(message);
+        }
+        providers = Array.isArray(payload) ? payload : [];
         renderProviders(providers);
       } catch (error) {
         setStatus(error.message, true);
@@ -718,9 +729,18 @@
       }
       try {
         setStatus('Chargement des certifications…');
-        const response = await fetch(`/quest/api/certifications/${providerId}`);
-        if (!response.ok) throw new Error('Erreur lors de la récupération des certifications');
-        certifications = await response.json();
+        const response = await fetch(`${certificationsEndpointBase}${providerId}`);
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch (_) {
+          payload = null;
+        }
+        if (!response.ok) {
+          const message = payload && payload.error ? payload.error : 'Erreur lors de la récupération des certifications';
+          throw new Error(message);
+        }
+        certifications = Array.isArray(payload) ? payload : [];
         renderCertifications(certifications);
         setStatus('');
       } catch (error) {
