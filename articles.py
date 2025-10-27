@@ -105,6 +105,29 @@ class SocialPublishError(RuntimeError):
         self.status_code = status_code
 
 
+def _serialize_social_result(
+    prefix: str, result: Optional[SocialPostResult]
+) -> dict[str, object]:
+    """Return a JSON-serialisable payload for a social publication result."""
+
+    if not result:
+        return {}
+
+    payload: dict[str, object] = {
+        prefix: result.text,
+        f"{prefix}_response": result.response,
+        f"{prefix}_published": result.published,
+        f"{prefix}_status_code": result.status_code,
+    }
+
+    if result.media_filename:
+        payload[f"{prefix}_image"] = result.media_filename
+    if result.error:
+        payload[f"{prefix}_error"] = result.error
+
+    return payload
+
+
 def _fetch_selection(provider_id: int, certification_id: int) -> Selection:
     """Return the provider and certification names for the given identifiers."""
 
@@ -1336,18 +1359,7 @@ def publish_tweet():
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
-    payload = {
-        "tweet": tweet_result.text,
-        "tweet_response": tweet_result.response,
-        "tweet_published": tweet_result.published,
-        "tweet_status_code": tweet_result.status_code,
-    }
-    if tweet_result.media_filename:
-        payload["tweet_image"] = tweet_result.media_filename
-    if tweet_result.error:
-        payload["tweet_error"] = tweet_result.error
-
-    return jsonify(payload)
+    return jsonify(_serialize_social_result("tweet", tweet_result))
 
 
 @articles_bp.route("/publish-linkedin", methods=["POST"])
@@ -1373,15 +1385,4 @@ def publish_linkedin():
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
-    payload = {
-        "linkedin_post": linkedin_result.text,
-        "linkedin_response": linkedin_result.response,
-        "linkedin_published": linkedin_result.published,
-        "linkedin_status_code": linkedin_result.status_code,
-    }
-    if linkedin_result.media_filename:
-        payload["linkedin_image"] = linkedin_result.media_filename
-    if linkedin_result.error:
-        payload["linkedin_error"] = linkedin_result.error
-
-    return jsonify(payload)
+    return jsonify(_serialize_social_result("linkedin", linkedin_result))
