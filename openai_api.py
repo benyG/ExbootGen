@@ -333,12 +333,12 @@ Return **only** valid JSON following exactly this structure:
 {{
   "prerequisites": ["text1", "text2", "text3"],
   "targeted_profession": ["job title1", "job title2", "job title3"],
-  "studytip": "20-25 word sentence explaining how ExamBoot.net helps candidates prepare"
+  "studytip": "20-25 words"
 }}
 Rules:
 - Provide a maximum of five distinct, specific prerequisite statements.
 - Provide a maximum of five distinct targeted job titles that match real professional roles.
-- The studytip must be up to 20-25 words that clearly states how ExamBoot.net can tactically supports certification preparation. Knowing that ExamBoot offers: A bank of realistic questions, an exam simulation engine, an AI coach providing question explanations, performance analysis, and intelligent test generation tailored to your weaknesses. And finally, shareable tests to engage with your community.
+- The studytip must be up to 20-25 words that clearly states how tactically preppare for certification exam.
 - Use double quotes for every string and return valid JSON without additional commentary or code fences.
 """
 
