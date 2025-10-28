@@ -35,6 +35,7 @@ Your mission is to write a SEO optimized, clear, actionable and up-to-date artic
 Reference Sources: only from official website of the specified certification vendor.
 If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate informations.
 RULES:
+- Format your response in Markdown.
 - Titles should be short.
 - respect scrupulously the given Article structure only
 - Formulates complete, non-robotic sentences
@@ -42,53 +43,76 @@ RULES:
 - Tone: motivating, factual, without unexplained jargon.
 - Zero fluff: each section must deliver useful and actionable information.
 STRUCTURE:
-- certification objectives
-- targeted professions.
-- targeted audience
+- Certification objectives
+- Targeted professions.
+- Audience
 - Official prerequisites.
 - Exam plan: Precise format (duration, number of questions, types), language, passing score, retake policy, validity/recertification.
 - How ExamBoot.net helps candidates prepare
-- A call to action with a link to to start a free test: {exam_url}.
+- Study tip (≤50 words)
+- A call to action with a link to start a free test: {exam_url}.
 """,
     "preparation_methodology": """
-Write a step-by-step guide on how to Prepare for the certification exam: {certification} from {vendor}.
+Write a SEO optimized, clear, actionable and up-to-date step-by-step guide on how to Prepare for the certification exam: {certification} from {vendor}.
 Include study duration, key topics, common mistakes, and preparation resources.
-Integrate how ExamBoot.net’s AI coach, performances analysis and realistic simulations accelerate learning.
+Integrate how ExamBoot.net features like qustions bank, AI coach, performances analysis and realistic simulations, can help accelerate learning.
 Format with headings, bullet points, and a motivational tone.
 Explicitly include the link to start a free ExamBoot test: {exam_url}.
+RULES:
+- Format your response in Markdown.
+- Titles should be SEO optimized.
+- Formulates complete, non-robotic sentences
+- Target length: 1,500–2,200 words.
 """,
     "experience_testimony": """
-Write a first-person or storytelling-style blog post on how to pass the certification exam: {certification} from {vendor}.
-Structure: motivation, challenges, strategy, results.
+Write a SEO optimized, clear, actionable and up-to-date third-person or storytelling-style blog post testimony on how to pass the certification exam: {certification} from {vendor}.
+Structure: presentation, motivation, challenges, strategy, results.
+Make it inspiring and motivating.
 Include realistic study milestones, use of ExamBoot.net, and takeaways for other candidates.
 End with a call to action containing the link to start a free test: {exam_url}.
+RULES:
+- Format your response in Markdown.
+- Titles should be SEO optimized.
+- Formulates complete, non-robotic sentences
+- Target length: 1,500–2,200 words.
 """,
     "career_impact": """
 Write a data-driven blog post on how the certification exam: {certification} from {vendor} can Boost Your career Opportunities.
 Include statistics (average salaries, job titles, demand trends), examples of companies hiring certified professionals, and how ExamBoot.net helps candidates stand out.
 Conclude with a call to action featuring the link to start a free ExamBoot test: {exam_url}.
+RULES:
+- Format your response in Markdown.
+- Titles should be SEO optimized.
+- Formulates complete, non-robotic sentences
+- Target length: 1,500–2,200 words.
 """,
     "engagement_community": """
 Write an interactive blog post titled “Can You Pass This Mini {certification} from {vendor} Quiz?”
 Include 5–10 sample questions with answers and explanations.
 Add a section inviting readers to try the full simulation on ExamBoot.net and share their scores online.
 Insert a call to action with the link to start a free ExamBoot test: {exam_url}.
+RULES:
+- Format your response in Markdown.
+- Titles should be SEO optimized.
+- Formulates complete, non-robotic sentences
+- Target length: 1,500–2,200 words.
 """,
 }
 
-COURSE_ART_PROMPT_TEMPLATE = """
-Generate a concise JSON profile for the certification exam {certification} from vendor {vendor}.
-Return **only** valid JSON following exactly this structure:
+CERTIFICATION_PRESENTATION_JSON_PROMPT = """
+You are an expert certification advisor helping candidates understand {certification} from {vendor}.
+Produce a JSON object describing the certification with the following exact structure:
 {{
   "prerequisites": ["text1", "text2", "text3"],
   "targeted_profession": ["job title1", "job title2", "job title3"],
-  "studytip": "20-25 word sentence explaining how ExamBoot.net helps candidates prepare"
+  "studytip": "In 20-25 words tell here how ExamBoot.net can help to prepare for the certification"
 }}
-Rules:
-- Provide exactly three distinct, specific prerequisite statements.
-- Provide exactly three targeted job titles that match real professional roles.
-- The studytip must be a single sentence of 20-25 words that clearly states how ExamBoot.net supports certification preparation.
-- Use double quotes for every string and return valid JSON without additional commentary or code fences.
+Guidelines:
+- Return exactly three concise bullet-style strings in both arrays, each 6-12 words.
+- Mention specific skills, knowledge, or credentials relevant to {certification} in the prerequisites.
+- Mention realistic job titles aligned with the certification outcome in the targeted_profession list.
+- The studytip MUST be a single sentence of 20-25 words, highlight ExamBoot.net, and stay actionable.
+- Respond with valid JSON only, no explanations or Markdown.
 """
 
 TWEET_PROMPT_TEMPLATES = {
@@ -97,29 +121,33 @@ Compose a short, punchy tweet introducing the certification: {certification} fro
 Highlight 1 key benefit, 1 career outcome, and mention ExamBoot.net as the platform to prepare.
 Include 3 relevant hashtags and a link to the free practice test: {exam_url}.
 Return only the tweet text without additional commentary.
+max 280 characters.
 """,
     "preparation_methodology": """
 Tweet actionable exam prep tips for certification exam: {certification} from {vendor}.
 Follow with 3 quick bullet points, then “💡Train smarter with ExamBoot free test: {exam_url}”.
 Include 3 relevant hashtags and no additional commentary.
+max 280 characters.
 """,
     "experience_testimony": """
-Post a motivational short story tweet on how to pass the certification exam: {certification} from {vendor} after specified weeks of focused prep.
-Biggest lesson? Practice + AI guidance = success.
+Post a motivational cote on how to pass the certification exam: {certification} from {vendor} after specified weeks of focused prep.
 Try ExamBoot.net for your journey with a link to start a free test: 👉{exam_url}
 Include 3 relevant hashtags.
 Return only the tweet body.
+max 280 characters.
 """,
     "career_impact": """
 Tweet key value insight from certification exam: {certification} from {vendor}.
 Include 3 relevant hashtags and a link to the free practice test: {exam_url}.
 Return only the tweet content.
+max 280 characters.
 """,
     "engagement_community": """
 “Can you pass this mini {certification} from {vendor} quiz? 🤔”
 Try the free practice test now on ExamBoot.net and share your score!
 👉 {exam_url}
 Include 3 relevant hashtags and no additional commentary.
+max 280 characters.
 """,
 }
 
@@ -293,6 +321,29 @@ def generate_certification_linkedin_post(
     return _run_completion(prompt)
 
 
+def _build_course_art_prompt(certification: str, vendor: str) -> str:
+    """Return the course art prompt even if the template constant is missing."""
+
+    try:
+        template = COURSE_ART_PROMPT_TEMPLATE
+    except NameError:  # pragma: no cover - defensive guard for partial imports
+        template = """
+Generate a concise JSON profile for the certification exam {certification} from vendor {vendor}.
+Return **only** valid JSON following exactly this structure:
+{{
+  "prerequisites": ["text1", "text2", "text3"],
+  "targeted_profession": ["job title1", "job title2", "job title3"],
+  "studytip": "20-25 word sentence explaining how ExamBoot.net helps candidates prepare"
+}}
+Rules:
+- Provide a maximum of five distinct, specific prerequisite statements.
+- Provide a maximum of five distinct targeted job titles that match real professional roles.
+- The studytip must be up to 20-25 words that clearly states how ExamBoot.net can tactically supports certification preparation. Knowing that ExamBoot offers: A bank of realistic questions, an exam simulation engine, an AI coach providing question explanations, performance analysis, and intelligent test generation tailored to your weaknesses. And finally, shareable tests to engage with your community.
+- Use double quotes for every string and return valid JSON without additional commentary or code fences.
+"""
+
+    return template.format(certification=certification, vendor=vendor)
+
 def generate_certification_course_art(certification: str, vendor: str) -> dict:
     """Generate structured JSON describing the certification course."""
 
@@ -301,10 +352,7 @@ def generate_certification_course_art(certification: str, vendor: str) -> dict:
             "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer la fiche certification."
         )
 
-    prompt = COURSE_ART_PROMPT_TEMPLATE.format(
-        certification=certification,
-        vendor=vendor,
-    )
+    prompt = _build_course_art_prompt(certification, vendor)
     raw_content = _run_completion(prompt)
     return clean_and_decode_json(raw_content)
 
