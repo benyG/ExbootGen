@@ -1,0 +1,52 @@
+{
+  "schema_version": "0.2.0",
+  "lab": {
+    "id": "archi-only-demo",
+    "title": "Architecture drag-and-drop (démo)",
+    "subtitle": "Architecture + Quiz",
+    "variables": {},
+    "scoring": { "max_points": 60 },
+    "timer": { "mode": "countdown", "seconds": 600 },
+    "assets": [],
+    "steps": [
+			  {
+		  "id": "archi-free",
+		  "type": "architecture",
+		  "title": "Archi libre (mini PacketTracer)",
+		  "instructions_md": "Ajoute les composants et relie-les librement.",
+		  "architecture": {
+			"freeform": true,
+			"palette": [
+			  { "id": "alb", "label": "ALB" },
+			  { "id": "asg", "label": "ASG" },
+			  { "id": "rds", "label": "RDS (privé)" }
+			],
+			"expected": {
+			  "require_nodes": ["alb", "asg", "rds"],
+			  "min_counts": { "asg": 1 },
+			  "connections_by_type": [
+				{ "from": "alb", "to": "asg" },
+				{ "from": "asg", "to": "rds" }
+			  ]
+			}
+		  },
+		  "points": 40,
+		  "transitions": { "on_success": "quiz-impact" }
+		}
+		,
+      {
+        "id": "quiz-impact",
+        "type": "quiz",
+        "title": "Bloquer l'accès public",
+        "question_md": "Bloquer l'accès public empêche…?",
+        "choices": [
+          { "id": "a", "text": "Toutes les requêtes signées" },
+          { "id": "b", "text": "L'accès anonyme" }
+        ],
+        "correct": ["b"],
+        "points": 20,
+        "transitions": { "on_success": "#end" }
+      }
+    ]
+  }
+}
