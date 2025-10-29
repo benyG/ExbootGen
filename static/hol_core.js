@@ -3,18 +3,114 @@ const deepClone = (o) => JSON.parse(JSON.stringify(o));
 const seededRandom = (seedStr) => { function xmur3(str){let h=1779033703^str.length;for(let i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353);h=(h<<13)|(h>>>19);}return function(){h=Math.imul(h^(h>>>16),2246822507);h=Math.imul(h^(h>>>13),3266489909);h^=h>>>16;return h>>>0;};} function mulberry32(a){return function(){let t=(a+=0x6d2b79f5);t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296;};} return mulberry32(xmur3(seedStr)()); };
 const templateString = (s,v)=> s.replace(/\{\{(.*?)\}\}/g,(_,k)=> (v[k.trim()]??"")+"");
 const templateAny=(val,v)=> typeof val==="string"?templateString(val,v):Array.isArray(val)?val.map(x=>templateAny(x,v)):(val&&typeof val==="object"?Object.fromEntries(Object.entries(val).map(([k,x])=>[k,templateAny(x,v)])):val);
+const stableStringify=(val)=>{
+  if(val===null||typeof val!=='object') return JSON.stringify(val);
+  if(Array.isArray(val)) return '['+val.map(stableStringify).join(',')+']';
+  return '{'+Object.keys(val).sort().map(k=> JSON.stringify(k)+':'+stableStringify(val[k])).join(',')+'}';
+};
+const deepEqual=(a,b)=> stableStringify(a)===stableStringify(b);
 const getByPath=(o,p)=> p.split('.').reduce((a,k)=> (a==null?undefined:a[k]), o);
 const setByPath=(o,p,val)=>{const parts=p.split('.');let cur=o;for(let i=0;i<parts.length-1;i++){if(cur[parts[i]]==null)cur[parts[i]]={};cur=cur[parts[i]];}cur[parts[parts.length-1]]=val;};
 const applyWorldPatch=(world,patch,vars)=> (patch||[]).forEach(p=> p.op==='set' && setByPath(world, templateString(p.path,vars), templateAny(p.value,vars)) );
 const md = (s='')=> s.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>');
 
-function runValidators(validators, payload){
+function normalizeIconSpec(icon){
+  if(!icon) return null;
+  if(typeof icon==='string'){
+    const trimmed=icon.trim();
+    if(!trimmed) return null;
+    if(/^data:image\//.test(trimmed) || /^https?:\/\//.test(trimmed) || trimmed.startsWith('/')){
+      return { kind:'image', src:trimmed, alt:'' };
+    }
+    return { kind:'text', text:trimmed };
+  }
+  if(typeof icon==='object'){
+    if((icon.kind==='image' || icon.type==='image') && (icon.src||icon.url||icon.href)){
+      return { kind:'image', src:icon.src||icon.url||icon.href, alt:icon.alt||icon.label||'' };
+    }
+    if(icon.kind==='text' || icon.type==='text' || icon.kind==='emoji'){
+      if(icon.text||icon.value||icon.emoji) return { kind:'text', text:icon.text||icon.value||icon.emoji };
+    }
+  }
+  return null;
+}
+
+function iconsEqual(a,b){
+  const na=normalizeIconSpec(a);
+  const nb=normalizeIconSpec(b);
+  if(!na && !nb) return true;
+  if(!na || !nb) return false;
+  if(na.kind!==nb.kind) return false;
+  if(na.kind==='image') return na.src===nb.src && na.alt===nb.alt;
+  return na.text===nb.text;
+}
+
+function setIconElementContent(el, iconRaw){
+  el.innerHTML='';
+  const icon=normalizeIconSpec(iconRaw);
+  if(!icon) return;
+  if(icon.kind==='image'){
+    const img=document.createElement('img');
+    img.src=icon.src;
+    img.alt=icon.alt||'';
+    el.appendChild(img);
+  } else {
+    el.textContent=icon.text;
+  }
+}
+
+function buildChipElement(tagName, item){
+  const chip=document.createElement(tagName);
+  if(tagName==='button') chip.type='button';
+  chip.className='chip';
+  chip.dataset.componentId=item.id;
+  if(item.description) chip.title=item.description;
+  const iconSpan=document.createElement('span');
+  iconSpan.className='chip-icon';
+  setIconElementContent(iconSpan, item.icon);
+  const labelSpan=document.createElement('span');
+  labelSpan.className='chip-label';
+  labelSpan.textContent=item.label || item.id;
+  chip.appendChild(iconSpan);
+  chip.appendChild(labelSpan);
+  return chip;
+}
+
+function normalizeArchitectureForCompare(payload){
+  if(!payload || typeof payload!=='object') return payload;
+  const clone=deepClone(payload);
+  if(Array.isArray(clone.nodes)){
+    clone.nodes=clone.nodes.map(node=>{
+      const next=deepClone(node);
+      if(Array.isArray(next.tags)) next.tags=[...next.tags].sort();
+      return next;
+    }).sort((a,b)=> String(a.id||'').localeCompare(String(b.id||'')));
+  }
+  if(Array.isArray(clone.links)){
+    clone.links=[...clone.links].sort((a,b)=> String(a.id||'').localeCompare(String(b.id||'')));
+  }
+  if(clone.summary){
+    const sum=clone.summary;
+    if(sum.type_connections){
+      sum.type_connections=[...sum.type_connections].sort((a,b)=>{
+        const fa=String(a.from||'');
+        const fb=String(b.from||'');
+        if(fa!==fb) return fa.localeCompare(fb);
+        return String(a.to||'').localeCompare(String(b.to||''));
+      });
+    }
+  }
+  return clone;
+}
+
+function runValidators(validators, payload, worldOverride){
   const errors=[];
+  const worldCtx = worldOverride || state.world;
   for(const v of (validators||[])){
     if(v.kind==='world'){
       const rawPath = v.path || v.expect?.path || '';
       const path = templateString(rawPath, state.vars);
-      const got = getByPath(state.world, path);
+      const got = getByPath(worldCtx, path);
       const wantRaw = v.equals!==undefined ? v.equals : v.expect?.equals;
       const want = wantRaw===undefined ? undefined : templateAny(wantRaw, state.vars);
       const ok = want===undefined ? got!==undefined : JSON.stringify(got)===JSON.stringify(want);
@@ -23,7 +119,7 @@ function runValidators(validators, payload){
       }
     } else if (v.kind==='expression'){
       let ok=false;
-      try{ ok = !!evalExpr(v.expr, { world: state.world, vars: state.vars, payload }); }
+      try{ ok = !!evalExpr(v.expr, { world: worldCtx, vars: state.vars, payload }); }
       catch{ errors.push(templateString(v.error_message || v.message || 'Expression invalide', state.vars)); continue; }
       if(!ok){
         errors.push(templateString(v.message || 'Expression non vérifiée', state.vars));
@@ -193,9 +289,12 @@ function renderStep(){
       wrap.appendChild(row);
     });
     const btnSave=document.createElement('button'); btnSave.className='button'; btnSave.textContent='Enregistrer'; btnSave.onclick=()=>{
-      const next=deepClone(state.world); setByPath(next, templateString(path,state.vars), local); state.world=next; setWorld(); feedback.innerHTML='';
-      const res = runValidators(r.validators||[], local);
+      const next=deepClone(state.world);
+      setByPath(next, templateString(path,state.vars), local);
+      feedback.innerHTML='';
+      const res = runValidators(r.validators||[], local, next);
       if(!res.ok){ feedback.innerHTML = '<div class="ko">'+res.errors.join('<br>')+'</div>'; return; }
+      state.world=next; setWorld();
       success(r);
     };
     body.appendChild(wrap); body.appendChild(btnSave);
@@ -333,12 +432,7 @@ function renderArchitectureFreeform(step, cfg, mount){
   paletteCol.appendChild(paletteList);
 
   (cfg.palette || []).forEach(item => {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'chip';
-    chip.dataset.componentId = item.id;
-    chip.title = item.description || '';
-    chip.innerHTML = `<span class="chip-icon">${item.icon || '⬜'}</span><span class="chip-label">${item.label || item.id}</span>`;
+    const chip = buildChipElement('button', item);
     chip.addEventListener('click', ()=> addNode(item.id));
     paletteList.appendChild(chip);
   });
@@ -421,26 +515,73 @@ function renderArchitectureFreeform(step, cfg, mount){
   let pendingFrom = null;
   let selectedNode = null;
 
-  const paletteLookup = (id)=> (cfg.palette || []).find(p=> p.id===id) || { id, label:id, icon:'' };
+  const paletteLookup = (id)=>{
+    const raw = (cfg.palette || []).find(p=> p.id===id);
+    if(raw){
+      const tagsRaw = raw.tags;
+      return {
+        id: raw.id || id,
+        paletteId: raw.id || id,
+        label: raw.label || raw.id || id,
+        type: raw.type || raw.component || raw.id || id,
+        iconRaw: raw.icon ?? null,
+        width: raw.width,
+        height: raw.height,
+        tags: Array.isArray(tagsRaw)? tagsRaw : (tagsRaw ? [tagsRaw] : [])
+      };
+    }
+    return { id, paletteId:id, label:id, type:id, iconRaw:null, width:176, height:68, tags:[] };
+  };
 
-  function addNode(type){
-    const spec = paletteLookup(type);
-    const width = spec.width || 176;
-    const height = spec.height || 68;
-    const id = 'n'+(nodeUid++);
-    const startX = Math.max(32, (stage.width()/2 - width/2) + ((nodes.length%3)-1)*48);
-    const startY = Math.max(24, (stage.height()/2 - height/2) + (nodes.length*28)%240);
+  function cancelPendingLink(){ pendingFrom=null; stage.container().classList.remove('is-linking'); }
+
+  function setNodeIcon(nodeData, iconValue){
+    if(nodeData.iconNode){ nodeData.iconNode.destroy(); nodeData.iconNode=null; }
+    nodeData.iconRaw = iconValue ?? null;
+    nodeData.icon = normalizeIconSpec(iconValue);
+    if(nodeData.icon){
+      let iconNode=null;
+      if(nodeData.icon.kind==='image'){
+        iconNode = new Konva.Image({ x:16, y: nodeData.height/2 - 16, width:32, height:32, listening:false, opacity:0.92 });
+        const imgObj = new window.Image();
+        imgObj.onload = ()=>{ iconNode.image(imgObj); layerNodes.batchDraw(); };
+        imgObj.src = nodeData.icon.src;
+      } else {
+        iconNode = new Konva.Text({ text: nodeData.icon.text, fontSize:26, fill:'#7cf7ff', y: nodeData.height/2 - 20, width:40, align:'center', listening:false });
+        iconNode.x(16);
+      }
+      nodeData.iconNode = iconNode;
+      nodeData.group.add(iconNode);
+      nodeData.rect.moveToBottom();
+      nodeData.labelNode.x(62);
+      nodeData.labelNode.width(nodeData.width - 76);
+      nodeData.labelNode.align('left');
+      nodeData.labelNode.moveToTop();
+    } else {
+      nodeData.labelNode.x(24);
+      nodeData.labelNode.width(nodeData.width - 48);
+      nodeData.labelNode.align('left');
+    }
+    layerNodes.batchDraw();
+  }
+
+  function addNode(componentId, overrides={}){
+    const spec = paletteLookup(componentId);
+    const width = overrides.width || spec.width || 176;
+    const height = overrides.height || spec.height || 68;
+    const id = overrides.id || 'n'+(nodeUid++);
+    const startX = overrides.position?.x ?? Math.max(32, (stage.width()/2 - width/2) + ((nodes.length%3)-1)*48);
+    const startY = overrides.position?.y ?? Math.max(24, (stage.height()/2 - height/2) + (nodes.length*28)%240);
     const group = new Konva.Group({ x:startX, y:startY, draggable:true });
     const rect = new Konva.Rect({ width, height, cornerRadius:14, stroke:'#1d2a5b', strokeWidth:1.4, fill:'#0f1630', shadowColor:'#47f5c0', shadowBlur:18, shadowOpacity:0, shadowOffset:{x:0,y:0} });
-    const label = new Konva.Text({ text: spec.label || type, fontSize:16, fill:'#cde1ff', y: height/2 - 9 });
-    const iconText = new Konva.Text({ text: spec.icon || '', fontSize:26, fill:'#7cf7ff', y: height/2 - 20, width:40, align:'center' });
+    const label = new Konva.Text({ text: overrides.label || spec.label || componentId, fontSize:16, fill:'#cde1ff', y: height/2 - 9, width: width - 48, align:'left' });
     const portIn = new Konva.Circle({ x:0, y:height/2, radius:6, fill:'#16264d', stroke:'#47f5c0', strokeWidth:1.4 });
     const portOut = new Konva.Circle({ x:width, y:height/2, radius:6, fill:'#16264d', stroke:'#47f5c0', strokeWidth:1.4 });
 
-    if(spec.icon){ iconText.x(16); group.add(iconText); label.x(62); }
-    else { label.x(24); }
-
-    group.add(rect, label, portIn, portOut);
+    group.add(rect);
+    group.add(label);
+    group.add(portIn);
+    group.add(portOut);
     layerNodes.add(group);
     layerNodes.draw();
 
@@ -464,15 +605,33 @@ function renderArchitectureFreeform(step, cfg, mount){
     });
     group.on('contextmenu', (evt)=>{ evt.evt.preventDefault(); removeNode(id); });
 
-    portOut.on('mousedown touchstart', (evt)=>{ evt.cancelBubble=true; pendingFrom=id; stage.container().classList.add('is-linking'); });
-    portIn.on('mouseup touchend', (evt)=>{ evt.cancelBubble=true; if(pendingFrom && pendingFrom!==id){ addLink(pendingFrom, id); } pendingFrom=null; stage.container().classList.remove('is-linking'); });
+    const beginLink = (evt)=>{ evt.cancelBubble=true; pendingFrom=id; stage.container().classList.add('is-linking'); };
+    const finishLink = (evt)=>{ evt.cancelBubble=true; if(pendingFrom && pendingFrom!==id){ addLink(pendingFrom, id); } cancelPendingLink(); };
+    portOut.on('mousedown touchstart', beginLink);
+    portOut.on('click tap', beginLink);
+    portIn.on('mouseup touchend', finishLink);
+    portIn.on('click tap', finishLink);
 
-    const nodeData = { id, type: spec.type || type, paletteId: spec.id || type, group, rect, labelNode: label, icon: spec.icon || '', iconNode: iconText, width, height, tags: Array.isArray(spec.tags)? spec.tags : (spec.tags?[spec.tags]:[]), alias: null };
+    const tagsRaw = overrides.tags!==undefined ? overrides.tags : spec.tags;
+    const tags = Array.isArray(tagsRaw)? tagsRaw : (tagsRaw ? [tagsRaw] : []);
+    const paletteId = overrides.palette_id || spec.paletteId || componentId;
+    const nodeType = overrides.type || spec.type || componentId;
+    const nodeData = { id, type: nodeType, paletteId, group, rect, labelNode: label, iconRaw: null, icon: null, iconNode: null, width, height, tags, alias: null };
     nodes.push(nodeData);
+    setNodeIcon(nodeData, overrides.icon!==undefined ? overrides.icon : spec.iconRaw);
+    portIn.moveToTop();
+    portOut.moveToTop();
+    if(overrides.alias){ nodeData.alias = overrides.alias; aliasMap[overrides.alias] = id; }
     selectNode(id);
     drawLinks();
     return id;
   }
+
+  stage.on('mousedown touchstart', (evt)=>{
+    const target = evt.target;
+    if(!target || target === stage){ cancelPendingLink(); }
+  });
+  stage.on('mouseleave', ()=>{ cancelPendingLink(); });
 
   function selectNode(id){
     selectedNode = id;
@@ -520,6 +679,8 @@ function renderArchitectureFreeform(step, cfg, mount){
     const idx = nodes.findIndex(n=> n.id===id);
     if(idx===-1) return;
     const node = nodes[idx];
+    if(node.alias){ delete aliasMap[node.alias]; }
+    if(pendingFrom===id) cancelPendingLink();
     node.group.destroy();
     nodes.splice(idx,1);
     for(let i=links.length-1;i>=0;i--){ if(links[i].fromNode===id || links[i].toNode===id){ links[i].arrow.destroy(); links.splice(i,1); } }
@@ -548,7 +709,7 @@ function renderArchitectureFreeform(step, cfg, mount){
           type: n.type,
           palette_id: n.paletteId,
           label: n.labelNode.text(),
-          icon: n.icon || '',
+          icon: n.iconRaw ?? null,
           tags: n.tags,
           position: { x: Math.round(pos.x), y: Math.round(pos.y) }
         };
@@ -577,15 +738,26 @@ function renderArchitectureFreeform(step, cfg, mount){
     (cfg.initial_nodes || []).forEach(entry => {
       if(entry == null) return;
       if(typeof entry === 'string'){ addNode(entry); return; }
-      const idRef = entry.id || entry.type || entry.component;
-      const nodeId = addNode(idRef);
+      const paletteRef = entry.palette_id || entry.component || entry.type || entry.id;
+      if(!paletteRef){ return; }
+      const overrides = {
+        id: entry.node_id || entry.nodeId || entry.instance_id,
+        label: entry.label,
+        position: entry.position,
+        alias: entry.alias,
+        icon: entry.icon,
+        tags: entry.tags,
+        palette_id: entry.palette_id,
+        width: entry.width,
+        height: entry.height
+      };
+      if(entry.node_type){ overrides.type = entry.node_type; }
+      const nodeId = addNode(paletteRef, overrides);
       const node = getNodeById(nodeId);
-      if(entry.label){ node.labelNode.text(entry.label); }
-      if(entry.position){
+      if(node && entry.position){
         const pos = { x: entry.position.x ?? node.group.x(), y: entry.position.y ?? node.group.y() };
         node.group.position(pos);
       }
-      if(entry.alias){ node.alias = entry.alias; aliasMap[entry.alias] = nodeId; }
     });
     (cfg.initial_links || []).forEach(link => {
       if(!link) return;
@@ -602,6 +774,8 @@ function renderArchitectureFreeform(step, cfg, mount){
     stage.scale({x:1,y:1});
     stage.position({x:0,y:0});
     drawGrid();
+    aliasMap = {};
+    cancelPendingLink();
   }
 
   const actions = document.createElement('div');
@@ -656,7 +830,8 @@ function renderArchitectureSlots(step, cfg, mount){
   pal.innerHTML = '<div class="palette-header"><h4>Palette</h4></div>';
   const palList = document.createElement('div'); palList.className='palette-list'; pal.appendChild(palList);
   (cfg.palette||[]).forEach(item=>{
-    const chip=document.createElement('div'); chip.className='chip'; chip.dataset.componentId=item.id; chip.innerHTML=`<span class="chip-icon">${item.icon||'⬜'}</span><span class="chip-label">${item.label||item.id}</span>`; palList.appendChild(chip);
+    const chip=buildChipElement('div', item);
+    palList.appendChild(chip);
   });
 
   const right=document.createElement('div'); right.className='slots-wrap';
@@ -739,7 +914,7 @@ function renderArchitectureSlots(step, cfg, mount){
           type: compId,
           palette_id: paletteItem.id,
           label: slot.label || slotId,
-          icon: paletteItem.icon || '',
+          icon: paletteItem.icon ?? null,
           tags: Array.isArray(paletteItem.tags)? paletteItem.tags : (paletteItem.tags?[paletteItem.tags]:[]),
           position: { slot: slotId }
         };
@@ -802,7 +977,7 @@ function matchNode(node, matcher){
   if(matcher.type && node.type!==matcher.type) return false;
   if(matcher.palette_id && node.palette_id!==matcher.palette_id) return false;
   if(matcher.label && node.label!==matcher.label) return false;
-  if(matcher.icon && node.icon!==matcher.icon) return false;
+  if(matcher.icon && !iconsEqual(node.icon, matcher.icon)) return false;
   if(matcher.tags){
     const tags = Array.isArray(node.tags)? node.tags : [];
     const required = Array.isArray(matcher.tags)? matcher.tags : [matcher.tags];
@@ -889,19 +1064,38 @@ function submitArchitectureResult(step, cfg, payload){
   const path = templateString(cfg.world_path || step.world_path || `architecture.${step.id}`, state.vars);
   const next = deepClone(state.world);
   setByPath(next, path, payload);
-  state.world = next;
-  setWorld();
-
-  const spec = cfg.expected_world || step.expected_world || null;
-  const specRes = validateArchitectureSpec(spec, payload);
+  const expectedRaw = cfg.expected_world || step.expected_world || null;
+  const errors = [];
+  if(expectedRaw){
+    const templated = templateAny(expectedRaw, state.vars);
+    const isRuleSpec = Array.isArray(templated) || (templated && typeof templated==='object' && (templated.nodes || templated.links || templated.allow_extra_nodes !== undefined || templated.type_connections || templated.expressions));
+    if(isRuleSpec){
+      const specRes = validateArchitectureSpec(templated, payload);
+      errors.push(...specRes.errors);
+    } else {
+      const expectedValue = templated && typeof templated==='object' && templated.equals!==undefined ? templated.equals : templated;
+      const strict = !!(templated && typeof templated==='object' && templated.strict===true);
+      const actualValue = getByPath(next, path);
+      let actualComparable = normalizeArchitectureForCompare(actualValue);
+      let expectedComparable = normalizeArchitectureForCompare(expectedValue);
+      if(!strict && expectedComparable && typeof expectedComparable==='object' && expectedComparable.summary===undefined && actualComparable && actualComparable.summary!==undefined){
+        delete actualComparable.summary;
+      }
+      if(!deepEqual(actualComparable, expectedComparable)){
+        errors.push((templated && templated.message) || 'Architecture incorrecte.');
+      }
+    }
+  }
   const validators = [...(step.validators||[]), ...(cfg.validators||[])];
-  const validatorRes = runValidators(validators, payload);
-  const errors = [...specRes.errors, ...(validatorRes.errors||[])];
+  const validatorRes = runValidators(validators, payload, next);
+  if(validatorRes.errors){ errors.push(...validatorRes.errors); }
   if(errors.length){
     const fb=document.getElementById('step-feedback');
     fb.innerHTML = '<div class="ko">'+errors.join('<br>')+'</div>';
     return false;
   }
+  state.world = next;
+  setWorld();
   success(step);
   return true;
 }
