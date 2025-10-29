@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ExamBoot — HOL Player (Flask)</title>
+  <!-- Dragula for drag-and-drop -->
+  <link rel="stylesheet" href="https://unpkg.com/dragula@3.7.3/dist/dragula.min.css">
+  <style>
+    body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu; margin:0; background:#0b1020; color:#e6ecff}
+    header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;background:#0f1630;border-bottom:1px solid #1d2a5b}
+    .badge{background:#1d2a5b;color:#cde1ff;padding:4px 8px;border-radius:999px;font-size:12px}
+    .container{max-width:1000px;margin:0 auto;padding:20px}
+    .card{background:#0f1630;border:1px solid #1d2a5b;border-radius:14px;margin-bottom:16px}
+    .card h3{margin:0;padding:14px 16px;border-bottom:1px solid #1d2a5b;font-size:16px}
+    .card .content{padding:16px}
+    .row{display:flex;gap:8px;align-items:center}
+    .button{background:#2b8a3e;color:#fff;border:0;border-radius:10px;padding:8px 12px;cursor:pointer}
+    .button.secondary{background:#263767}
+    .input{background:#0b1020;border:1px solid #1d2a5b;border-radius:10px;padding:8px 10px;color:#e6ecff}
+    .terminal{background:#0b1020;color:#8ff0a4;font-family:ui-monospace,Menlo,Consolas,monospace;border-radius:10px;padding:12px;min-height:160px}
+    .stdout{white-space:pre-wrap}
+    .stderr{white-space:pre-wrap;color:#ffb0b0}
+    .tabs{display:flex;gap:8px;border-bottom:1px solid #1d2a5b;margin-bottom:12px}
+    .tab{padding:8px 10px;border:1px solid #1d2a5b;border-bottom-color:transparent;border-radius:10px 10px 0 0;background:#0f1630;cursor:pointer}
+    .tab.active{background:#122049}
+    textarea.json{width:100%;height:320px;background:#0b1020;color:#cde1ff;border:1px solid #1d2a5b;border-radius:10px;padding:10px;font-family:ui-monospace,Menlo,Consolas,monospace}
+    .hint{background:#0b1020;border:1px dashed #2a3c7a;border-radius:10px;padding:8px;color:#aab8ff}
+    .ok{background:#0d2f22;color:#a8ffd3;border:1px solid #1e5b46;border-radius:10px;padding:8px}
+    .ko{background:#36181b;color:#ffb4c2;border:1px solid #6b1e2a;border-radius:10px;padding:8px}
+    .pill{padding:.25rem .6rem;border-radius:999px;background:#1a2a5a}
+    .choice{padding:8px;border:1px solid #1d2a5b;border-radius:10px;margin-bottom:8px;cursor:pointer}
+    .choice.selected{background:#13235a}
+    code{background:#09122a;padding:0 .3rem;border-radius:6px}
+    /* DnD Architecture */
+    .arch-wrap{position:relative}
+    .arch-grid{display:grid;grid-template-columns:220px 1fr;gap:16px}
+    .palette{border:1px dashed #2a3c7a;border-radius:12px;padding:8px}
+    .palette h4{margin:.3rem 0 .5rem 0;color:#aab8ff}
+    .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid #1d2a5b;background:#0b1020;margin:6px 6px 0 0;cursor:grab}
+    .chip .dot{width:8px;height:8px;border-radius:999px;background:#2b8a3e}
+    .slots{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+    .slot{min-height:72px;border:1px dashed #2a3c7a;border-radius:12px;padding:8px}
+    .slot-title{font-size:12px;color:#aab8ff;margin-bottom:6px}
+    .slot .chip{cursor:grabbing}
+    .link-hint{font-size:12px;color:#aab8ff;margin-top:6px}
+    #arch-svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+    .chip[data-selected="true"]{outline:2px solid #2b8a3e}
+    .arch-tabs{display:flex;gap:8px;margin-bottom:8px}
+    .arch-tabs button{background:#263767}
+    .arch-tabs button.active{background:#2b8a3e}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="row">
+      <img src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Crect width='28' height='28' rx='6' fill='%232b8a3e'/%3E%3Ctext x='14' y='19' text-anchor='middle' font-size='14' fill='white'%3EEB%3C/text%3E%3C/svg%3E" alt="ExamBoot" width="28" height="28" style="opacity:.9" />
+      <div>
+        <div style="font-weight:600">ExamBoot — Hands‑on Lab Player</div>
+        <div style="font-size:13px;color:#aab8ff">Charge un JSON de lab et joue‑le dans la même interface.</div>
+      </div>
+    </div>
+    <div class="row" style="gap:12px">
+      <div class="badge" id="timer">--:--</div>
+      <div class="badge" id="score">Score: 0</div>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="tabs">
+      <div class="tab active" data-tab="player">Player</div>
+      <div class="tab" data-tab="json">Lab JSON</div>
+      <div class="tab" data-tab="world">World</div>
+    </div>
+
+    <div id="view-player">
+      <div class="card">
+        <h3 id="lab-title">Titre du lab</h3>
+        <div class="content" id="lab-subtitle" style="color:#aab8ff"></div>
+      </div>
+
+      <div class="card">
+        <h3>Étape</h3>
+        <div class="content">
+          <div id="step-title" style="font-weight:600;margin-bottom:6px"></div>
+          <div id="step-instr" style="color:#cde1ff;margin-bottom:12px"></div>
+          <div id="step-body"></div>
+          <div id="step-feedback" style="margin-top:10px"></div>
+          <div class="row" style="margin-top:10px">
+            <button class="button secondary" id="btn-hint" style="display:none">Indice</button>
+            <button class="button" id="btn-restart">Recommencer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-json" style="display:none">
+      <div class="card">
+        <h3>Source JSON</h3>
+        <div class="content">
+          <div class="row" style="justify-content:space-between;margin-bottom:8px">
+            <div>
+              <button class="button" id="btn-load">Charger</button>
+              <span class="pill" id="schemaStatus">Schéma: n/a</span>
+            </div>
+            <a class="button secondary" href="/static/demo_lab.json" target="_blank">Ouvrir demo_lab.json</a>
+          </div>
+          <textarea class="json" id="json-area"></textarea>
+          <div id="schema-errors" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-world" style="display:none">
+      <div class="card">
+        <h3>État du monde (simulé)</h3>
+        <div class="content"><pre id="world-pre" style="white-space:pre-wrap"></pre></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/konva@9.3.0/konva.min.js"></script>
+  <script src="https://unpkg.com/dragula@3.7.3/dist/dragula.min.js"></script>
+  <script src="/static/hol_core.js"></script>
+</body>
+</html>
