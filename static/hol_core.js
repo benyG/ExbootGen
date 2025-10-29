@@ -8,6 +8,40 @@ const setByPath=(o,p,val)=>{const parts=p.split('.');let cur=o;for(let i=0;i<par
 const applyWorldPatch=(world,patch,vars)=> (patch||[]).forEach(p=> p.op==='set' && setByPath(world, templateString(p.path,vars), templateAny(p.value,vars)) );
 const md = (s='')=> s.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>');
 
+function runValidators(validators, payload){
+  const errors=[];
+  for(const v of (validators||[])){
+    if(v.kind==='world'){
+      const rawPath = v.path || v.expect?.path || '';
+      const path = templateString(rawPath, state.vars);
+      const got = getByPath(state.world, path);
+      const wantRaw = v.equals!==undefined ? v.equals : v.expect?.equals;
+      const want = wantRaw===undefined ? undefined : templateAny(wantRaw, state.vars);
+      const ok = want===undefined ? got!==undefined : JSON.stringify(got)===JSON.stringify(want);
+      if(!ok){
+        errors.push(templateString(v.message || `Condition monde non satisfaite (${path})`, state.vars));
+      }
+    } else if (v.kind==='expression'){
+      let ok=false;
+      try{ ok = !!evalExpr(v.expr, { world: state.world, vars: state.vars, payload }); }
+      catch{ errors.push(templateString(v.error_message || v.message || 'Expression invalide', state.vars)); continue; }
+      if(!ok){
+        errors.push(templateString(v.message || 'Expression non vérifiée', state.vars));
+      }
+    } else if (v.kind==='payload'){
+      const path = v.path || v.expect?.path || '';
+      const got = getByPath(payload||{}, path);
+      const wantRaw = v.equals!==undefined ? v.equals : v.expect?.equals;
+      const want = wantRaw===undefined ? undefined : templateAny(wantRaw, state.vars);
+      const ok = want===undefined ? got!==undefined : JSON.stringify(got)===JSON.stringify(want);
+      if(!ok){
+        errors.push(templateString(v.message || `Condition payload non satisfaite (${path})`, state.vars));
+      }
+    }
+  }
+  return { ok: errors.length===0, errors };
+}
+
 // command parsing
 function tokenize(cmd){const out=[];let cur="";let q=null;for(let i=0;i<cmd.length;i++){const c=cmd[i];if(q){if(c===q)q=null;else cur+=c;}else{if(c==='"'||c==="'")q=c;else if(c===' '){if(cur){out.push(cur);cur="";}}else cur+=c;}}if(cur)out.push(cur);return out;}
 function parseCommand(line){const t=tokenize(line.trim());const program=t[0]||"";let idx=1;const subcmd=[];while(idx<t.length && !t[idx].startsWith('-')){subcmd.push(t[idx]);idx++;}const flags={};while(idx<t.length){const tok=t[idx];if(tok.startsWith('--')){const [k,v]=tok.split('=');if(v!=null){flags[k]=v;idx++;continue;}if(idx+1<t.length && !t[idx+1].startsWith('-')){flags[k]=t[idx+1];idx+=2;}else{flags[k]=true;idx++;}}else if(tok.startsWith('-')){const k=tok;if(idx+1<t.length && !t[idx+1].startsWith('-')){flags[k]=t[idx+1];idx+=2;}else{flags[k]=true;idx++;}}else{idx++;}}return { program, subcmd, flags };}
@@ -158,7 +192,12 @@ function renderStep(){
       }
       wrap.appendChild(row);
     });
-    const btnSave=document.createElement('button'); btnSave.className='button'; btnSave.textContent='Enregistrer'; btnSave.onclick=()=>{ const next=deepClone(state.world); setByPath(next, templateString(path,state.vars), local); state.world=next; setWorld(); feedback.innerHTML=''; validateConsole(r); };
+    const btnSave=document.createElement('button'); btnSave.className='button'; btnSave.textContent='Enregistrer'; btnSave.onclick=()=>{
+      const next=deepClone(state.world); setByPath(next, templateString(path,state.vars), local); state.world=next; setWorld(); feedback.innerHTML='';
+      const res = runValidators(r.validators||[], local);
+      if(!res.ok){ feedback.innerHTML = '<div class="ko">'+res.errors.join('<br>')+'</div>'; return; }
+      success(r);
+    };
     body.appendChild(wrap); body.appendChild(btnSave);
   }
   else if(r.type==='inspect_file'){
@@ -203,29 +242,6 @@ function validateTerminal(r, line){
   return { ok:true, stdout: out };
 }
 
-function validateConsole(r){
-  const fb = document.getElementById('step-feedback');
-  const okAll = (r.validators||[]).every(v=>{
-    if(v.kind==='world'){
-      const path = templateString(v.path || v.expect?.path, state.vars);
-      const got  = getByPath(state.world, path);
-      const want = (v.equals!==undefined? v.equals : v.expect?.equals);
-      return want===undefined ? (got!==undefined) : (String(got)===String(want));
-    }
-    if(v.kind==='expression'){
-      try { return !!evalExpr(v.expr, { world: state.world, vars: state.vars }); }
-      catch { return false; }
-    }
-    return true;
-  });
-  if(!okAll){
-    fb.innerHTML = '<div class="ko">Condition non satisfaite. Enregistre et réessaie.</div>';
-    return false;
-  }
-  success(r);
-  return true;
-}
-
 function validateInspect(r, payload){
   const fb=document.getElementById('step-feedback');
   for(const v of (r.validators||[])){
@@ -253,165 +269,641 @@ function boot(){
 
 // Timer
 setInterval(()=>{ if(state.remain>0){ state.remain--; setTimer(); } }, 1000);
-
 // ===== Architecture Step (Freeform PacketTracer-like with Konva) =====
-function renderArchitecture(r, body){
-  const cfgInput = r.architecture;
-  const configs = Array.isArray(cfgInput) ? cfgInput : [cfgInput||{}];
+function renderArchitecture(step, mount){
+  const cfgInput = step.architecture;
+  const configs = Array.isArray(cfgInput) ? cfgInput : [cfgInput || {}];
   let active = 0;
 
   const wrap = document.createElement('div');
   wrap.className = 'arch-wrap';
-  const pane = document.createElement('div');
 
-  // tabs if many
-  if(configs.length>1){
-    const tabs = document.createElement('div'); tabs.className='arch-tabs';
-    configs.forEach((cfg,idx)=>{ const b=document.createElement('button'); b.className='button secondary'+(idx===0?' active':''); b.textContent=cfg.title||('Architecture '+(idx+1)); b.onclick=()=>{ active=idx; renderPane(); Array.from(tabs.children).forEach(x=>x.classList.remove('active')); b.classList.add('active'); }; tabs.appendChild(b); });
+  if(configs.length > 1){
+    const tabs = document.createElement('div');
+    tabs.className = 'arch-tabs';
+    configs.forEach((cfg, idx)=>{
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'arch-tab'+(idx===0?' is-active':'');
+      btn.textContent = cfg.title || (`Architecture ${idx+1}`);
+      btn.addEventListener('click', ()=>{
+        active = idx;
+        tabs.querySelectorAll('button').forEach(b=> b.classList.remove('is-active'));
+        btn.classList.add('is-active');
+        renderPane();
+      });
+      tabs.appendChild(btn);
+    });
     wrap.appendChild(tabs);
   }
 
+  const pane = document.createElement('div');
+  pane.className = 'arch-pane';
   wrap.appendChild(pane);
-  body.appendChild(wrap);
+  mount.appendChild(wrap);
 
   function renderPane(){
-    pane.innerHTML='';
+    pane.innerHTML = '';
     const cfg = configs[active] || {};
-    const freeform = !!cfg.freeform || !(cfg.slots && cfg.slots.length);
-    if(freeform){ renderArchitectureFreeform(cfg, pane, r); }
-    else { renderArchitectureSlots(cfg, pane, r); }
+    const useFreeform = (cfg.slots && cfg.slots.length) ? cfg.freeform === true : cfg.freeform !== false;
+    if(useFreeform){ renderArchitectureFreeform(step, cfg, pane); }
+    else { renderArchitectureSlots(step, cfg, pane); }
   }
 
   renderPane();
 }
 
-// ——— Freeform renderer (Konva): nodes anywhere, connect by drag/click, pan/zoom
-function renderArchitectureFreeform(cfg, mount, step){
-  // Layout
-  const grid = document.createElement('div'); grid.style.display='grid'; grid.style.gridTemplateColumns='220px 1fr'; grid.style.gap='16px';
-  const pal = document.createElement('div'); pal.className='palette'; pal.innerHTML='<h4>Palette</h4>';
-  const palList = document.createElement('div'); pal.appendChild(palList);
-  const canvasBox = document.createElement('div'); canvasBox.style.position='relative'; canvasBox.style.height = (cfg.height||480)+'px'; canvasBox.style.background='#0b1020'; canvasBox.style.border='1px solid #1d2a5b'; canvasBox.style.borderRadius='12px';
-  grid.appendChild(pal); grid.appendChild(canvasBox); mount.appendChild(grid);
+function renderArchitectureFreeform(step, cfg, mount){
+  const layout = document.createElement('div');
+  layout.className = 'arch-layout';
 
-  // Palette
-  (cfg.palette||[]).forEach(c=>{ const chip=document.createElement('div'); chip.className='chip'; chip.innerHTML=`<span class="dot"></span><span>${c.label||c.id}</span>`; chip.onclick=()=> addNode(c.id); palList.appendChild(chip); });
+  const paletteCol = document.createElement('div');
+  paletteCol.className = 'palette';
+  const paletteHeader = document.createElement('div');
+  paletteHeader.className = 'palette-header';
+  paletteHeader.innerHTML = `<h4>${cfg.palette_title || 'Palette'}</h4>`;
+  if(cfg.palette_caption){
+    const caption = document.createElement('p');
+    caption.textContent = cfg.palette_caption;
+    paletteHeader.appendChild(caption);
+  }
+  paletteCol.appendChild(paletteHeader);
+  const paletteList = document.createElement('div');
+  paletteList.className = 'palette-list';
+  paletteCol.appendChild(paletteList);
 
-  // Stage (Konva)
-  const stage = new Konva.Stage({ container: canvasBox, width: canvasBox.clientWidth, height: canvasBox.clientHeight, draggable: false });
-  const layerGrid = new Konva.Layer();
+  (cfg.palette || []).forEach(item => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.dataset.componentId = item.id;
+    chip.title = item.description || '';
+    chip.innerHTML = `<span class="chip-icon">${item.icon || '⬜'}</span><span class="chip-label">${item.label || item.id}</span>`;
+    chip.addEventListener('click', ()=> addNode(item.id));
+    paletteList.appendChild(chip);
+  });
+
+  const canvasWrap = document.createElement('div');
+  canvasWrap.className = 'arch-canvas';
+  const canvasBox = document.createElement('div');
+  canvasBox.className = 'arch-stage';
+  canvasBox.style.height = `${cfg.height || 520}px`;
+  canvasWrap.appendChild(canvasBox);
+
+  if(cfg.instructions){
+    const note = document.createElement('div');
+    note.className = 'arch-note';
+    note.innerHTML = md(cfg.instructions);
+    canvasWrap.appendChild(note);
+  }
+  const helper = document.createElement('div');
+  helper.className = 'arch-help';
+  helper.innerHTML = cfg.help || 'Astuce : cliquez pour renommer, clic droit pour supprimer, reliez les ports latéraux.';
+  canvasWrap.appendChild(helper);
+
+  layout.appendChild(paletteCol);
+  layout.appendChild(canvasWrap);
+  mount.appendChild(layout);
+
+  const stage = new Konva.Stage({ container: canvasBox, width: canvasBox.clientWidth, height: canvasBox.clientHeight, draggable:false });
+  const layerGrid = new Konva.Layer({ listening:false });
   const layerLinks = new Konva.Layer();
   const layerNodes = new Konva.Layer();
   stage.add(layerGrid); stage.add(layerLinks); stage.add(layerNodes);
 
-  // Grid background
-  const stepGrid = 24; const drawGrid=()=>{ layerGrid.destroyChildren(); const w=stage.width(), h=stage.height(); for(let x=0;x<w; x+=stepGrid){ layerGrid.add(new Konva.Line({ points:[x,0,x,h], stroke:'#13235a', strokeWidth:1, opacity:0.4 })); } for(let y=0;y<h;y+=stepGrid){ layerGrid.add(new Konva.Line({ points:[0,y,w,y], stroke:'#13235a', strokeWidth:1, opacity:0.4 })); } layerGrid.draw(); };
+  const gridState = { visible: cfg.show_grid !== false };
+  const snapState = { enabled: cfg.snap_to_grid !== false };
+  const snapSize = typeof cfg.snap_to_grid === 'number' ? Math.max(1, cfg.snap_to_grid) : 20;
+  const gridSize = cfg.grid_spacing || 64;
+
+  const drawGrid = ()=>{
+    layerGrid.destroyChildren();
+    if(!gridState.visible){ layerGrid.draw(); return; }
+    const w = stage.width(), h = stage.height();
+    for(let x=0;x<=w;x+=gridSize){
+      layerGrid.add(new Konva.Line({ points:[x,0,x,h], stroke:'#14254e', strokeWidth:1, opacity:0.25 }));
+    }
+    for(let y=0;y<=h;y+=gridSize){
+      layerGrid.add(new Konva.Line({ points:[0,y,w,y], stroke:'#14254e', strokeWidth:1, opacity:0.25 }));
+    }
+    layerGrid.draw();
+  };
   drawGrid();
-  window.addEventListener('resize', ()=>{ stage.width(canvasBox.clientWidth); stage.height(canvasBox.clientHeight); drawGrid(); drawLinks(); });
 
-  // Pan/zoom (wheel zoom, hold Space to pan)
-  let panning=false; window.addEventListener('keydown', e=>{ if(e.code==='Space') { panning=true; stage.draggable(true);} }); window.addEventListener('keyup', e=>{ if(e.code==='Space') { panning=false; stage.draggable(false);} });
-  stage.on('wheel', (e)=>{ e.evt.preventDefault(); const scaleBy=1.05; const oldScale = stage.scaleX(); const pointer = stage.getPointerPosition(); const mousePointTo = { x:(pointer.x - stage.x())/oldScale, y:(pointer.y - stage.y())/oldScale }; const direction = e.evt.deltaY>0 ? -1 : 1; const newScale = direction>0 ? oldScale*scaleBy : oldScale/scaleBy; stage.scale({x:newScale,y:newScale}); const newPos = { x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale }; stage.position(newPos); stage.batchDraw(); });
+  const resizeObserver = new ResizeObserver(()=>{
+    stage.width(canvasBox.clientWidth);
+    stage.height(canvasBox.clientHeight);
+    drawGrid();
+    drawLinks();
+  });
+  resizeObserver.observe(canvasBox);
 
-  // State
-  const nodes=[]; // {id, type, group, ports:{in,out}}
-  const links=[]; // {fromNode, toNode, arrow}
-  let uid=0; const nextId=()=> 'n'+(uid++);
+  stage.on('wheel', (e)=>{
+    e.evt.preventDefault();
+    const scaleBy = 1.05;
+    const oldScale = stage.scaleX();
+    const pointer = stage.getPointerPosition();
+    const mousePointTo = { x:(pointer.x - stage.x())/oldScale, y:(pointer.y - stage.y())/oldScale };
+    const direction = e.evt.deltaY>0 ? -1 : 1;
+    const newScale = direction>0 ? oldScale*scaleBy : oldScale/scaleBy;
+    stage.scale({x:newScale,y:newScale});
+    const newPos = { x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale };
+    stage.position(newPos);
+    stage.batchDraw();
+    drawLinks();
+  });
+
+  const nodes = [];
+  const links = [];
+  let nodeUid = 0;
+  let linkUid = 0;
+  let aliasMap = {};
+  let pendingFrom = null;
+  let selectedNode = null;
+
+  const paletteLookup = (id)=> (cfg.palette || []).find(p=> p.id===id) || { id, label:id, icon:'' };
 
   function addNode(type){
-    const id=nextId();
-    const group=new Konva.Group({ x: 80 + (nodes.length*20)%200, y: 60 + (nodes.length*12)%120, draggable:true });
-    const rect=new Konva.Rect({ width:120, height:46, cornerRadius:10, stroke:'#1d2a5b', fill:'#0f1630' });
-    const label=new Konva.Text({ text: (cfg.palette||[]).find(p=>p.id===type)?.label || type, x:10, y:12, fontSize:14, fill:'#cde1ff' });
-    const portIn = new Konva.Circle({ x:0, y:23, radius:5, fill:'#263767', stroke:'#2b8a3e' });
-    const portOut= new Konva.Circle({ x:120, y:23, radius:5, fill:'#263767', stroke:'#2b8a3e' });
-    group.add(rect,label,portIn,portOut); layerNodes.add(group); layerNodes.draw();
+    const spec = paletteLookup(type);
+    const width = spec.width || 176;
+    const height = spec.height || 68;
+    const id = 'n'+(nodeUid++);
+    const startX = Math.max(32, (stage.width()/2 - width/2) + ((nodes.length%3)-1)*48);
+    const startY = Math.max(24, (stage.height()/2 - height/2) + (nodes.length*28)%240);
+    const group = new Konva.Group({ x:startX, y:startY, draggable:true });
+    const rect = new Konva.Rect({ width, height, cornerRadius:14, stroke:'#1d2a5b', strokeWidth:1.4, fill:'#0f1630', shadowColor:'#47f5c0', shadowBlur:18, shadowOpacity:0, shadowOffset:{x:0,y:0} });
+    const label = new Konva.Text({ text: spec.label || type, fontSize:16, fill:'#cde1ff', y: height/2 - 9 });
+    const iconText = new Konva.Text({ text: spec.icon || '', fontSize:26, fill:'#7cf7ff', y: height/2 - 20, width:40, align:'center' });
+    const portIn = new Konva.Circle({ x:0, y:height/2, radius:6, fill:'#16264d', stroke:'#47f5c0', strokeWidth:1.4 });
+    const portOut = new Konva.Circle({ x:width, y:height/2, radius:6, fill:'#16264d', stroke:'#47f5c0', strokeWidth:1.4 });
 
-    // snap to grid
-    group.on('dragend', ()=>{ const gx=Math.round(group.x()/stepGrid)*stepGrid; const gy=Math.round(group.y()/stepGrid)*stepGrid; group.position({x:gx,y:gy}); layerNodes.draw(); drawLinks(); });
+    if(spec.icon){ iconText.x(16); group.add(iconText); label.x(62); }
+    else { label.x(24); }
 
-    nodes.push({ id, type, group, ports:{in:portIn, out:portOut} });
+    group.add(rect, label, portIn, portOut);
+    layerNodes.add(group);
+    layerNodes.draw();
 
-    let pendingFrom=null;
-    portOut.on('mousedown', ()=>{ pendingFrom=id; });
-    portIn.on('mouseup', ()=>{ if(pendingFrom && pendingFrom!==id){ addLink(pendingFrom, id); } pendingFrom=null; });
+    group.on('click', (evt)=>{ evt.cancelBubble=true; selectNode(id); });
+    group.on('mouseenter', ()=>{ stage.container().style.cursor='grab'; });
+    group.on('dragstart', ()=>{ stage.container().style.cursor='grabbing'; });
+    group.on('dragmove', ()=>{ drawLinks(); });
+    group.on('dragend', ()=>{
+      stage.container().style.cursor='grab';
+      if(snapState.enabled && snapSize>0){
+        const gx = Math.round(group.x()/snapSize)*snapSize;
+        const gy = Math.round(group.y()/snapSize)*snapSize;
+        group.position({x:gx,y:gy});
+      }
+      drawLinks();
+    });
+    group.on('dblclick', (evt)=>{
+      evt.cancelBubble=true;
+      const next = prompt('Nom du composant', label.text());
+      if(next!==null){ label.text(next.trim() || label.text()); layerNodes.draw(); drawLinks(); }
+    });
+    group.on('contextmenu', (evt)=>{ evt.evt.preventDefault(); removeNode(id); });
 
+    portOut.on('mousedown touchstart', (evt)=>{ evt.cancelBubble=true; pendingFrom=id; stage.container().classList.add('is-linking'); });
+    portIn.on('mouseup touchend', (evt)=>{ evt.cancelBubble=true; if(pendingFrom && pendingFrom!==id){ addLink(pendingFrom, id); } pendingFrom=null; stage.container().classList.remove('is-linking'); });
+
+    const nodeData = { id, type: spec.type || type, paletteId: spec.id || type, group, rect, labelNode: label, icon: spec.icon || '', iconNode: iconText, width, height, tags: Array.isArray(spec.tags)? spec.tags : (spec.tags?[spec.tags]:[]), alias: null };
+    nodes.push(nodeData);
+    selectNode(id);
+    drawLinks();
     return id;
   }
 
-  function addLink(fromId, toId){
-    const arrow=new Konva.Arrow({ points:calcPoints(fromId,toId), stroke:'#2b8a3e', fill:'#2b8a3e', strokeWidth:2, pointerLength:10, pointerWidth:8 });
-    links.push({ fromNode:fromId, toNode:toId, arrow }); layerLinks.add(arrow); layerLinks.draw();
+  function selectNode(id){
+    selectedNode = id;
+    nodes.forEach(node=>{
+      const active = node.id === selectedNode;
+      node.rect.stroke(active ? '#47f5c0' : '#1d2a5b');
+      node.rect.shadowOpacity(active ? 0.55 : 0);
+    });
+    layerNodes.batchDraw();
   }
 
-  function centerOfOut(node){ const g=getNode(node).group; const p=g.getAbsolutePosition(); return { x:p.x+120, y:p.y+23 }; }
-  function centerOfIn(node){ const g=getNode(node).group; const p=g.getAbsolutePosition(); return { x:p.x, y:p.y+23 }; }
-  function calcPoints(a,b){ const A=centerOfOut(a), B=centerOfIn(b); return [A.x,A.y,B.x,B.y]; }
-  function getNode(id){ return nodes.find(n=>n.id===id); }
-  function drawLinks(){ links.forEach(l=>{ l.arrow.points(calcPoints(l.fromNode,l.toNode)); }); layerLinks.batchDraw(); }
+  function getNodeById(id){ return nodes.find(n=> n.id===id); }
 
-  // Populate defaults if provided
-  (cfg.initial_nodes||[]).forEach(t=> addNode(t));
+  function centerPoint(id, kind){
+    const node = getNodeById(id);
+    if(!node) return { x:0, y:0 };
+    const pos = node.group.position();
+    if(kind==='out'){ return { x: pos.x + node.width, y: pos.y + node.height/2 }; }
+    return { x: pos.x, y: pos.y + node.height/2 };
+  }
 
-  // Actions
-  const bar = document.createElement('div'); bar.className='row'; bar.style.marginTop='10px';
-  const btnClear = document.createElement('button'); btnClear.className='button secondary'; btnClear.textContent='Réinitialiser'; btnClear.onclick=()=>{ nodes.splice(0); links.splice(0); layerNodes.destroyChildren(); layerLinks.destroyChildren(); layerNodes.draw(); layerLinks.draw(); };
-  const btnValidate = document.createElement('button'); btnValidate.className='button'; btnValidate.textContent='Valider'; btnValidate.onclick=()=>{
-    // Build input for validator (freeform rules)
-    const connByType = links.map(l=> ({ from: getNode(l.fromNode).type, to: getNode(l.toNode).type }));
-    const counts = nodes.reduce((acc,n)=> (acc[n.type]=(acc[n.type]||0)+1, acc),{});
-    const ok = validateFreeform(cfg, counts, connByType);
-    if(ok) success(step); else document.getElementById('step-feedback').innerHTML='<div class="ko">Architecture invalide.</div>';
-  };
-  bar.appendChild(btnClear); bar.appendChild(btnValidate); mount.appendChild(bar);
+  function calcPoints(fromId, toId){ const A=centerPoint(fromId,'out'); const B=centerPoint(toId,'in'); return [A.x,A.y,B.x,B.y]; }
+
+  function drawLinks(){ links.forEach(link=>{ link.arrow.points(calcPoints(link.fromNode, link.toNode)); }); layerLinks.batchDraw(); }
+
+  function addLink(fromId, toId){
+    if(!fromId || !toId || fromId===toId) return;
+    if(links.some(l=> l.fromNode===fromId && l.toNode===toId)) return;
+    const arrow = new Konva.Arrow({ points:calcPoints(fromId,toId), stroke:'#47f5c0', fill:'#47f5c0', strokeWidth:2.2, pointerLength:12, pointerWidth:10, lineCap:'round', lineJoin:'round' });
+    const linkId = 'l'+(linkUid++);
+    arrow.on('mouseenter', ()=>{ stage.container().style.cursor='pointer'; });
+    arrow.on('mouseleave', ()=>{ stage.container().style.cursor='default'; });
+    arrow.on('contextmenu', (evt)=>{ evt.evt.preventDefault(); removeLink(linkId); });
+    links.push({ id:linkId, fromNode:fromId, toNode:toId, arrow });
+    layerLinks.add(arrow);
+    drawLinks();
+  }
+
+  function removeLink(id){
+    const idx = links.findIndex(l=> l.id===id);
+    if(idx>=0){ links[idx].arrow.destroy(); links.splice(idx,1); layerLinks.draw(); }
+  }
+
+  function removeNode(id){
+    const idx = nodes.findIndex(n=> n.id===id);
+    if(idx===-1) return;
+    const node = nodes[idx];
+    node.group.destroy();
+    nodes.splice(idx,1);
+    for(let i=links.length-1;i>=0;i--){ if(links[i].fromNode===id || links[i].toNode===id){ links[i].arrow.destroy(); links.splice(i,1); } }
+    layerNodes.draw();
+    layerLinks.draw();
+  }
+
+  function resolveNodeRef(ref){
+    if(!ref) return null;
+    if(aliasMap[ref]) return aliasMap[ref];
+    const byId = nodes.find(n=> n.id===ref);
+    if(byId) return byId.id;
+    const byLabel = nodes.find(n=> n.labelNode.text()===ref);
+    if(byLabel) return byLabel.id;
+    const byType = nodes.find(n=> n.type===ref || n.paletteId===ref);
+    return byType ? byType.id : null;
+  }
+
+  function buildPayload(){
+    const payload = {
+      nodes: nodes.map(n=>{
+        const pos = n.group.position();
+        return {
+          id: n.id,
+          alias: n.alias || null,
+          type: n.type,
+          palette_id: n.paletteId,
+          label: n.labelNode.text(),
+          icon: n.icon || '',
+          tags: n.tags,
+          position: { x: Math.round(pos.x), y: Math.round(pos.y) }
+        };
+      }),
+      links: links.map(l=>{
+        const from = getNodeById(l.fromNode);
+        const to = getNodeById(l.toNode);
+        return {
+          id: l.id,
+          from: l.fromNode,
+          to: l.toNode,
+          from_type: from?.type || null,
+          to_type: to?.type || null,
+          from_label: from?.labelNode.text() || null,
+          to_label: to?.labelNode.text() || null,
+          from_alias: from?.alias || null,
+          to_alias: to?.alias || null
+        };
+      })
+    };
+    return finalizeArchitecturePayload(payload);
+  }
+
+  function setupInitial(){
+    aliasMap = {};
+    (cfg.initial_nodes || []).forEach(entry => {
+      if(entry == null) return;
+      if(typeof entry === 'string'){ addNode(entry); return; }
+      const idRef = entry.id || entry.type || entry.component;
+      const nodeId = addNode(idRef);
+      const node = getNodeById(nodeId);
+      if(entry.label){ node.labelNode.text(entry.label); }
+      if(entry.position){
+        const pos = { x: entry.position.x ?? node.group.x(), y: entry.position.y ?? node.group.y() };
+        node.group.position(pos);
+      }
+      if(entry.alias){ node.alias = entry.alias; aliasMap[entry.alias] = nodeId; }
+    });
+    (cfg.initial_links || []).forEach(link => {
+      if(!link) return;
+      const fromId = resolveNodeRef(link.from);
+      const toId = resolveNodeRef(link.to);
+      if(fromId && toId) addLink(fromId, toId);
+    });
+    drawLinks();
+  }
+
+  function clearScene(){
+    while(nodes.length){ removeNode(nodes[0].id); }
+    while(links.length){ removeLink(links[0].id); }
+    stage.scale({x:1,y:1});
+    stage.position({x:0,y:0});
+    drawGrid();
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'arch-actions row';
+
+  const btnValidate = document.createElement('button');
+  btnValidate.className = 'button';
+  btnValidate.textContent = cfg.validate_label || 'Valider';
+  btnValidate.addEventListener('click', ()=>{
+    const payload = buildPayload();
+    submitArchitectureResult(step, cfg, payload);
+  });
+
+  const btnReset = document.createElement('button');
+  btnReset.className = 'button secondary';
+  btnReset.textContent = 'Réinitialiser';
+  btnReset.addEventListener('click', ()=>{ clearScene(); setupInitial(); });
+
+  const btnSnap = document.createElement('button');
+  btnSnap.className = 'button secondary';
+  const updateSnap = ()=>{ btnSnap.textContent = snapState.enabled ? 'Aimantation: ON' : 'Aimantation: OFF'; btnSnap.setAttribute('data-active', snapState.enabled); };
+  btnSnap.addEventListener('click', ()=>{ snapState.enabled = !snapState.enabled; updateSnap(); });
+  updateSnap();
+
+  const btnGrid = document.createElement('button');
+  btnGrid.className = 'button secondary';
+  const updateGridBtn = ()=>{ btnGrid.textContent = gridState.visible ? 'Grille: ON' : 'Grille: OFF'; btnGrid.setAttribute('data-active', gridState.visible); };
+  btnGrid.addEventListener('click', ()=>{ gridState.visible = !gridState.visible; updateGridBtn(); drawGrid(); });
+  updateGridBtn();
+
+  const btnPan = document.createElement('button');
+  btnPan.className = 'button secondary';
+  const updatePan = ()=>{ btnPan.textContent = stage.draggable() ? 'Déplacement vue: ON' : 'Déplacement vue: OFF'; btnPan.setAttribute('data-active', stage.draggable()); };
+  btnPan.addEventListener('click', ()=>{ stage.draggable(!stage.draggable()); updatePan(); });
+  updatePan();
+
+  actions.appendChild(btnValidate);
+  actions.appendChild(btnReset);
+  actions.appendChild(btnSnap);
+  actions.appendChild(btnGrid);
+  actions.appendChild(btnPan);
+  mount.appendChild(actions);
+
+  setupInitial();
+  stage.on('mouseup touchend', ()=>{ pendingFrom=null; stage.container().classList.remove('is-linking'); });
 }
 
-function validateFreeform(cfg, counts, connections){
-  const exp = cfg.expected || {};
-  const errors=[];
-  // required node types
-  (exp.require_nodes||[]).forEach(t=>{ if(!(counts[t]>0)) errors.push(`Composant requis manquant: ${t}`); });
-  // min counts
-  const minc = exp.min_counts||{}; Object.keys(minc).forEach(t=>{ if((counts[t]||0) < minc[t]) errors.push(`Au moins ${minc[t]} x ${t}`); });
-  // connections by type (at least one)
-  (exp.connections_by_type||[]).forEach(c=>{ const ok = connections.some(e=> e.from===c.from && e.to===c.to); if(!ok) errors.push(`Lien manquant ${c.from} → ${c.to}`); });
-  if(errors.length){ const fb=document.getElementById('step-feedback'); fb.innerHTML='<div class="ko">'+errors.join('<br>')+'</div>'; return false; }
-  return true;
-}
+function renderArchitectureSlots(step, cfg, mount){
+  const wrapper = document.createElement('div');
+  wrapper.className = 'arch-grid';
+  const pal = document.createElement('div'); pal.className='palette';
+  pal.innerHTML = '<div class="palette-header"><h4>Palette</h4></div>';
+  const palList = document.createElement('div'); palList.className='palette-list'; pal.appendChild(palList);
+  (cfg.palette||[]).forEach(item=>{
+    const chip=document.createElement('div'); chip.className='chip'; chip.dataset.componentId=item.id; chip.innerHTML=`<span class="chip-icon">${item.icon||'⬜'}</span><span class="chip-label">${item.label||item.id}</span>`; palList.appendChild(chip);
+  });
 
-// ——— Legacy slot-grid renderer kept as fallback (uses Dragula)
-function renderArchitectureSlots(cfg, mount, r){
-  const body=document.createElement('div'); body.className='arch-grid';
-  const pal = document.createElement('div'); pal.className='palette'; pal.innerHTML='<h4>Palette</h4>';
-  const palList = document.createElement('div'); pal.appendChild(palList);
-  (cfg.palette||[]).forEach(c=>{ const chip=document.createElement('div'); chip.className='chip'; chip.innerHTML=`<span class="dot"></span><span>${c.label||c.id}</span>`; chip.dataset.componentId=c.id; palList.appendChild(chip); });
+  const right=document.createElement('div'); right.className='slots-wrap';
+  const slots=document.createElement('div'); slots.className='slots';
+  right.appendChild(slots);
+  wrapper.appendChild(pal); wrapper.appendChild(right);
+  mount.appendChild(wrapper);
 
-  const right = document.createElement('div'); right.style.position='relative';
-  const slotsGrid = document.createElement('div'); slotsGrid.className='slots';
-  const slotEls = new Map();
-  (cfg.slots||[]).forEach(s=>{ const box=document.createElement('div'); box.className='slot'; box.dataset.slotId=s.id; const title=document.createElement('div'); title.className='slot-title'; title.textContent=s.label||s.id; box.appendChild(title); slotsGrid.appendChild(box); slotEls.set(s.id, box); });
-  const overlay = document.createElementNS('http://www.w3.org/2000/svg','svg'); overlay.setAttribute('id','arch-svg'); right.appendChild(slotsGrid); right.appendChild(overlay);
+  const slotEls=new Map();
+  (cfg.slots||[]).forEach(s=>{
+    const box=document.createElement('div'); box.className='slot'; box.dataset.slotId=s.id;
+    const title=document.createElement('div'); title.className='slot-title'; title.textContent=s.label||s.id; box.appendChild(title);
+    slots.appendChild(box);
+    slotEls.set(s.id, box);
+  });
 
-  body.appendChild(pal); body.appendChild(right); mount.appendChild(body);
-
-  const allAssignments = {}; const allConnections = [];
-  const containers = [ palList, ...slotEls.values() ];
-  const drake = dragula(containers, {
-    copy: (el, source)=> source===palList,
-    accepts: (el, target)=>{ const slotId=target && target.dataset ? target.dataset.slotId : null; if(!slotId) return target===palList; const slot=(cfg.slots||[]).find(s=>s.id===slotId); const compId=el.dataset.componentId; return !slot || !slot.accepts || slot.accepts.includes(compId); },
+  const allAssignments={};
+  const allConnections=[];
+  const containers=[palList, ...slotEls.values()];
+  const drake=dragula(containers, {
+    copy:(el,source)=> source===palList,
+    accepts:(el,target)=>{
+      const slotId=target?.dataset?.slotId;
+      if(!slotId) return target===palList;
+      const slot=(cfg.slots||[]).find(s=> s.id===slotId);
+      const compId=el.dataset.componentId;
+      return !slot || !slot.accepts || slot.accepts.includes(compId);
+    },
     revertOnSpill:true,
     removeOnSpill:true
   });
-  drake.on('drop',(el,target,source)=>{ if(!target) return; const toSlot=target.dataset && target.dataset.slotId ? target.dataset.slotId : null; const fromSlot=source && source.dataset ? source.dataset.slotId : null; if(target===palList){ if(fromSlot) delete allAssignments[fromSlot]; el.remove(); draw(); return; } if(!toSlot) return; [...target.querySelectorAll('.chip')].forEach(ch=>{ if(ch!==el) ch.remove(); }); allAssignments[toSlot]=el.dataset.componentId; if(fromSlot && fromSlot!==toSlot) delete allAssignments[fromSlot]; draw(); });
-  drake.on('remove', (el, container, source)=>{ const fromSlot=source && source.dataset ? source.dataset.slotId : null; if(fromSlot){ delete allAssignments[fromSlot]; draw(); }});
 
-  // simple click-to-link using chips placed in slots
-  let pending=null; slotsGrid.addEventListener('click',(e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; const compId=chip.dataset.componentId; if(!pending){ pending=compId; chip.setAttribute('data-selected','true'); } else { if(pending!==compId){ allConnections.push({from: pending, to: compId}); } pending=null; slotsGrid.querySelectorAll('.chip').forEach(c=>c.removeAttribute('data-selected')); draw(); }});
+  drake.on('drop',(el,target,source)=>{
+    if(!target) return;
+    const toSlot=target.dataset?.slotId || null;
+    const fromSlot=source?.dataset?.slotId || null;
+    if(target===palList){
+      if(fromSlot) delete allAssignments[fromSlot];
+      el.remove();
+      return;
+    }
+    if(!toSlot) return;
+    el.dataset.slotId = toSlot;
+    [...target.querySelectorAll('.chip')].forEach(ch=>{ if(ch!==el) ch.remove(); });
+    allAssignments[toSlot]=el.dataset.componentId;
+    if(fromSlot && fromSlot!==toSlot) delete allAssignments[fromSlot];
+  });
 
-  function draw(){ while(overlay.firstChild) overlay.removeChild(overlay.firstChild); }
+  drake.on('remove',(el, container, source)=>{
+    const fromSlot=source?.dataset?.slotId || null;
+    if(fromSlot){ delete allAssignments[fromSlot]; }
+  });
 
-  // Validate button
-  const actions=document.createElement('div'); actions.className='row'; actions.style.marginTop='10px'; const btn=document.createElement('button'); btn.className='button'; btn.textContent='Valider'; btn.onclick=()=>{ const ok = validateArchitecture({ architecture: cfg }, { assignments: allAssignments, connections: allConnections }); if(ok) success(r); else document.getElementById('step-feedback').innerHTML='<div class="ko">Architecture invalide.</div>'; }; actions.appendChild(btn); mount.appendChild(actions);
+  let pending=null;
+  slots.addEventListener('click',(e)=>{
+    const chip=e.target.closest('.chip');
+    if(!chip || !chip.dataset.slotId) return;
+    const slotId=chip.dataset.slotId;
+    const compId=chip.dataset.componentId;
+    const current={ slot:slotId, component:compId };
+    if(!pending){
+      pending=current;
+      chip.setAttribute('data-selected','true');
+      return;
+    }
+    if(pending.slot!==current.slot){ allConnections.push({ from: pending, to: current }); }
+    pending=null;
+    slots.querySelectorAll('.chip').forEach(c=> c.removeAttribute('data-selected'));
+  });
+
+  const actions=document.createElement('div'); actions.className='arch-actions row';
+  const btn=document.createElement('button'); btn.className='button'; btn.textContent='Valider';
+  btn.addEventListener('click', ()=>{
+    const payload = finalizeArchitecturePayload({
+      nodes: Object.entries(allAssignments).map(([slotId, compId])=>{
+        const slot=(cfg.slots||[]).find(s=> s.id===slotId) || {};
+        const paletteItem=(cfg.palette||[]).find(p=> p.id===compId) || { id:compId };
+        return {
+          id: slotId,
+          type: compId,
+          palette_id: paletteItem.id,
+          label: slot.label || slotId,
+          icon: paletteItem.icon || '',
+          tags: Array.isArray(paletteItem.tags)? paletteItem.tags : (paletteItem.tags?[paletteItem.tags]:[]),
+          position: { slot: slotId }
+        };
+      }),
+      links: allConnections.map((link, idx)=>{
+        const from = link.from || {};
+        const to = link.to || {};
+        return {
+          id: 'l'+idx,
+          from: from.slot || null,
+          to: to.slot || null,
+          from_type: from.component || null,
+          to_type: to.component || null,
+          from_label: from.slot || from.component || null,
+          to_label: to.slot || to.component || null
+        };
+      })
+    });
+    submitArchitectureResult(step, cfg, payload);
+  });
+  actions.appendChild(btn);
+  mount.appendChild(actions);
+}
+
+function finalizeArchitecturePayload(payload){
+  const countsByType={};
+  const countsByPalette={};
+  (payload.nodes||[]).forEach(node=>{
+    countsByType[node.type]=(countsByType[node.type]||0)+1;
+    if(node.palette_id){ countsByPalette[node.palette_id]=(countsByPalette[node.palette_id]||0)+1; }
+  });
+
+  const nodesById=new Map();
+  (payload.nodes||[]).forEach(node=> nodesById.set(node.id, node));
+  const typeConnections=[];
+  (payload.links||[]).forEach(link=>{
+    const fromNode = nodesById.get(link.from);
+    const toNode = nodesById.get(link.to);
+    if(fromNode){ link.from_type = link.from_type || fromNode.type; link.from_label = link.from_label || fromNode.label; }
+    if(toNode){ link.to_type = link.to_type || toNode.type; link.to_label = link.to_label || toNode.label; }
+    typeConnections.push({ from: link.from_type || null, to: link.to_type || null });
+  });
+
+  payload.summary = {
+    counts_by_type: countsByType,
+    counts_by_palette: countsByPalette,
+    labels: (payload.nodes||[]).map(n=> n.label),
+    type_connections: typeConnections
+  };
+
+  return payload;
+}
+
+function matchNode(node, matcher){
+  if(!matcher) return true;
+  if(typeof matcher==='string') return node.type===matcher || node.label===matcher || node.palette_id===matcher || node.alias===matcher;
+  if(Array.isArray(matcher)) return matcher.some(m=> matchNode(node, m));
+  if(matcher.id && node.id!==matcher.id) return false;
+  if(matcher.alias && node.alias!==matcher.alias) return false;
+  if(matcher.type && node.type!==matcher.type) return false;
+  if(matcher.palette_id && node.palette_id!==matcher.palette_id) return false;
+  if(matcher.label && node.label!==matcher.label) return false;
+  if(matcher.icon && node.icon!==matcher.icon) return false;
+  if(matcher.tags){
+    const tags = Array.isArray(node.tags)? node.tags : [];
+    const required = Array.isArray(matcher.tags)? matcher.tags : [matcher.tags];
+    if(!required.every(tag=> tags.includes(tag))) return false;
+  }
+  if(matcher.not && matchNode(node, matcher.not)) return false;
+  return true;
+}
+
+function linkMatches(link, req, nodes){
+  const fromMatcher = req.from || req.match_from || req.match?.from || req.match;
+  const toMatcher = req.to || req.match_to || req.match?.to || req.match;
+  const fromNode = nodes.find(n=> n.id===link.from) || nodes.find(n=> matchNode(n, link.from_alias||link.from_label));
+  const toNode = nodes.find(n=> n.id===link.to) || nodes.find(n=> matchNode(n, link.to_alias||link.to_label));
+  const direct = matchNode(fromNode||{}, fromMatcher) && matchNode(toNode||{}, toMatcher);
+  if(direct) return true;
+  if(req.bidirectional){
+    return matchNode(fromNode||{}, toMatcher) && matchNode(toNode||{}, fromMatcher);
+  }
+  return false;
+}
+
+function validateArchitectureSpec(specInput, payload){
+  if(!specInput) return { ok:true, errors:[] };
+  const spec = Array.isArray(specInput) ? { nodes: specInput } : specInput;
+  const errors=[];
+  const nodes = payload.nodes || [];
+  const links = payload.links || [];
+
+  (spec.nodes||[]).forEach(rule=>{
+    const matcher = rule.match || rule;
+    const count = rule.count ?? rule.min ?? 1;
+    const max = rule.max;
+    const matches = nodes.filter(node=> matchNode(node, matcher));
+    if(matches.length < count){
+      errors.push(rule.message || `Il faut au moins ${count} composant(s) correspondant(s) à ${matcher.label || matcher.type || matcher}`);
+    }
+    if(max !== undefined && matches.length > max){
+      errors.push(rule.message_max || `Trop de composants du type ${matcher.label || matcher.type || matcher}`);
+    }
+  });
+
+  if(spec.allow_extra_nodes === false && (spec.nodes||[]).length){
+    const extras = nodes.filter(node=> !(spec.nodes||[]).some(rule=> matchNode(node, rule.match || rule)));
+    if(extras.length){
+      errors.push(`Composants non attendus : ${extras.map(n=> n.label || n.type).join(', ')}`);
+    }
+  }
+
+  (spec.links||[]).forEach(rule=>{
+    const min = rule.count ?? rule.min ?? 1;
+    const max = rule.max;
+    const matches = links.filter(link=> linkMatches(link, rule, nodes));
+    if(matches.length < min){
+      errors.push(rule.message || `Lien attendu manquant (${min}x ${rule.from?.type || rule.from || '?'} → ${rule.to?.type || rule.to || '?'})`);
+    }
+    if(max !== undefined && matches.length > max){
+      errors.push(rule.message_max || `Trop de liens ${rule.from?.type || rule.from || '?'} → ${rule.to?.type || rule.to || '?'}`);
+    }
+  });
+
+  (spec.type_connections||[]).forEach(rule=>{
+    const min = rule.count ?? rule.min ?? 1;
+    const max = rule.max;
+    const matches = (payload.summary?.type_connections || []).filter(conn=> matchNode({ type: conn.from, label: conn.from }, rule.from) && matchNode({ type: conn.to, label: conn.to }, rule.to));
+    if(matches.length < min){ errors.push(rule.message || `Connexion de type ${rule.from} → ${rule.to} attendue (${min})`); }
+    if(max !== undefined && matches.length > max){ errors.push(rule.message_max || `Trop de connexions ${rule.from} → ${rule.to}`); }
+  });
+
+  (spec.expressions||[]).forEach(expr=>{
+    try {
+      if(!evalExpr(expr, { world: state.world, vars: state.vars, payload })){
+        errors.push(`Expression invalide: ${expr}`);
+      }
+    } catch {
+      errors.push(`Expression invalide: ${expr}`);
+    }
+  });
+
+  return { ok: errors.length===0, errors };
+}
+
+function submitArchitectureResult(step, cfg, payload){
+  const path = templateString(cfg.world_path || step.world_path || `architecture.${step.id}`, state.vars);
+  const next = deepClone(state.world);
+  setByPath(next, path, payload);
+  state.world = next;
+  setWorld();
+
+  const spec = cfg.expected_world || step.expected_world || null;
+  const specRes = validateArchitectureSpec(spec, payload);
+  const validators = [...(step.validators||[]), ...(cfg.validators||[])];
+  const validatorRes = runValidators(validators, payload);
+  const errors = [...specRes.errors, ...(validatorRes.errors||[])];
+  if(errors.length){
+    const fb=document.getElementById('step-feedback');
+    fb.innerHTML = '<div class="ko">'+errors.join('<br>')+'</div>';
+    return false;
+  }
+  success(step);
+  return true;
 }
 
 // Start
