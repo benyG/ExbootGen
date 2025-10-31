@@ -906,6 +906,8 @@ def run_playbook():
                 topic_type,
                 certification_id,
             )
+            article_payload = article_future.result()
+
             tweet_future = executor.submit(
                 _generate_and_publish_tweet_task,
                 selection,
@@ -930,7 +932,6 @@ def run_playbook():
                 else None
             )
 
-            article_payload = article_future.result()
             tweet_text, tweet_result = tweet_future.result()
             linkedin_text, linkedin_result = linkedin_future.result()
             course_art_payload = (
