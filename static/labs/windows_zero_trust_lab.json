@@ -1,0 +1,186 @@
+{
+  "schema_version": "0.2.0",
+  "lab": {
+    "id": "windows-zero-trust-hands-on",
+    "title": "Windows 11 Zero Trust Hardening",
+    "subtitle": "Configurer, valider et auditer un poste de travail",
+    "scenario_md": "Votre équipe endpoint vient de recevoir un nouveau lot de postes Windows 11 pour équiper un plateau d'analystes SOC. Vous devez finaliser la sécurisation du premier poste de la série avant de propager l'image à l'ensemble du parc.\n\nL'environnement doit respecter les exigences Zero Trust : pare-feu actif sur tous les profils, canal de mises à jour maîtrisé, et collecte centralisée des journaux. Les services d'infrastructure vous ont remis un extrait de journal et attendent votre validation.\n\nAu fil des étapes, vous préparerez la configuration locale, analyserez les preuves d'exécution, puis modéliserez la topologie cible pour documenter les commandes standard à appliquer à chaque composant.",
+    "variables": {
+      "device_name": { "type": "choice", "choices": ["WS-210", "WS-455", "WS-889"] },
+      "site_code": { "type": "choice", "choices": ["EU-WKS", "NA-HQ"] }
+    },
+    "scoring": { "max_points": 110 },
+    "timer": { "mode": "countdown", "seconds": 2700 },
+    "assets": [
+      {
+        "id": "security_snapshot.txt",
+        "filename": "security_snapshot.txt",
+        "kind": "file",
+        "mime": "text/plain",
+        "inline": true,
+        "content_b64": "TG9nTmFtZT1TZWN1cml0eQpTb3VyY2VOYW1lPU1pY3Jvc29mdCBXaW5kb3dzIHNlY3VyaXR5IGF1ZGl0aW5nLgpFdmVudENvZGU9NzA0NQpFdmVudFR5cGU9NApUeXBlPUluZm9ybWF0aW9uCkNvbXB1dGVyTmFtZT1XUy0yMTAuY29ycC5jb250b3NvLmxvY2FsClRhc2tDYXRlZ29yeT1Ob25lCk9wQ29kZT1JbmZvClJlY29yZE51bWJlcj00MzIxOQpLZXl3b3Jkcz1BdWRpdCBTdWNjZXNzCk1lc3NhZ2U9QSBzZXJ2aWNlIHdhcyBpbnN0YWxsZWQgaW4gdGhlIHN5c3RlbS4KU2VydmljZSBOYW1lOiBQU0VYRVNWQwpTZXJ2aWNlIEZpbGUgTmFtZTogQzpcV2luZG93c1xQU0VYRVNWQy5leGUKU2VydmljZSBUeXBlOiB1c2VyIG1vZGUgc2VydmljZQpTZXJ2aWNlIFN0YXJ0IFR5cGU6IGRlbWFuZCBzdGFydApTZXJ2aWNlIEFjY291bnQ6IExvY2FsU3lzdGVtCgpMb2dOYW1lPU1pY3Jvc29mdC1XaW5kb3dzLVBvd2VyU2hlbGwvT3BlcmF0aW9uYWwKRXZlbnRJRD00MTA0Ck1lc3NhZ2U9Q3JlYXRpbmcgU2NyaXB0YmxvY2sgdGV4dCAoMSBvZiAxKToKcG93ZXJzaGVsbC5leGUgLU5vUCAtV2luZG93U3R5bGUgSGlkZGVuIC1FbmNvZGVkQ29tbWFuZCBTUUJ2QUc0QVpRQmtBQ0FBTlFBd0FEb2dBRXdBYndCaEFHUUFaUUJrQUM0dUxnPT0KVXNlcjogQ09SUFxzdmMuZGVwbG95Cg=="
+      }
+    ],
+    "steps": [
+      {
+        "id": "enable-firewall",
+        "type": "terminal",
+        "title": "Activer le pare-feu sur {{device_name}}",
+        "instructions_md": "Depuis une console PowerShell élevée sur **{{device_name}}**, active les trois profils du pare-feu Windows. Utilise l'applet `Set-NetFirewallProfile` pour basculer Domain, Private et Public sur *Enabled*.",
+        "terminal": {
+          "prompt": "{{device_name}} PS C:\\\>",
+          "validators": [
+            {
+              "kind": "command",
+              "match": {
+                "program": "powershell",
+                "subcommand": ["Set-NetFirewallProfile"],
+                "flags": {
+                  "required": ["--Profile", "--Enabled"],
+                  "aliases": { "-Profile": "--Profile", "-Enabled": "--Enabled" }
+                },
+                "args": [
+                  { "flag": "--Profile", "expect": "Domain,Private,Public" },
+                  { "flag": "--Enabled", "expect": "True" }
+                ]
+              },
+              "response": {
+                "stdout_template": "Profiles Domain,Private,Public enabled on {{device_name}}\\n",
+                "world_patch": [
+                  { "op": "set", "path": "windows.devices.{{device_name}}.hostname", "value": "{{device_name}}" },
+                  { "op": "set", "path": "windows.devices.{{device_name}}.site_code", "value": "{{site_code}}" },
+                  { "op": "set", "path": "windows.devices.{{device_name}}.firewall.enabled", "value": true },
+                  { "op": "set", "path": "windows.devices.{{device_name}}.firewall.profiles", "value": ["Domain", "Private", "Public"] }
+                ]
+              }
+            }
+          ]
+        },
+        "points": 20,
+        "hints": [
+          "L'applet PowerShell attend une liste de profils via `--Profile Domain,Private,Public`.",
+          "Assure-toi que `--Enabled True` est présent pour valider l'étape."
+        ],
+        "transitions": { "on_success": "configure-updates", "on_failure": "#stay" }
+      },
+      {
+        "id": "configure-updates",
+        "type": "console_form",
+        "title": "Définir la politique Windows Update",
+        "instructions_md": "Dans le portail Endpoint Manager simulé, configure la politique de mises à jour pour **{{device_name}}** : canal *Production*, plage active de 08:00 à 20:00 et délai de redémarrage de 2 jours.",
+        "form": {
+          "model_path": "windows.devices.{{device_name}}.update_policy",
+          "schema": {
+            "fields": [
+              { "key": "ring", "widget": "toggle", "label": "Canal de déploiement", "options": ["Pilote", "Production"], "placeholder": "Choisir le canal" },
+              { "key": "active_hours_start", "label": "Heure de début", "placeholder": "08:00" },
+              { "key": "active_hours_end", "label": "Heure de fin", "placeholder": "20:00" },
+              { "key": "deadline_days", "label": "Délai (jours)", "placeholder": "2" }
+            ]
+          }
+        },
+        "validators": [
+          { "kind": "world", "expect": { "path": "windows.devices.{{device_name}}.update_policy.ring", "equals": "Production" } },
+          { "kind": "world", "expect": { "path": "windows.devices.{{device_name}}.update_policy.active_hours_start", "equals": "08:00" } },
+          { "kind": "world", "expect": { "path": "windows.devices.{{device_name}}.update_policy.active_hours_end", "equals": "20:00" } },
+          { "kind": "world", "expect": { "path": "windows.devices.{{device_name}}.update_policy.deadline_days", "equals": "2" } }
+        ],
+        "hints": [
+          "Commence par sélectionner le canal *Production* via le bouton bascule.",
+          "Renseigne les heures actives et le délai exactement comme demandé (08:00 / 20:00 / 2)."
+        ],
+        "points": 25,
+        "transitions": { "on_success": "analyze-logs", "on_failure": "#stay" }
+      },
+      {
+        "id": "analyze-logs",
+        "type": "inspect_file",
+        "title": "Analyser l'événement suspect",
+        "instructions_md": "Télécharge l'extrait de journal fourni et identifie le binaire installé par le compte de service **svc.deploy**. Saisis la réponse (chemin ou nom) dans la zone ci-dessous.",
+        "file_ref": "security_snapshot.txt",
+        "input": {
+          "mode": "answer",
+          "placeholder": "Ex: C\\\\Windows\\\\PSEXESVC.exe",
+          "prompt": "Quel service ou binaire non autorisé a été déployé par le compte `svc.deploy` ?"
+        },
+        "validators": [
+          {
+            "kind": "expression",
+            "expr": "((get('payload')||'').toLowerCase().includes('psexesvc') || (get('payload')||'').toLowerCase().includes('psexec'))",
+            "message": "Indique le service PSEXESVC.exe installé via PsExec."
+          }
+        ],
+        "hints": [
+          "Repère l'événement 7045 pour connaître le service installé.",
+          "Le journal PowerShell 4104 révèle également la commande exécutée par svc.deploy."
+        ],
+        "points": 20,
+        "transitions": { "on_success": "design-architecture", "on_failure": "#stay" }
+      },
+      {
+        "id": "design-architecture",
+        "type": "architecture",
+        "title": "Modéliser l'atelier Zero Trust",
+        "instructions_md": "Assemble la topologie cible :\n- **DC01** héberge la forêt AD et crée l'UO *Workstations*.\n- **MEMCM** orchestre les clients et force une action d'inventaire matériel.\n- **Poste {{device_name}}** applique son adressage local et pointe vers le contrôleur de domaine pour le DNS.\n- **WSUS** publie les correctifs requis pour le site **{{site_code}}**.\n\nAjoute les commandes correspondantes à chaque composant dans le panneau de droite et relie les flux : DC01 → MEMCM, MEMCM → Poste, MEMCM → WSUS. Ignore le composant leurre.",
+        "architecture": {
+          "palette_title": "Composants Windows",
+          "palette_caption": "Fais glisser uniquement les éléments utiles. Le composant héritage n'est qu'un leurre.",
+          "palette": [
+            { "id": "domain_controller", "label": "Contrôleur de domaine", "icon": "🛡️", "tags": ["core"] },
+            { "id": "config_manager", "label": "Centre de configuration", "icon": "🖥️", "tags": ["management"] },
+            { "id": "client", "label": "Poste Windows", "icon": "💻", "tags": ["endpoint"] },
+            { "id": "update_server", "label": "Serveur WSUS", "icon": "🗄️", "tags": ["patch"] },
+            { "id": "legacy_gateway", "label": "Passerelle FTP héritée", "icon": "📠", "tags": ["decoy"], "is_decoy": true, "description": "Élément volontairement hors sujet." }
+          ],
+          "initial_nodes": [
+            { "palette_id": "domain_controller", "label": "DC01", "alias": "dc", "position": { "x": 120, "y": 200 } },
+            { "palette_id": "config_manager", "label": "MEMCM", "alias": "cm", "position": { "x": 320, "y": 200 } },
+            { "palette_id": "client", "label": "Poste {{device_name}}", "alias": "client", "position": { "x": 320, "y": 60 } },
+            { "palette_id": "update_server", "label": "WSUS", "alias": "wsus", "position": { "x": 320, "y": 340 } }
+          ],
+          "help": "Clique sur les ports latéraux pour créer les liens. Utilise le panneau Inspecteur pour saisir les commandes exécutées.",
+          "world_path": "windows.topology.zero_trust",
+          "expected_world": {
+            "nodes": [
+              { "match": { "label": "DC01", "palette_id": "domain_controller", "config_contains": ["New-ADOrganizationalUnit", "Workstations"] }, "count": 1 },
+              { "match": { "label": "MEMCM", "palette_id": "config_manager", "config_contains": ["Invoke-CMClientAction", "Hardware Inventory"] }, "count": 1 },
+              { "match": { "label": "Poste {{device_name}}", "palette_id": "client", "config_contains": ["New-NetIPAddress", "Set-DnsClientServerAddress"] }, "count": 1 },
+              { "match": { "label": "WSUS", "palette_id": "update_server", "config_contains": ["Install-WindowsFeature", "UpdateServices"] }, "count": 1 }
+            ],
+            "links": [
+              { "from": { "label": "DC01" }, "to": { "label": "MEMCM" }, "count": 1, "bidirectional": true },
+              { "from": { "label": "MEMCM" }, "to": { "label": "Poste {{device_name}}" }, "count": 1, "bidirectional": true },
+              { "from": { "label": "MEMCM" }, "to": { "label": "WSUS" }, "count": 1, "bidirectional": true }
+            ],
+            "allow_extra_nodes": false
+          }
+        },
+        "validators": [
+          { "kind": "payload", "path": "nodes.length", "equals": 4, "message": "Utilise uniquement les quatre composants attendus." },
+          { "kind": "expression", "expr": "Array.isArray(get('payload.nodes')) && get('payload.nodes').every(n => (n.config||'').trim().length > 0)", "message": "Chaque composant doit contenir les commandes appliquées." }
+        ],
+        "hints": [
+          "Le contrôleur de domaine doit référencer la création de l'UO Workstations.",
+          "Sur le poste client, indique l'adresse IP et le serveur DNS via `New-NetIPAddress` et `Set-DnsClientServerAddress`."
+        ],
+        "points": 30,
+        "transitions": { "on_success": "hardening-quiz", "on_failure": "#stay" }
+      },
+      {
+        "id": "hardening-quiz",
+        "type": "quiz",
+        "title": "Valider la couverture",
+        "question_md": "Quelle vérification confirmera le plus rapidement que le poste applique bien la politique antimalware Zero Trust ?",
+        "choices": [
+          { "id": "a", "text": "Exécuter `Get-MpComputerStatus` pour vérifier la dernière signature Defender." },
+          { "id": "b", "text": "Consulter l'observateur d'événements pour des erreurs DFS." },
+          { "id": "c", "text": "Redémarrer la machine pour appliquer les stratégies de groupe." }
+        ],
+        "correct": ["a"],
+        "hints": ["Pense à une commande locale offrant un état instantané de l'antimalware."],
+        "points": 15,
+        "transitions": { "on_success": "#end", "on_failure": "#stay" }
+      }
+    ]
+  }
+}

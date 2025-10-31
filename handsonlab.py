@@ -1,10 +1,16 @@
-from flask import Flask, render_template
+"""Blueprint exposing the Hands-on Lab player view."""
 
-app = Flask(__name__)
+from flask import Blueprint, render_template
 
-@app.route("/")
-def player():
+
+hol_bp = Blueprint("hol", __name__)
+
+
+@hol_bp.route("/hands-on-labs")
+def player() -> str:
+    """Render the immersive Hands-on Lab player."""
+
     return render_template("player.html")
 
-if __name__ == "__main__":
-    app.run(debug=True)
+
+__all__ = ["hol_bp"]
