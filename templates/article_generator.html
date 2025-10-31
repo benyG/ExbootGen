@@ -223,6 +223,40 @@
       transform: translateY(-2px);
     }
 
+    button.is-loading {
+      position: relative;
+      pointer-events: none;
+    }
+
+    button.is-loading::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 18px;
+      height: 18px;
+      margin: -9px 0 0 -9px;
+      border-radius: 999px;
+      border: 3px solid rgba(12, 17, 31, 0.25);
+      border-top-color: rgba(12, 17, 31, 0.85);
+      animation: spin 0.9s linear infinite;
+    }
+
+    button.is-loading.primary::after,
+    button.is-loading.playbook::after {
+      border-color: rgba(255, 255, 255, 0.22);
+      border-top-color: rgba(255, 255, 255, 0.88);
+    }
+
+    @keyframes spin {
+      from {
+        transform: rotate(0turn);
+      }
+      to {
+        transform: rotate(1turn);
+      }
+    }
+
     .status {
       margin-top: 0.8rem;
       min-height: 1.2rem;
@@ -356,7 +390,7 @@
         </div>
         <div class="field-group">
           <label for="examUrl">Lien du test partagé Examboot</label>
-          <input type="url" id="examUrl" placeholder="https://" autocomplete="off">
+          <input type="url" id="examUrl" placeholder="http://examboot.net" value="http://examboot.net" autocomplete="off">
         </div>
       </div>
       <div class="actions">
@@ -417,6 +451,8 @@
   <script>
     const COURSE_ART_TOPIC = 'certification_presentation';
 
+    const DEFAULT_EXAM_URL = 'http://examboot.net';
+
     const providerSearch = document.getElementById('providerSearch');
     const providerSelect = document.getElementById('providerSelect');
     const certSearch = document.getElementById('certSearch');
@@ -454,6 +490,8 @@
     let currentCourseArt = null;
     let currentTweetDraft = '';
     let currentLinkedinDraft = '';
+    let currentBlogId = null;
+    let loadingButton = null;
 
     publishArticleBtn.disabled = true;
     generateCourseArtBtn.disabled = true;
@@ -501,10 +539,10 @@
     function getSelectionPayload() {
       const providerId = providerSelect.value;
       const certificationId = certSelect.value;
-      const examUrl = examUrlInput.value.trim();
+      const examUrl = examUrlInput.value.trim() || DEFAULT_EXAM_URL;
       const topicType = topicTypeSelect.value;
 
-      if (!providerId || !certificationId || !examUrl || !topicType) {
+      if (!providerId || !certificationId || !topicType) {
         return null;
       }
 
@@ -525,7 +563,7 @@
       generateTweetBtn.disabled = !hasSelection;
       generateLinkedinBtn.disabled = !hasSelection;
       runPlaybookBtn.disabled = !hasSelection;
-      publishArticleBtn.disabled = !hasSelection || !currentArticle;
+      publishArticleBtn.disabled = !hasSelection || !currentArticle || Boolean(currentBlogId);
       const isCourseArtTopic = hasSelection && topicTypeSelect.value === COURSE_ART_TOPIC;
       generateCourseArtBtn.disabled = !isCourseArtTopic;
       publishCourseArtBtn.disabled = !isCourseArtTopic || !currentCourseArt;
@@ -552,6 +590,7 @@
       currentCourseArt = null;
       currentTweetDraft = '';
       currentLinkedinDraft = '';
+      currentBlogId = null;
       articleOutput.textContent = DEFAULT_ARTICLE_TEXT;
       courseArtOutput.textContent = DEFAULT_COURSE_ART_TEXT;
       tweetOutput.textContent = DEFAULT_TWEET_TEXT;
@@ -639,8 +678,9 @@
         return;
       }
 
+      currentBlogId = null;
       try {
-        toggleLoading(true);
+        toggleLoading(true, generateArticleBtn);
         setStatus('Génération de l\'article en cours…');
         const response = await fetch('/articles/generate', {
           method: 'POST',
@@ -648,9 +688,15 @@
           body: JSON.stringify(selection)
         });
         const payload = await response.json();
+        if (response.status === 409) {
+          currentBlogId = payload.blog_id || currentBlogId;
+          setStatus(payload.error || 'Un article de présentation existe déjà pour cette certification.', false);
+          return;
+        }
         if (!response.ok) {
           throw new Error(payload.error || 'Erreur inconnue lors de la génération');
         }
+        currentBlogId = null;
         currentArticle = payload.article || '';
         articleOutput.textContent = currentArticle || 'Aucun contenu généré.';
         setStatus('Article généré avec succès.');
@@ -679,7 +725,7 @@
       }
 
       try {
-        toggleLoading(true);
+        toggleLoading(true, publishArticleBtn);
         setStatus("Publication de l'article en cours…");
         const response = await fetch('/articles/publish-article', {
           method: 'POST',
@@ -687,9 +733,15 @@
           body: JSON.stringify({ ...selection, article: currentArticle })
         });
         const payload = await response.json();
+        if (response.status === 409) {
+          currentBlogId = payload.blog_id || null;
+          setStatus(payload.error || 'Un article de présentation existe déjà pour cette certification.', false);
+          return;
+        }
         if (!response.ok) {
           throw new Error(payload.error || "Erreur lors de la publication de l'article");
         }
+        currentBlogId = payload.blog_id || null;
         setStatus(`Article publié avec succès (ID ${payload.blog_id}).`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -709,7 +761,7 @@
       }
 
       try {
-        toggleLoading(true);
+        toggleLoading(true, generateTweetBtn);
         setStatus('Génération du tweet en cours…');
         const response = await fetch('/articles/generate-tweet', {
           method: 'POST',
@@ -759,7 +811,7 @@
       }
 
       try {
-        toggleLoading(true);
+        toggleLoading(true, generateLinkedinBtn);
         setStatus('Génération du post LinkedIn en cours…');
         const response = await fetch('/articles/generate-linkedin', {
           method: 'POST',
@@ -814,7 +866,7 @@
       }
 
       try {
-        toggleLoading(true);
+        toggleLoading(true, generateCourseArtBtn);
         setStatus('Génération de la fiche certification en cours…');
         const response = await fetch('/articles/generate-course-art', {
           method: 'POST',
@@ -864,7 +916,7 @@
       }
 
       try {
-        toggleLoading(true);
+        toggleLoading(true, publishCourseArtBtn);
         setStatus('Publication de la fiche certification en cours…');
         const response = await fetch('/articles/publish-course-art', {
           method: 'POST',
@@ -895,7 +947,7 @@
       }
       selection.add_image = addImageCheckbox.checked;
       try {
-        toggleLoading(true);
+        toggleLoading(true, runPlaybookBtn);
         setStatus('Exécution du playbook : génération et publication en cours…');
         const response = await fetch('/articles/run-playbook', {
           method: 'POST',
@@ -903,9 +955,15 @@
           body: JSON.stringify(selection)
         });
         const payload = await response.json();
+        if (response.status === 409) {
+          currentBlogId = payload.blog_id || currentBlogId;
+          setStatus(payload.error || 'Un article de présentation existe déjà pour cette certification.', false);
+          return;
+        }
         if (!response.ok) {
           throw new Error(payload.error || 'Erreur inconnue lors de la publication');
         }
+        currentBlogId = payload.blog_id || null;
         currentArticle = payload.article || '';
         articleOutput.textContent = currentArticle || 'Aucun contenu généré.';
 
@@ -931,11 +989,33 @@
           payload.linkedin_image
         );
 
+        currentCourseArt = payload.course_art || null;
+        if (currentCourseArt) {
+          courseArtOutput.textContent = JSON.stringify(currentCourseArt, null, 2);
+        } else if (payload.course_art_error) {
+          courseArtOutput.textContent = `${DEFAULT_COURSE_ART_TEXT}\n\nErreur : ${payload.course_art_error}`;
+        } else if (topicTypeSelect.value === COURSE_ART_TOPIC) {
+          courseArtOutput.textContent = DEFAULT_COURSE_ART_TEXT;
+        }
+
         const statuses = [];
+        if (payload.blog_id) {
+          statuses.push(`Article enregistré (#${payload.blog_id})`);
+        } else if (currentArticle) {
+          statuses.push('Article généré');
+        }
         statuses.push(`Tweet ${payload.tweet_published ? 'publié' : 'non publié'}`);
         statuses.push(`LinkedIn ${payload.linkedin_published ? 'publié' : 'non publié'}`);
-        const hasFailure = !payload.tweet_published || !payload.linkedin_published;
-        setStatus(`Playbook terminé – article généré · ${statuses.join(' · ')}.`, hasFailure);
+        if (payload.course_art) {
+          statuses.push('Fiche certification enregistrée');
+        } else if (payload.course_art_error) {
+          statuses.push(`Fiche non enregistrée : ${payload.course_art_error}`);
+        }
+        const hasFailure =
+          !payload.tweet_published ||
+          !payload.linkedin_published ||
+          Boolean(payload.course_art_error);
+        setStatus(`Playbook terminé – ${statuses.join(' · ')}.`, hasFailure);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setStatus(message, true);
@@ -958,7 +1038,7 @@
       selection.add_image = addImageCheckbox.checked;
       selection.tweet = currentTweetDraft;
       try {
-        toggleLoading(true);
+        toggleLoading(true, publishTweetBtn);
         setStatus('Publication du tweet en cours…');
         const response = await fetch('/articles/publish-tweet', {
           method: 'POST',
@@ -1008,7 +1088,7 @@
       selection.add_image = addImageCheckbox.checked;
       selection.linkedin_post = currentLinkedinDraft;
       try {
-        toggleLoading(true);
+        toggleLoading(true, publishLinkedinBtn);
         setStatus('Publication du post LinkedIn en cours…');
         const response = await fetch('/articles/publish-linkedin', {
           method: 'POST',
@@ -1045,19 +1125,31 @@
       }
     });
 
-    function toggleLoading(state) {
+    const allActionButtons = [
+      generateArticleBtn,
+      generateTweetBtn,
+      generateLinkedinBtn,
+      runPlaybookBtn,
+      publishArticleBtn,
+      generateCourseArtBtn,
+      publishCourseArtBtn,
+      publishTweetBtn,
+      publishLinkedinBtn
+    ];
+
+    function toggleLoading(state, sourceButton = null) {
       isLoading = Boolean(state);
       if (isLoading) {
-        generateArticleBtn.disabled = true;
-        generateTweetBtn.disabled = true;
-        generateLinkedinBtn.disabled = true;
-        runPlaybookBtn.disabled = true;
-        publishArticleBtn.disabled = true;
-        generateCourseArtBtn.disabled = true;
-        publishCourseArtBtn.disabled = true;
-        publishTweetBtn.disabled = true;
-        publishLinkedinBtn.disabled = true;
+        loadingButton = sourceButton || null;
+        allActionButtons.forEach(button => {
+          if (button === loadingButton) {
+            button.classList.add('is-loading');
+          }
+          button.disabled = true;
+        });
       } else {
+        allActionButtons.forEach(button => button.classList.remove('is-loading'));
+        loadingButton = null;
         updateActionAvailability();
       }
     }
@@ -1067,6 +1159,7 @@
       statusArea.style.color = isError ? '#f87171' : 'var(--text-muted)';
     }
 
+    examUrlInput.value = examUrlInput.value || DEFAULT_EXAM_URL;
     updateCourseArtSection();
     fetchProviders();
     updateActionAvailability();
