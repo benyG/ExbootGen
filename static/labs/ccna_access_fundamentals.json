@@ -77,10 +77,10 @@
         "id": "design-topology",
         "type": "architecture",
         "title": "Assembler la topologie d'accès",
-        "instructions_md": "Place un routeur, un commutateur, un poste utilisateur et un serveur. Renomme-les comme indiqué puis relie-les : le routeur vers le commutateur, et le commutateur vers chaque hôte.",
+        "instructions_md": "Place un routeur, un commutateur, un poste utilisateur et un serveur. Renomme-les comme indiqué puis relie-les : le routeur vers le commutateur, et le commutateur vers chaque hôte.\n\nSélectionne ensuite chaque équipement dans l'espace de travail et saisis les commandes exécutées :\n- **Edge Router** : `interface Gi0/0`, `ip address 192.168.10.1 255.255.255.0`, `no shutdown`\n- **Distribution Switch** : `interface Gi0/1`, `switchport access vlan {{access_vlan}}`\n- **User PC** : `ip address 192.168.10.10 255.255.255.0`\n- **Web Server** : `ip address 192.168.10.20 255.255.255.0`",
         "architecture": {
           "palette_title": "Équipements",
-          "palette_caption": "Ajoute uniquement les équipements listés et renomme-les si besoin.",
+          "palette_caption": "Ajoute uniquement les équipements listés et renomme-les si besoin. Ignore le composant leurre éventuel.",
           "palette": [
             { "id": "router", "label": "Routeur", "icon": "🛜", "tags": ["layer3"] },
             { "id": "switch", "label": "Commutateur", "icon": "🖧", "tags": ["layer2"] },
@@ -93,14 +93,14 @@
             { "palette_id": "pc", "label": "User PC", "alias": "pc1", "position": { "x": 360, "y": 60 } },
             { "palette_id": "server", "label": "Web Server", "alias": "srv1", "position": { "x": 360, "y": 340 } }
           ],
-          "help": "Clique sur les ports latéraux pour créer les liens. Clic droit supprime un lien ou un équipement.",
+          "help": "Clique sur les ports latéraux pour créer les liens. Clic droit supprime un lien ou un équipement. Sélectionne un élément pour saisir sa configuration dans le panneau dédié.",
           "world_path": "campus.topology.access",
           "expected_world": {
             "nodes": [
-              { "match": { "label": "Edge Router", "palette_id": "router" }, "count": 1 },
-              { "match": { "label": "Distribution Switch", "palette_id": "switch" }, "count": 1 },
-              { "match": { "label": "User PC", "palette_id": "pc" }, "count": 1 },
-              { "match": { "label": "Web Server", "palette_id": "server" }, "count": 1 }
+              { "match": { "label": "Edge Router", "palette_id": "router", "config_contains": ["interface Gi0/0", "ip address 192.168.10.1 255.255.255.0"] }, "count": 1 },
+              { "match": { "label": "Distribution Switch", "palette_id": "switch", "config_contains": ["interface Gi0/1", "switchport access vlan {{access_vlan}}"] }, "count": 1 },
+              { "match": { "label": "User PC", "palette_id": "pc", "config_contains": ["ip address 192.168.10.10 255.255.255.0"] }, "count": 1 },
+              { "match": { "label": "Web Server", "palette_id": "server", "config_contains": ["ip address 192.168.10.20 255.255.255.0"] }, "count": 1 }
             ],
             "links": [
               { "from": { "label": "Edge Router" }, "to": { "label": "Distribution Switch" }, "count": 1, "bidirectional": true },
@@ -111,7 +111,8 @@
           }
         },
         "validators": [
-          { "kind": "payload", "path": "nodes.length", "equals": 4, "message": "Garde uniquement les quatre équipements requis." }
+          { "kind": "payload", "path": "nodes.length", "equals": 4, "message": "Garde uniquement les quatre équipements requis." },
+          { "kind": "expression", "expr": "get('payload.nodes') && get('payload.nodes').every(n => n.config && n.config.trim().length > 0)", "message": "Renseigne la configuration attendue pour chaque équipement." }
         ],
         "hints": [
           "Renomme les équipements avec les intitulés Edge Router, Distribution Switch, User PC et Web Server.",

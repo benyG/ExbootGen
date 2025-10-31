@@ -76,6 +76,29 @@ function buildChipElement(tagName, item){
   return chip;
 }
 
+function ensurePaletteHasDecoy(palette){
+  const items = (Array.isArray(palette) ? palette : []).map(item => ({ ...item }));
+  const hasDecoy = items.some(item => item && (item.is_decoy || item.decoy));
+  if(!hasDecoy){
+    const existing = new Set(items.map(item => item && item.id).filter(Boolean));
+    let idx = 1;
+    let decoyId = 'decoy';
+    while(existing.has(decoyId)){
+      idx += 1;
+      decoyId = `decoy_${idx}`;
+    }
+    items.push({
+      id: decoyId,
+      label: 'Composant leurre',
+      icon: '🧱',
+      description: "Élément distrayant qui n'est pas utile pour la solution.",
+      tags: ['decoy'],
+      is_decoy: true
+    });
+  }
+  return items;
+}
+
 function normalizeArchitectureForCompare(payload){
   if(!payload || typeof payload!=='object') return payload;
   const clone=deepClone(payload);
@@ -416,6 +439,9 @@ function renderArchitectureFreeform(step, cfg, mount){
   const layout = document.createElement('div');
   layout.className = 'arch-layout';
 
+  const paletteItems = ensurePaletteHasDecoy(cfg.palette || []);
+  const paletteIndex = new Map(paletteItems.map(item => [item.id, item]));
+
   const paletteCol = document.createElement('div');
   paletteCol.className = 'palette';
   const paletteHeader = document.createElement('div');
@@ -431,7 +457,7 @@ function renderArchitectureFreeform(step, cfg, mount){
   paletteList.className = 'palette-list';
   paletteCol.appendChild(paletteList);
 
-  (cfg.palette || []).forEach(item => {
+  paletteItems.forEach(item => {
     const chip = buildChipElement('button', item);
     chip.addEventListener('click', ()=> addNode(item.id));
     paletteList.appendChild(chip);
@@ -454,6 +480,36 @@ function renderArchitectureFreeform(step, cfg, mount){
   helper.className = 'arch-help';
   helper.innerHTML = cfg.help || 'Astuce : cliquez pour renommer, clic droit pour supprimer, reliez les ports latéraux.';
   canvasWrap.appendChild(helper);
+
+  const inspector = document.createElement('div');
+  inspector.className = 'arch-inspector';
+  inspector.setAttribute('data-state', 'empty');
+  const inspectorTitle = document.createElement('h4');
+  inspectorTitle.textContent = 'Sélectionne un composant';
+  const inspectorSubtitle = document.createElement('p');
+  inspectorSubtitle.textContent = 'Clique sur un élément de la topologie pour saisir ses commandes standard.';
+  const labelField = document.createElement('label');
+  const labelSpan = document.createElement('span');
+  labelSpan.textContent = 'Nom affiché';
+  const labelInput = document.createElement('input');
+  labelInput.className = 'input';
+  labelInput.disabled = true;
+  labelField.appendChild(labelSpan);
+  labelField.appendChild(labelInput);
+  const configField = document.createElement('label');
+  const configSpan = document.createElement('span');
+  configSpan.textContent = 'Commande(s) appliquées';
+  const configArea = document.createElement('textarea');
+  configArea.className = 'input arch-config';
+  configArea.placeholder = 'Ex:\ninterface Gi0/1\nip address 192.168.10.10 255.255.255.0';
+  configArea.disabled = true;
+  configField.appendChild(configSpan);
+  configField.appendChild(configArea);
+  inspector.appendChild(inspectorTitle);
+  inspector.appendChild(inspectorSubtitle);
+  inspector.appendChild(labelField);
+  inspector.appendChild(configField);
+  canvasWrap.appendChild(inspector);
 
   layout.appendChild(paletteCol);
   layout.appendChild(canvasWrap);
@@ -514,23 +570,67 @@ function renderArchitectureFreeform(step, cfg, mount){
   let aliasMap = {};
   let pendingFrom = null;
   let selectedNode = null;
+  let inspectorNodeId = null;
+
+  function updateInspector(node){
+    inspectorNodeId = node ? node.id : null;
+    if(!node){
+      inspector.setAttribute('data-state', 'empty');
+      inspectorTitle.textContent = 'Sélectionne un composant';
+      inspectorSubtitle.textContent = 'Clique sur un élément de la topologie pour saisir ses commandes standard.';
+      labelInput.value = '';
+      labelInput.disabled = true;
+      configArea.value = '';
+      configArea.disabled = true;
+      return;
+    }
+    inspector.setAttribute('data-state', 'active');
+    const currentLabel = node.labelNode.text();
+    inspectorTitle.textContent = currentLabel || 'Composant';
+    inspectorSubtitle.textContent = 'Saisis ou colle la configuration attendue pour ce composant.';
+    labelInput.disabled = false;
+    configArea.disabled = false;
+    labelInput.value = currentLabel;
+    configArea.value = node.configText || '';
+  }
+
+  labelInput.addEventListener('input', ()=>{
+    if(!inspectorNodeId) return;
+    const node = getNodeById(inspectorNodeId);
+    if(!node) return;
+    const nextLabel = labelInput.value || '';
+    node.labelNode.text(nextLabel);
+    inspectorTitle.textContent = nextLabel || 'Composant';
+    layerNodes.batchDraw();
+    drawLinks();
+  });
+
+  configArea.addEventListener('input', ()=>{
+    if(!inspectorNodeId) return;
+    const node = getNodeById(inspectorNodeId);
+    if(!node) return;
+    node.configText = configArea.value;
+  });
+
+  updateInspector(null);
 
   const paletteLookup = (id)=>{
-    const raw = (cfg.palette || []).find(p=> p.id===id);
+    const key = id!=null ? String(id) : id;
+    const raw = paletteIndex.get(id) || paletteIndex.get(key) || (cfg.palette || []).find(p=> p.id===id || p.id===key);
     if(raw){
       const tagsRaw = raw.tags;
       return {
-        id: raw.id || id,
-        paletteId: raw.id || id,
-        label: raw.label || raw.id || id,
-        type: raw.type || raw.component || raw.id || id,
+        id: raw.id || key,
+        paletteId: raw.id || key,
+        label: raw.label || raw.id || key,
+        type: raw.type || raw.component || raw.id || key,
         iconRaw: raw.icon ?? null,
         width: raw.width,
         height: raw.height,
         tags: Array.isArray(tagsRaw)? tagsRaw : (tagsRaw ? [tagsRaw] : [])
       };
     }
-    return { id, paletteId:id, label:id, type:id, iconRaw:null, width:176, height:68, tags:[] };
+    return { id: key || id, paletteId:key || id, label:key || id, type:key || id, iconRaw:null, width:176, height:68, tags:[] };
   };
 
   function cancelPendingLink(){ pendingFrom=null; stage.container().classList.remove('is-linking'); }
@@ -600,8 +700,15 @@ function renderArchitectureFreeform(step, cfg, mount){
     });
     group.on('dblclick', (evt)=>{
       evt.cancelBubble=true;
-      const next = prompt('Nom du composant', label.text());
-      if(next!==null){ label.text(next.trim() || label.text()); layerNodes.draw(); drawLinks(); }
+      const previous = label.text();
+      const next = prompt('Nom du composant', previous);
+      if(next!==null){
+        const trimmed = next.trim();
+        label.text(trimmed || previous);
+        layerNodes.draw();
+        drawLinks();
+        if(selectedNode===id){ updateInspector(getNodeById(id)); }
+      }
     });
     group.on('contextmenu', (evt)=>{ evt.evt.preventDefault(); removeNode(id); });
 
@@ -616,7 +723,14 @@ function renderArchitectureFreeform(step, cfg, mount){
     const tags = Array.isArray(tagsRaw)? tagsRaw : (tagsRaw ? [tagsRaw] : []);
     const paletteId = overrides.palette_id || spec.paletteId || componentId;
     const nodeType = overrides.type || spec.type || componentId;
-    const nodeData = { id, type: nodeType, paletteId, group, rect, labelNode: label, iconRaw: null, icon: null, iconNode: null, width, height, tags, alias: null };
+    let configValue = '';
+    if(overrides.config !== undefined) configValue = String(overrides.config);
+    else if(overrides.config_text !== undefined) configValue = String(overrides.config_text);
+    else if(Array.isArray(overrides.commands)) configValue = overrides.commands.join('\n');
+    else if(spec.default_config !== undefined) configValue = String(spec.default_config);
+    else if(spec.config !== undefined) configValue = String(spec.config);
+    configValue = configValue.replace(/\r\n/g, '\n');
+    const nodeData = { id, type: nodeType, paletteId, group, rect, labelNode: label, iconRaw: null, icon: null, iconNode: null, width, height, tags, alias: null, configText: configValue };
     nodes.push(nodeData);
     setNodeIcon(nodeData, overrides.icon!==undefined ? overrides.icon : spec.iconRaw);
     portIn.moveToTop();
@@ -629,7 +743,10 @@ function renderArchitectureFreeform(step, cfg, mount){
 
   stage.on('mousedown touchstart', (evt)=>{
     const target = evt.target;
-    if(!target || target === stage){ cancelPendingLink(); }
+    if(!target || target === stage){
+      cancelPendingLink();
+      selectNode(null);
+    }
   });
   stage.on('mouseleave', ()=>{ cancelPendingLink(); });
 
@@ -641,6 +758,7 @@ function renderArchitectureFreeform(step, cfg, mount){
       node.rect.shadowOpacity(active ? 0.55 : 0);
     });
     layerNodes.batchDraw();
+    updateInspector(getNodeById(id));
   }
 
   function getNodeById(id){ return nodes.find(n=> n.id===id); }
@@ -681,11 +799,15 @@ function renderArchitectureFreeform(step, cfg, mount){
     const node = nodes[idx];
     if(node.alias){ delete aliasMap[node.alias]; }
     if(pendingFrom===id) cancelPendingLink();
+    const wasSelected = selectedNode===id;
+    const inspectorWasNode = inspectorNodeId===id;
     node.group.destroy();
     nodes.splice(idx,1);
     for(let i=links.length-1;i>=0;i--){ if(links[i].fromNode===id || links[i].toNode===id){ links[i].arrow.destroy(); links.splice(i,1); } }
     layerNodes.draw();
     layerLinks.draw();
+    if(wasSelected){ selectNode(null); }
+    else if(inspectorWasNode){ updateInspector(null); }
   }
 
   function resolveNodeRef(ref){
@@ -703,6 +825,8 @@ function renderArchitectureFreeform(step, cfg, mount){
     const payload = {
       nodes: nodes.map(n=>{
         const pos = n.group.position();
+        const configText = (n.configText || '').replace(/\r\n/g, '\n');
+        const commands = configText.split(/\n/).map(line=> line.trim()).filter(line=> line.length>0);
         return {
           id: n.id,
           alias: n.alias || null,
@@ -711,7 +835,9 @@ function renderArchitectureFreeform(step, cfg, mount){
           label: n.labelNode.text(),
           icon: n.iconRaw ?? null,
           tags: n.tags,
-          position: { x: Math.round(pos.x), y: Math.round(pos.y) }
+          position: { x: Math.round(pos.x), y: Math.round(pos.y) },
+          config: configText,
+          commands
         };
       }),
       links: links.map(l=>{
@@ -752,6 +878,9 @@ function renderArchitectureFreeform(step, cfg, mount){
         height: entry.height
       };
       if(entry.node_type){ overrides.type = entry.node_type; }
+      if(entry.config !== undefined) overrides.config = entry.config;
+      if(entry.config_text !== undefined) overrides.config_text = entry.config_text;
+      if(Array.isArray(entry.commands)) overrides.commands = entry.commands;
       const nodeId = addNode(paletteRef, overrides);
       const node = getNodeById(nodeId);
       if(node && entry.position){
@@ -766,6 +895,8 @@ function renderArchitectureFreeform(step, cfg, mount){
       if(fromId && toId) addLink(fromId, toId);
     });
     drawLinks();
+    if(nodes.length){ selectNode(null); }
+    else { updateInspector(null); }
   }
 
   function clearScene(){
@@ -776,6 +907,9 @@ function renderArchitectureFreeform(step, cfg, mount){
     drawGrid();
     aliasMap = {};
     cancelPendingLink();
+    selectedNode = null;
+    inspectorNodeId = null;
+    updateInspector(null);
   }
 
   const actions = document.createElement('div');
@@ -824,12 +958,13 @@ function renderArchitectureFreeform(step, cfg, mount){
 }
 
 function renderArchitectureSlots(step, cfg, mount){
+  const paletteItems = ensurePaletteHasDecoy(cfg.palette || []);
   const wrapper = document.createElement('div');
   wrapper.className = 'arch-grid';
   const pal = document.createElement('div'); pal.className='palette';
   pal.innerHTML = '<div class="palette-header"><h4>Palette</h4></div>';
   const palList = document.createElement('div'); palList.className='palette-list'; pal.appendChild(palList);
-  (cfg.palette||[]).forEach(item=>{
+  paletteItems.forEach(item=>{
     const chip=buildChipElement('div', item);
     palList.appendChild(chip);
   });
@@ -841,9 +976,23 @@ function renderArchitectureSlots(step, cfg, mount){
   mount.appendChild(wrapper);
 
   const slotEls=new Map();
+  const slotMeta=new Map();
   (cfg.slots||[]).forEach(s=>{
     const box=document.createElement('div'); box.className='slot'; box.dataset.slotId=s.id;
     const title=document.createElement('div'); title.className='slot-title'; title.textContent=s.label||s.id; box.appendChild(title);
+    const configLabel=document.createElement('label');
+    configLabel.className='slot-config';
+    configLabel.dataset.active='false';
+    const span=document.createElement('span'); span.textContent='Commande(s)';
+    const configArea=document.createElement('textarea');
+    configArea.className='input slot-config-input';
+    configArea.placeholder='Commandes pour ce composant';
+    configArea.disabled=true;
+    configLabel.appendChild(span);
+    configLabel.appendChild(configArea);
+    box.appendChild(configLabel);
+    configArea.addEventListener('input', ()=>{ const meta=slotMeta.get(s.id); if(meta) meta.config = configArea.value; });
+    slotMeta.set(s.id, { label: configLabel, area: configArea, config: '' });
     slots.appendChild(box);
     slotEls.set(s.id, box);
   });
@@ -869,7 +1018,16 @@ function renderArchitectureSlots(step, cfg, mount){
     const toSlot=target.dataset?.slotId || null;
     const fromSlot=source?.dataset?.slotId || null;
     if(target===palList){
-      if(fromSlot) delete allAssignments[fromSlot];
+      if(fromSlot){
+        delete allAssignments[fromSlot];
+        const meta=slotMeta.get(fromSlot);
+        if(meta){
+          meta.config='';
+          meta.area.value='';
+          meta.area.disabled=true;
+          meta.label.dataset.active='false';
+        }
+      }
       el.remove();
       return;
     }
@@ -877,12 +1035,40 @@ function renderArchitectureSlots(step, cfg, mount){
     el.dataset.slotId = toSlot;
     [...target.querySelectorAll('.chip')].forEach(ch=>{ if(ch!==el) ch.remove(); });
     allAssignments[toSlot]=el.dataset.componentId;
-    if(fromSlot && fromSlot!==toSlot) delete allAssignments[fromSlot];
+    let transferred='';
+    if(fromSlot && fromSlot!==toSlot){
+      delete allAssignments[fromSlot];
+      const fromMeta=slotMeta.get(fromSlot);
+      if(fromMeta){
+        transferred = fromMeta.config || '';
+        fromMeta.config='';
+        fromMeta.area.value='';
+        fromMeta.area.disabled=true;
+        fromMeta.label.dataset.active='false';
+      }
+    }
+    const toMeta=slotMeta.get(toSlot);
+    if(toMeta){
+      const nextConfig = transferred && fromSlot!==toSlot ? transferred : '';
+      toMeta.config = nextConfig;
+      toMeta.area.value = nextConfig;
+      toMeta.area.disabled=false;
+      toMeta.label.dataset.active='true';
+    }
   });
 
   drake.on('remove',(el, container, source)=>{
     const fromSlot=source?.dataset?.slotId || null;
-    if(fromSlot){ delete allAssignments[fromSlot]; }
+    if(fromSlot){
+      delete allAssignments[fromSlot];
+      const meta=slotMeta.get(fromSlot);
+      if(meta){
+        meta.config='';
+        meta.area.value='';
+        meta.area.disabled=true;
+        meta.label.dataset.active='false';
+      }
+    }
   });
 
   let pending=null;
@@ -908,7 +1094,10 @@ function renderArchitectureSlots(step, cfg, mount){
     const payload = finalizeArchitecturePayload({
       nodes: Object.entries(allAssignments).map(([slotId, compId])=>{
         const slot=(cfg.slots||[]).find(s=> s.id===slotId) || {};
-        const paletteItem=(cfg.palette||[]).find(p=> p.id===compId) || { id:compId };
+        const paletteItem=paletteItems.find(p=> p.id===compId) || { id:compId };
+        const meta=slotMeta.get(slotId) || {};
+        const configText = (meta.config || '').replace(/\r\n/g,'\n');
+        const commands = configText.split(/\n/).map(line=> line.trim()).filter(line=> line.length>0);
         return {
           id: slotId,
           type: compId,
@@ -916,7 +1105,9 @@ function renderArchitectureSlots(step, cfg, mount){
           label: slot.label || slotId,
           icon: paletteItem.icon ?? null,
           tags: Array.isArray(paletteItem.tags)? paletteItem.tags : (paletteItem.tags?[paletteItem.tags]:[]),
-          position: { slot: slotId }
+          position: { slot: slotId },
+          config: configText,
+          commands
         };
       }),
       links: allConnections.map((link, idx)=>{
@@ -958,11 +1149,22 @@ function finalizeArchitecturePayload(payload){
     typeConnections.push({ from: link.from_type || null, to: link.to_type || null });
   });
 
+  const configuredNodes = [];
+  const commandEntries = [];
+  (payload.nodes||[]).forEach(node=>{
+    const configText = (node.config || node.config_text || '').trim();
+    const commands = Array.isArray(node.commands) ? node.commands : configText ? configText.split(/\r?\n/).map(line=> line.trim()).filter(Boolean) : [];
+    if(configText){ configuredNodes.push({ id: node.id, label: node.label, type: node.type }); }
+    commands.forEach(cmd=> commandEntries.push({ node_id: node.id, label: node.label, type: node.type, command: cmd }));
+  });
+
   payload.summary = {
     counts_by_type: countsByType,
     counts_by_palette: countsByPalette,
     labels: (payload.nodes||[]).map(n=> n.label),
-    type_connections: typeConnections
+    type_connections: typeConnections,
+    configured_nodes: configuredNodes,
+    commands: commandEntries
   };
 
   return payload;
@@ -978,6 +1180,26 @@ function matchNode(node, matcher){
   if(matcher.palette_id && node.palette_id!==matcher.palette_id) return false;
   if(matcher.label && node.label!==matcher.label) return false;
   if(matcher.icon && !iconsEqual(node.icon, matcher.icon)) return false;
+  const configText = (node.config ?? node.config_text ?? (Array.isArray(node.commands)? node.commands.join('\n') : '') ?? '').toString();
+  if(matcher.config !== undefined){
+    if(configText.trim() !== String(matcher.config).trim()) return false;
+  }
+  if(matcher.config_contains){
+    const required = Array.isArray(matcher.config_contains) ? matcher.config_contains : [matcher.config_contains];
+    const haystack = configText.toLowerCase();
+    if(!required.every(part => haystack.includes(String(part).toLowerCase()))) return false;
+  }
+  if(matcher.config_regex){
+    try {
+      const re = new RegExp(matcher.config_regex, matcher.config_regex_flags || '');
+      if(!re.test(configText)) return false;
+    } catch { return false; }
+  }
+  if(matcher.commands){
+    const commandsArray = Array.isArray(node.commands) ? node.commands : configText.split(/\r?\n/).map(line=> line.trim()).filter(Boolean);
+    const expectedCommands = Array.isArray(matcher.commands) ? matcher.commands : [matcher.commands];
+    if(!expectedCommands.every(cmd => commandsArray.includes(cmd))) return false;
+  }
   if(matcher.tags){
     const tags = Array.isArray(node.tags)? node.tags : [];
     const required = Array.isArray(matcher.tags)? matcher.tags : [matcher.tags];
