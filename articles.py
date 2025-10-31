@@ -216,7 +216,8 @@ def _persist_blog_article(
             INSERT INTO blogs (title, topic_type, res, article, url, created_at, updated_at)
             VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
             """,
-            (title, topic_type_value, summary, article_text, exam_url),
+            # Keep `res` and `url` empty in storage per the product requirement.
+            (title, topic_type_value, "", article_text, ""),
         )
         blog_id = cursor.lastrowid
         cursor.execute(
