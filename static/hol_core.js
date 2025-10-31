@@ -176,6 +176,7 @@ const DEMO = {
     id: "s3-secure-mini",
     title: "Sécuriser un bucket S3 (démo)",
     subtitle: "Terminal + Console + Inspect + Quiz",
+    scenario_md: "Ce scénario de démonstration illustre comment le player orchestre une suite d'étapes complémentaires.\n\nVous incarnez un·e ingénieur·e cloud chargé·e de sécuriser un bucket S3 exposé. Chaque phase montre comment les validations mettent à jour l'état simulé et débloquent l'étape suivante.",
     variables: {
       bucket_name: { type: "choice", choices: ["acme-audit","contoso-audit","globex-audit"] },
       region: { type: "choice", choices: ["us-east-1","eu-west-1"] }
@@ -266,6 +267,12 @@ function renderStep(){
   const r = resolve(step);
   setText('lab-title', state.lab.lab.title);
   setText('lab-subtitle', state.lab.lab.subtitle||'');
+  const scenarioEl = document.getElementById('lab-context');
+  if(scenarioEl){
+    const scenarioHtml = state.lab.lab.scenario_md ? md(state.lab.lab.scenario_md) : '';
+    scenarioEl.innerHTML = scenarioHtml;
+    scenarioEl.style.display = scenarioHtml ? 'block' : 'none';
+  }
   setText('step-title', r.title || r.id);
   setText('step-instr', md(r.instructions_md||''));
   const body = document.getElementById('step-body');
@@ -302,12 +309,23 @@ function renderStep(){
       const row=document.createElement('div'); row.className='row'; row.style.justifyContent='space-between'; row.style.margin='8px 0';
       const label=document.createElement('div'); label.textContent=f.label||f.key; label.style.color='#aab8ff';
       if(f.widget==='toggle'){
-        if(local[f.key]===undefined) local[f.key] = (f.options?.[0]||'Off');
-        const btn=document.createElement('button'); btn.className='button secondary'; btn.textContent=(local[f.key]);
-        btn.onclick=()=>{ const a=f.options?.[0], b=f.options?.[1]; local[f.key] = (String(local[f.key])===String(a)? b : a); btn.textContent=local[f.key]; };
-        row.appendChild(label); row.appendChild(btn);
+        const options = Array.isArray(f.options)? f.options : (typeof f.options==='string'? f.options.split(','): []);
+        const placeholder = f.placeholder || 'Choisir';
+        const btn=document.createElement('button'); btn.className='button secondary';
+        if(local[f.key]!==undefined){ btn.textContent=local[f.key]; }
+        else { btn.textContent = options.length? placeholder : placeholder; }
+        btn.onclick=()=>{
+          if(!options.length){ return; }
+          const current = local[f.key];
+          const idx = options.findIndex(opt=> String(opt)===String(current));
+          const next = idx===-1 ? options[0] : options[(idx+1)%options.length];
+          local[f.key] = next;
+          btn.textContent = next;
+        };
+        row.appendChild(label);
+        row.appendChild(btn);
       } else {
-        const inp=document.createElement('input'); inp.className='input'; inp.value=local[f.key]||''; inp.oninput=()=> local[f.key]=inp.value; row.appendChild(label); row.appendChild(inp);
+        const inp=document.createElement('input'); inp.className='input'; inp.value=local[f.key]||''; if(f.placeholder) inp.placeholder=f.placeholder; inp.oninput=()=> local[f.key]=inp.value; row.appendChild(label); row.appendChild(inp);
       }
       wrap.appendChild(row);
     });
@@ -324,12 +342,69 @@ function renderStep(){
   }
   else if(r.type==='inspect_file'){
     const asset=(state.lab.lab.assets||[]).find(a=> a.id===r.file_ref);
-    const textArea=document.createElement('textarea'); textArea.className='json';
-    textArea.value = asset && asset.inline && asset.content_b64 ? atob(asset.content_b64) : '';
+    const assetBox=document.createElement('div'); assetBox.className='inspect-asset';
+    let assetContent='';
+    if(asset && asset.inline && asset.content_b64){
+      try{ assetContent = atob(asset.content_b64); }
+      catch{ assetContent=''; }
+    }
+    if(asset){
+      const link=document.createElement('a');
+      link.className='button secondary';
+      link.textContent = `Télécharger ${asset.filename || asset.name || asset.id || 'fichier'}`;
+      link.download = asset.filename || asset.name || asset.id || 'asset';
+      if(asset.inline && asset.content_b64){
+        link.href = `data:${asset.mime || 'application/octet-stream'};base64,${asset.content_b64}`;
+      } else {
+        link.href = asset.url || asset.href || asset.path || '#';
+        link.target = '_blank';
+      }
+      assetBox.appendChild(link);
+      if(assetContent && assetContent.length < 16000){
+        const details=document.createElement('details');
+        const summary=document.createElement('summary');
+        summary.textContent='Afficher un aperçu intégré';
+        const pre=document.createElement('pre'); pre.textContent=assetContent;
+        details.appendChild(summary); details.appendChild(pre);
+        assetBox.appendChild(details);
+      }
+    }
+    if(asset && assetBox.childNodes.length){
+      body.appendChild(assetBox);
+    }
+    const mode=(r.input?.mode||'editor').toLowerCase();
+    let inputEl=null;
+    if(mode==='answer'){
+      if(r.input?.prompt){
+        const prompt=document.createElement('div');
+        prompt.className='inspect-prompt';
+        prompt.innerHTML = md(r.input.prompt);
+        body.appendChild(prompt);
+      }
+      const area=document.createElement('textarea');
+      area.className='json';
+      area.placeholder = r.input?.placeholder || 'Saisis ta réponse ici…';
+      inputEl = area;
+      body.appendChild(area);
+    } else {
+      const area=document.createElement('textarea');
+      area.className='json';
+      area.value = assetContent || r.input?.prefill || '';
+      if(r.input?.placeholder) area.placeholder = r.input.placeholder;
+      inputEl = area;
+      body.appendChild(area);
+    }
     const btn=document.createElement('button'); btn.className='button'; btn.textContent='Valider'; btn.style.marginTop='8px';
-    btn.onclick=()=>{ let payload = textArea.value; try{ if((r.input?.language||'json')==='json'){ payload = JSON.parse(textArea.value); } }catch{ feedback.innerHTML = '<div class="ko">JSON invalide</div>'; return; }
-      const ok = validateInspect(r, payload); if(ok){ success(r); } };
-    body.appendChild(textArea); body.appendChild(btn);
+    btn.onclick=()=>{
+      let payload = inputEl.value;
+      if((mode==='editor' && (r.input?.language||'json')==='json') || (mode==='answer' && (r.input?.language||'text')==='json')){
+        try{ payload = JSON.parse(inputEl.value); }
+        catch{ feedback.innerHTML = '<div class="ko">JSON invalide</div>'; return; }
+      }
+      const ok = validateInspect(r, payload);
+      if(ok){ success(r); }
+    };
+    body.appendChild(btn);
   }
   else if(r.type==='architecture'){
     renderArchitecture(r, body);
@@ -392,6 +467,143 @@ function boot(){
 // Timer
 setInterval(()=>{ if(state.remain>0){ state.remain--; setTimer(); } }, 1000);
 // ===== Architecture Step (Freeform PacketTracer-like with Konva) =====
+
+function createCommandTerminal(options={}){
+  const prompt = options.prompt || '$';
+  const placeholder = options.placeholder || 'Tape une commande et presse Entrée';
+  const raf = (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function')
+    ? window.requestAnimationFrame.bind(window)
+    : (fn)=> setTimeout(fn, 0);
+  const root = document.createElement('div');
+  root.className = 'arch-terminal is-disabled';
+  root.dataset.disabled = 'true';
+  const log = document.createElement('div');
+  log.className = 'arch-terminal-log';
+  root.appendChild(log);
+  const form = document.createElement('form');
+  form.className = 'arch-terminal-input';
+  const promptSpan = document.createElement('span');
+  promptSpan.className = 'prompt';
+  promptSpan.textContent = prompt;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = placeholder;
+  input.disabled = true;
+  form.appendChild(promptSpan);
+  form.appendChild(input);
+  root.appendChild(form);
+
+  let history = [];
+  let historyIndex = 0;
+  let enabled = false;
+  let changeCb = ()=>{};
+
+  const sync = ()=>{
+    log.innerHTML = '';
+    history.forEach(cmd=>{
+      const line = document.createElement('div');
+      line.className = 'arch-terminal-line';
+      const p = document.createElement('span');
+      p.className = 'prompt';
+      p.textContent = prompt;
+      const span = document.createElement('span');
+      span.className = 'cmd';
+      span.textContent = cmd;
+      line.appendChild(p);
+      line.appendChild(span);
+      log.appendChild(line);
+    });
+    log.scrollTop = log.scrollHeight;
+  };
+
+  const getValue = ()=> history.join('\n');
+  const setValue = (text)=>{
+    const lines = (text || '').split(/\r?\n/).map(line=> line).filter(line=> line.trim().length>0);
+    history = lines;
+    historyIndex = history.length;
+    input.value = '';
+    sync();
+  };
+  const emitChange = ()=> changeCb(getValue());
+
+  const setEnabled = (flag)=>{
+    enabled = !!flag;
+    input.disabled = !enabled;
+    root.dataset.disabled = enabled ? 'false' : 'true';
+    root.classList.toggle('is-disabled', !enabled);
+    if(enabled){
+      raf(()=> input.focus());
+    }
+  };
+
+  const focus = ()=>{
+    if(!enabled) return;
+    input.focus();
+    const end = input.value.length;
+    input.setSelectionRange(end, end);
+  };
+
+  const clear = ()=>{
+    if(history.length===0) return;
+    history = [];
+    historyIndex = 0;
+    sync();
+    emitChange();
+  };
+
+  form.addEventListener('submit', (e)=>{
+    e.preventDefault();
+    if(!enabled) return;
+    const value = input.value;
+    if(!value || !value.trim()){ input.value=''; return; }
+    history.push(value);
+    historyIndex = history.length;
+    input.value = '';
+    sync();
+    emitChange();
+  });
+
+  input.addEventListener('keydown', (e)=>{
+    if(!enabled) return;
+    if(e.key==='ArrowUp'){
+      if(history.length===0) return;
+      e.preventDefault();
+      historyIndex = Math.max(0, historyIndex-1);
+      input.value = history[historyIndex] || '';
+      raf(()=>{ const end=input.value.length; input.setSelectionRange(end,end); });
+    } else if(e.key==='ArrowDown'){
+      if(history.length===0) return;
+      e.preventDefault();
+      historyIndex = Math.min(history.length, historyIndex+1);
+      input.value = history[historyIndex] || '';
+      raf(()=>{ const end=input.value.length; input.setSelectionRange(end,end); });
+    } else if(e.key==='Backspace' && input.value==='' && history.length>0){
+      e.preventDefault();
+      history.pop();
+      historyIndex = history.length;
+      sync();
+      emitChange();
+    } else if((e.ctrlKey||e.metaKey) && (e.key==='l' || e.key==='L')){
+      e.preventDefault();
+      clear();
+    }
+  });
+
+  log.addEventListener('click', (e)=>{
+    if(!enabled) return;
+    const line = e.target.closest('.arch-terminal-line');
+    if(!line) return;
+    const idx = Array.from(log.children).indexOf(line);
+    if(idx<0 || idx>=history.length) return;
+    input.value = history[idx] || '';
+    historyIndex = idx;
+    focus();
+  });
+
+  const onChange = (cb)=>{ changeCb = typeof cb === 'function' ? cb : ()=>{}; };
+
+  return { root, setValue, getValue, setEnabled, focus, onChange, clear };
+}
 function renderArchitecture(step, mount){
   const cfgInput = step.architecture;
   const configs = Array.isArray(cfgInput) ? cfgInput : [cfgInput || {}];
@@ -499,16 +711,22 @@ function renderArchitectureFreeform(step, cfg, mount){
   const configField = document.createElement('label');
   const configSpan = document.createElement('span');
   configSpan.textContent = 'Commande(s) appliquées';
-  const configArea = document.createElement('textarea');
-  configArea.className = 'input arch-config';
-  configArea.placeholder = 'Ex:\ninterface Gi0/1\nip address 192.168.10.10 255.255.255.0';
-  configArea.disabled = true;
+  const configTerminal = createCommandTerminal({
+    prompt: cfg.command_prompt || cfg.prompt || '$',
+    placeholder: cfg.command_placeholder || 'Ex: interface Gi0/1'
+  });
   configField.appendChild(configSpan);
-  configField.appendChild(configArea);
+  configField.appendChild(configTerminal.root);
+  const connectBtn = document.createElement('button');
+  connectBtn.className = 'button secondary';
+  connectBtn.textContent = 'Créer un lien';
+  connectBtn.disabled = true;
+  connectBtn.style.marginTop = '0.75rem';
   inspector.appendChild(inspectorTitle);
   inspector.appendChild(inspectorSubtitle);
   inspector.appendChild(labelField);
   inspector.appendChild(configField);
+  inspector.appendChild(connectBtn);
   canvasWrap.appendChild(inspector);
 
   layout.appendChild(paletteCol);
@@ -520,6 +738,8 @@ function renderArchitectureFreeform(step, cfg, mount){
   const layerLinks = new Konva.Layer();
   const layerNodes = new Konva.Layer();
   stage.add(layerGrid); stage.add(layerLinks); stage.add(layerNodes);
+  const previewLine = new Konva.Line({ points:[0,0,0,0], stroke:'rgba(71,245,192,0.75)', strokeWidth:2, dash:[10,6], listening:false, visible:false });
+  layerLinks.add(previewLine);
 
   const gridState = { visible: cfg.show_grid !== false };
   const snapState = { enabled: cfg.snap_to_grid !== false };
@@ -580,8 +800,11 @@ function renderArchitectureFreeform(step, cfg, mount){
       inspectorSubtitle.textContent = 'Clique sur un élément de la topologie pour saisir ses commandes standard.';
       labelInput.value = '';
       labelInput.disabled = true;
-      configArea.value = '';
-      configArea.disabled = true;
+      configTerminal.setValue('');
+      configTerminal.setEnabled(false);
+      connectBtn.disabled = true;
+      connectBtn.textContent = 'Créer un lien';
+      connectBtn.classList.remove('is-armed');
       return;
     }
     inspector.setAttribute('data-state', 'active');
@@ -589,9 +812,18 @@ function renderArchitectureFreeform(step, cfg, mount){
     inspectorTitle.textContent = currentLabel || 'Composant';
     inspectorSubtitle.textContent = 'Saisis ou colle la configuration attendue pour ce composant.';
     labelInput.disabled = false;
-    configArea.disabled = false;
+    configTerminal.setEnabled(true);
     labelInput.value = currentLabel;
-    configArea.value = node.configText || '';
+    configTerminal.setValue(node.configText || '');
+    configTerminal.focus();
+    connectBtn.disabled = false;
+    if(pendingFrom === node.id){
+      connectBtn.textContent = 'Sélectionne la cible…';
+      connectBtn.classList.add('is-armed');
+    } else {
+      connectBtn.textContent = 'Créer un lien';
+      connectBtn.classList.remove('is-armed');
+    }
   }
 
   labelInput.addEventListener('input', ()=>{
@@ -605,14 +837,21 @@ function renderArchitectureFreeform(step, cfg, mount){
     drawLinks();
   });
 
-  configArea.addEventListener('input', ()=>{
+  configTerminal.onChange(value=>{
     if(!inspectorNodeId) return;
     const node = getNodeById(inspectorNodeId);
     if(!node) return;
-    node.configText = configArea.value;
+    node.configText = value;
   });
 
+  configTerminal.setEnabled(false);
+
   updateInspector(null);
+  connectBtn.addEventListener('click', ()=>{
+    if(!inspectorNodeId) return;
+    if(pendingFrom === inspectorNodeId){ cancelPendingLink(); }
+    else { startLinking(inspectorNodeId); }
+  });
 
   const paletteLookup = (id)=>{
     const key = id!=null ? String(id) : id;
@@ -633,7 +872,43 @@ function renderArchitectureFreeform(step, cfg, mount){
     return { id: key || id, paletteId:key || id, label:key || id, type:key || id, iconRaw:null, width:176, height:68, tags:[] };
   };
 
-  function cancelPendingLink(){ pendingFrom=null; stage.container().classList.remove('is-linking'); }
+  function isLinking(){ return pendingFrom!==null; }
+
+  function drawLinkPreview(){
+    if(!pendingFrom){
+      previewLine.visible(false);
+      return;
+    }
+    const from = centerPoint(pendingFrom, 'out');
+    const pointer = stage.getRelativePointerPosition();
+    if(!pointer){
+      previewLine.visible(false);
+      return;
+    }
+    previewLine.points([from.x, from.y, pointer.x, pointer.y]);
+    previewLine.visible(true);
+  }
+
+  function cancelPendingLink(){
+    pendingFrom=null;
+    stage.container().classList.remove('is-linking');
+    previewLine.visible(false);
+    layerLinks.batchDraw();
+    updateInspector(getNodeById(selectedNode));
+  }
+
+  function startLinking(nodeId){
+    pendingFrom = nodeId;
+    stage.container().classList.add('is-linking');
+    updateInspector(getNodeById(nodeId));
+    drawLinkPreview();
+    layerLinks.batchDraw();
+  }
+
+  function finishLink(targetId){
+    if(pendingFrom && pendingFrom!==targetId){ addLink(pendingFrom, targetId); }
+    cancelPendingLink();
+  }
 
   function setNodeIcon(nodeData, iconValue){
     if(nodeData.iconNode){ nodeData.iconNode.destroy(); nodeData.iconNode=null; }
@@ -685,7 +960,7 @@ function renderArchitectureFreeform(step, cfg, mount){
     layerNodes.add(group);
     layerNodes.draw();
 
-    group.on('click', (evt)=>{ evt.cancelBubble=true; selectNode(id); });
+    group.on('click', (evt)=>{ evt.cancelBubble=true; if(pendingFrom && pendingFrom!==id){ finishLink(id); } else if(pendingFrom===id){ cancelPendingLink(); } else { selectNode(id); } });
     group.on('mouseenter', ()=>{ stage.container().style.cursor='grab'; });
     group.on('dragstart', ()=>{ stage.container().style.cursor='grabbing'; });
     group.on('dragmove', ()=>{ drawLinks(); });
@@ -712,12 +987,12 @@ function renderArchitectureFreeform(step, cfg, mount){
     });
     group.on('contextmenu', (evt)=>{ evt.evt.preventDefault(); removeNode(id); });
 
-    const beginLink = (evt)=>{ evt.cancelBubble=true; pendingFrom=id; stage.container().classList.add('is-linking'); };
-    const finishLink = (evt)=>{ evt.cancelBubble=true; if(pendingFrom && pendingFrom!==id){ addLink(pendingFrom, id); } cancelPendingLink(); };
-    portOut.on('mousedown touchstart', beginLink);
-    portOut.on('click tap', beginLink);
-    portIn.on('mouseup touchend', finishLink);
-    portIn.on('click tap', finishLink);
+    const handleBeginLink = (evt)=>{ evt.cancelBubble=true; startLinking(id); };
+    const handleFinishLink = (evt)=>{ evt.cancelBubble=true; finishLink(id); };
+    portOut.on('mousedown touchstart', handleBeginLink);
+    portOut.on('click tap', handleBeginLink);
+    portIn.on('mouseup touchend', handleFinishLink);
+    portIn.on('click tap', handleFinishLink);
 
     const tagsRaw = overrides.tags!==undefined ? overrides.tags : spec.tags;
     const tags = Array.isArray(tagsRaw)? tagsRaw : (tagsRaw ? [tagsRaw] : []);
@@ -744,11 +1019,13 @@ function renderArchitectureFreeform(step, cfg, mount){
   stage.on('mousedown touchstart', (evt)=>{
     const target = evt.target;
     if(!target || target === stage){
-      cancelPendingLink();
-      selectNode(null);
+      if(isLinking()){ cancelPendingLink(); }
+      else { selectNode(null); }
     }
   });
-  stage.on('mouseleave', ()=>{ cancelPendingLink(); });
+  stage.on('mouseleave', ()=>{ if(isLinking()) cancelPendingLink(); });
+  stage.on('mousemove touchmove', ()=>{ if(isLinking()){ drawLinkPreview(); layerLinks.batchDraw(); } });
+  window.addEventListener('keydown', (evt)=>{ if(evt.key==='Escape' && isLinking()) cancelPendingLink(); });
 
   function selectNode(id){
     selectedNode = id;
@@ -773,7 +1050,11 @@ function renderArchitectureFreeform(step, cfg, mount){
 
   function calcPoints(fromId, toId){ const A=centerPoint(fromId,'out'); const B=centerPoint(toId,'in'); return [A.x,A.y,B.x,B.y]; }
 
-  function drawLinks(){ links.forEach(link=>{ link.arrow.points(calcPoints(link.fromNode, link.toNode)); }); layerLinks.batchDraw(); }
+  function drawLinks(){
+    links.forEach(link=>{ link.arrow.points(calcPoints(link.fromNode, link.toNode)); });
+    drawLinkPreview();
+    layerLinks.batchDraw();
+  }
 
   function addLink(fromId, toId){
     if(!fromId || !toId || fromId===toId) return;
@@ -984,15 +1265,16 @@ function renderArchitectureSlots(step, cfg, mount){
     configLabel.className='slot-config';
     configLabel.dataset.active='false';
     const span=document.createElement('span'); span.textContent='Commande(s)';
-    const configArea=document.createElement('textarea');
-    configArea.className='input slot-config-input';
-    configArea.placeholder='Commandes pour ce composant';
-    configArea.disabled=true;
+    const configTerminal=createCommandTerminal({
+      prompt: cfg.command_prompt || cfg.prompt || '$',
+      placeholder: cfg.command_placeholder || 'Ex: interface Gi0/1'
+    });
+    configTerminal.setEnabled(false);
     configLabel.appendChild(span);
-    configLabel.appendChild(configArea);
+    configLabel.appendChild(configTerminal.root);
     box.appendChild(configLabel);
-    configArea.addEventListener('input', ()=>{ const meta=slotMeta.get(s.id); if(meta) meta.config = configArea.value; });
-    slotMeta.set(s.id, { label: configLabel, area: configArea, config: '' });
+    configTerminal.onChange(value=>{ const meta=slotMeta.get(s.id); if(meta) meta.config = value; });
+    slotMeta.set(s.id, { label: configLabel, terminal: configTerminal, config: '' });
     slots.appendChild(box);
     slotEls.set(s.id, box);
   });
@@ -1023,8 +1305,8 @@ function renderArchitectureSlots(step, cfg, mount){
         const meta=slotMeta.get(fromSlot);
         if(meta){
           meta.config='';
-          meta.area.value='';
-          meta.area.disabled=true;
+          meta.terminal.setValue('');
+          meta.terminal.setEnabled(false);
           meta.label.dataset.active='false';
         }
       }
@@ -1042,8 +1324,8 @@ function renderArchitectureSlots(step, cfg, mount){
       if(fromMeta){
         transferred = fromMeta.config || '';
         fromMeta.config='';
-        fromMeta.area.value='';
-        fromMeta.area.disabled=true;
+        fromMeta.terminal.setValue('');
+        fromMeta.terminal.setEnabled(false);
         fromMeta.label.dataset.active='false';
       }
     }
@@ -1051,8 +1333,8 @@ function renderArchitectureSlots(step, cfg, mount){
     if(toMeta){
       const nextConfig = transferred && fromSlot!==toSlot ? transferred : '';
       toMeta.config = nextConfig;
-      toMeta.area.value = nextConfig;
-      toMeta.area.disabled=false;
+      toMeta.terminal.setValue(nextConfig);
+      toMeta.terminal.setEnabled(true);
       toMeta.label.dataset.active='true';
     }
   });
@@ -1064,8 +1346,8 @@ function renderArchitectureSlots(step, cfg, mount){
       const meta=slotMeta.get(fromSlot);
       if(meta){
         meta.config='';
-        meta.area.value='';
-        meta.area.disabled=true;
+        meta.terminal.setValue('');
+        meta.terminal.setEnabled(false);
         meta.label.dataset.active='false';
       }
     }
