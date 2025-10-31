@@ -10,6 +10,7 @@ import mimetypes
 import random
 import secrets
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Tuple
@@ -141,6 +142,30 @@ def _fetch_selection(provider_id: int, certification_id: int) -> Selection:
     )
 
 
+def _get_existing_presentation_blog_id(certification_id: int) -> Optional[int]:
+    """Return the existing presentation blog identifier for the certification."""
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT b.id
+            FROM blog_courses bc
+            JOIN blogs b ON bc.blog = b.id
+            WHERE bc.course = %s AND b.topic_type = %s
+            ORDER BY b.updated_at DESC
+            LIMIT 1
+            """,
+            (certification_id, TOPIC_TYPE_DB_VALUES[COURSE_ART_TOPIC]),
+        )
+        row = cursor.fetchone()
+        return int(row[0]) if row else None
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def _map_topic_type_to_db_value(topic_type: str) -> int:
     """Translate the topic type identifier to its database value."""
 
@@ -191,7 +216,8 @@ def _persist_blog_article(
             INSERT INTO blogs (title, topic_type, res, article, url, created_at, updated_at)
             VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
             """,
-            (title, topic_type_value, summary, article_text, exam_url),
+            # Keep `res` and `url` empty in storage per the product requirement.
+            (title, topic_type_value, "", article_text, ""),
         )
         blog_id = cursor.lastrowid
         cursor.execute(
@@ -204,6 +230,26 @@ def _persist_blog_article(
         conn.commit()
         return int(blog_id)
     except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def _save_course_art_json(certification_id: int, course_art_payload: dict) -> None:
+    """Persist the structured course description for the certification."""
+
+    course_art_json = json.dumps(course_art_payload, ensure_ascii=False)
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE courses SET art = %s WHERE id = %s",
+            (course_art_json, certification_id),
+        )
+        conn.commit()
+    except mysql.connector.Error:
         conn.rollback()
         raise
     finally:
@@ -665,7 +711,7 @@ def _extract_selection_payload(data: dict) -> Tuple[int, int, str, str]:
     certification_id = data.get("certification_id")
     exam_url = (data.get("exam_url") or "").strip()
     if not exam_url:
-        exam_url = "https://examboot.net"
+        exam_url = "http://examboot.net"
     topic_type = (data.get("topic_type") or "").strip()
 
     if not provider_id or not certification_id or not topic_type:
@@ -698,6 +744,26 @@ def generate_article():
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if topic_type == COURSE_ART_TOPIC:
+        existing_blog_id = _get_existing_presentation_blog_id(certification_id)
+        if existing_blog_id:
+            return (
+                jsonify(
+                    {
+                        "error": (
+                            f"Un article de présentation existe déjà pour {selection.certification_name}."
+                            " Aucun nouvel article n'a été généré."
+                        ),
+                        "blog_id": existing_blog_id,
+                    }
+                ),
+                409,
+            )
+
+    try:
         article = generate_certification_article(
             selection.certification_name,
             selection.provider_name,
@@ -733,6 +799,26 @@ def publish_article():
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if topic_type == COURSE_ART_TOPIC:
+        existing_blog_id = _get_existing_presentation_blog_id(certification_id)
+        if existing_blog_id:
+            return (
+                jsonify(
+                    {
+                        "error": (
+                            f"Un article de présentation existe déjà pour {selection.certification_name}."
+                            " Aucun nouvel article n'a été enregistré."
+                        ),
+                        "blog_id": existing_blog_id,
+                    }
+                ),
+                409,
+            )
+
+    try:
         topic_type_value = _map_topic_type_to_db_value(topic_type)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -790,73 +876,213 @@ def run_playbook():
 
     try:
         selection = _fetch_selection(provider_id, certification_id)
-        attach_image = bool(data.get("add_image"))
-        article = generate_certification_article(
-            selection.certification_name,
-            selection.provider_name,
-            exam_url,
-            topic_type,
-        )
-        tweet_text = generate_certification_tweet(
-            selection.certification_name,
-            selection.provider_name,
-            exam_url,
-            topic_type,
-        )
-        tweet_result = _run_tweet_workflow(
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if topic_type == COURSE_ART_TOPIC:
+        existing_blog_id = _get_existing_presentation_blog_id(certification_id)
+        if existing_blog_id:
+            return (
+                jsonify(
+                    {
+                        "error": (
+                            f"Un article de présentation existe déjà pour {selection.certification_name}."
+                            " Aucun nouvel article n'a été généré."
+                        ),
+                        "blog_id": existing_blog_id,
+                    }
+                ),
+                409,
+            )
+
+    attach_image = bool(data.get("add_image"))
+
+    try:
+        article_payload = _generate_and_persist_article_task(
             selection,
             exam_url,
             topic_type,
-            attach_image=attach_image,
-            tweet_text=tweet_text,
-        )
-        linkedin_post = generate_certification_linkedin_post(
-            selection.certification_name,
-            selection.provider_name,
-            exam_url,
-            topic_type,
-        )
-        linkedin_result = _run_linkedin_workflow(
-            selection,
-            exam_url,
-            topic_type,
-            attach_image=attach_image,
-            linkedin_post=linkedin_post,
+            certification_id,
         )
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
-    return jsonify(
-        {
-            "article": article,
-            "provider_name": selection.provider_name,
-            "certification_name": selection.certification_name,
-            "tweet": tweet_result.text,
-            "tweet_response": tweet_result.response,
-            "tweet_published": tweet_result.published,
-            "tweet_status_code": tweet_result.status_code,
-            **(
-                {"tweet_image": tweet_result.media_filename}
-                if tweet_result.media_filename
-                else {}
-            ),
-            **({"tweet_error": tweet_result.error} if tweet_result.error else {}),
-            "linkedin_post": linkedin_result.text,
-            "linkedin_response": linkedin_result.response,
-            "linkedin_published": linkedin_result.published,
-            "linkedin_status_code": linkedin_result.status_code,
-            **(
-                {"linkedin_image": linkedin_result.media_filename}
-                if linkedin_result.media_filename
-                else {}
-            ),
-            **(
-                {"linkedin_error": linkedin_result.error}
-                if linkedin_result.error
-                else {}
-            ),
-        }
+    tweet_future = linkedin_future = course_art_future = None
+    try:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            tweet_future = executor.submit(
+                _generate_and_publish_tweet_task,
+                selection,
+                exam_url,
+                topic_type,
+                attach_image,
+            )
+            linkedin_future = executor.submit(
+                _generate_and_publish_linkedin_task,
+                selection,
+                exam_url,
+                topic_type,
+                attach_image,
+            )
+            course_art_future = (
+                executor.submit(
+                    _generate_and_store_course_art_task,
+                    selection,
+                    certification_id,
+                )
+                if topic_type == COURSE_ART_TOPIC
+                else None
+            )
+
+            tweet_text, tweet_result = tweet_future.result()
+            linkedin_text, linkedin_result = linkedin_future.result()
+            course_art_payload = (
+                course_art_future.result() if course_art_future else None
+            )
+    except Exception as exc:  # pragma: no cover - propagated to client for visibility
+        for future in (tweet_future, linkedin_future, course_art_future):
+            if future and not future.done():
+                future.cancel()
+        return jsonify({"error": str(exc)}), 500
+
+    response_payload = {
+        "article": article_payload["article"],
+        "blog_id": article_payload["blog_id"],
+        "title": article_payload["title"],
+        "summary": article_payload["summary"],
+        "provider_name": selection.provider_name,
+        "certification_name": selection.certification_name,
+        "tweet": tweet_text,
+        "tweet_response": tweet_result.response,
+        "tweet_published": tweet_result.published,
+        "tweet_status_code": tweet_result.status_code,
+        "linkedin_post": linkedin_text,
+        "linkedin_response": linkedin_result.response,
+        "linkedin_published": linkedin_result.published,
+        "linkedin_status_code": linkedin_result.status_code,
+    }
+    if tweet_result.media_filename:
+        response_payload["tweet_image"] = tweet_result.media_filename
+    if tweet_result.error:
+        response_payload["tweet_error"] = tweet_result.error
+    if linkedin_result.media_filename:
+        response_payload["linkedin_image"] = linkedin_result.media_filename
+    if linkedin_result.error:
+        response_payload["linkedin_error"] = linkedin_result.error
+
+    if course_art_payload:
+        if course_art_payload.get("course_art") is not None:
+            response_payload["course_art"] = course_art_payload["course_art"]
+            response_payload["course_art_saved"] = True
+        if course_art_payload.get("error"):
+            response_payload["course_art_error"] = course_art_payload["error"]
+
+    return jsonify(response_payload)
+
+
+def _generate_and_persist_article_task(
+    selection: Selection,
+    exam_url: str,
+    topic_type: str,
+    certification_id: int,
+) -> dict:
+    """Generate the article text and persist it to the database."""
+
+    article_text = generate_certification_article(
+        selection.certification_name,
+        selection.provider_name,
+        exam_url,
+        topic_type,
     )
+    topic_type_value = _map_topic_type_to_db_value(topic_type)
+    topic_label = TOPIC_TYPE_TEXT_LABELS.get(
+        topic_type, topic_type.replace("_", " ").title()
+    )
+    title = f"{selection.certification_name} – {topic_label}"
+    summary = _build_article_summary(article_text)
+    if not summary:
+        summary = selection.certification_name
+
+    blog_id = _persist_blog_article(
+        title,
+        topic_type_value,
+        summary,
+        article_text,
+        exam_url,
+        certification_id,
+    )
+
+    return {
+        "article": article_text,
+        "blog_id": blog_id,
+        "title": title,
+        "summary": summary,
+    }
+
+
+def _generate_and_publish_tweet_task(
+    selection: Selection,
+    exam_url: str,
+    topic_type: str,
+    attach_image: bool,
+) -> Tuple[str, SocialPostResult]:
+    """Generate the tweet content and trigger its publication."""
+
+    tweet_text = generate_certification_tweet(
+        selection.certification_name,
+        selection.provider_name,
+        exam_url,
+        topic_type,
+    )
+    tweet_result = _run_tweet_workflow(
+        selection,
+        exam_url,
+        topic_type,
+        attach_image=attach_image,
+        tweet_text=tweet_text,
+    )
+    return tweet_text, tweet_result
+
+
+def _generate_and_publish_linkedin_task(
+    selection: Selection,
+    exam_url: str,
+    topic_type: str,
+    attach_image: bool,
+) -> Tuple[str, SocialPostResult]:
+    """Generate the LinkedIn post content and trigger its publication."""
+
+    linkedin_post = generate_certification_linkedin_post(
+        selection.certification_name,
+        selection.provider_name,
+        exam_url,
+        topic_type,
+    )
+    linkedin_result = _run_linkedin_workflow(
+        selection,
+        exam_url,
+        topic_type,
+        attach_image=attach_image,
+        linkedin_post=linkedin_post,
+    )
+    return linkedin_post, linkedin_result
+
+
+def _generate_and_store_course_art_task(
+    selection: Selection,
+    certification_id: int,
+) -> dict:
+    """Generate the course art JSON and persist it when possible."""
+
+    try:
+        course_art = generate_certification_course_art(
+            selection.certification_name,
+            selection.provider_name,
+        )
+        _save_course_art_json(certification_id, course_art)
+        return {"course_art": course_art}
+    except Exception as exc:  # pragma: no cover - surfaced to the caller
+        return {"course_art": None, "error": str(exc)}
 
 
 def _run_tweet_workflow(
@@ -1167,22 +1393,12 @@ def publish_course_art():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    course_art_json = json.dumps(course_art_payload, ensure_ascii=False)
-
-    conn = mysql.connector.connect(**DB_CONFIG)
-    cursor = conn.cursor()
     try:
-        cursor.execute(
-            "UPDATE courses SET art = %s WHERE id = %s",
-            (course_art_json, certification_id),
-        )
-        conn.commit()
+        _save_course_art_json(certification_id, course_art_payload)
     except mysql.connector.Error as exc:  # pragma: no cover - database error path
-        conn.rollback()
         return jsonify({"error": f"Erreur lors de l'enregistrement de la fiche: {exc}"}), 500
-    finally:
-        cursor.close()
-        conn.close()
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        return jsonify({"error": str(exc)}), 500
 
     return jsonify(
         {
