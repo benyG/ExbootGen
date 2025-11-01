@@ -99,6 +99,15 @@ function ensurePaletteHasDecoy(palette){
   return items;
 }
 
+function shuffleArray(items){
+  const arr = Array.isArray(items) ? [...items] : [];
+  for(let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 function normalizeArchitectureForCompare(payload){
   if(!payload || typeof payload!=='object') return payload;
   const clone=deepClone(payload);
@@ -651,20 +660,31 @@ function renderArchitectureFreeform(step, cfg, mount){
   const layout = document.createElement('div');
   layout.className = 'arch-layout';
 
-  const paletteItems = ensurePaletteHasDecoy(cfg.palette || []);
+  const paletteItems = shuffleArray(ensurePaletteHasDecoy(cfg.palette || []));
   const paletteIndex = new Map(paletteItems.map(item => [item.id, item]));
 
   const paletteCol = document.createElement('div');
   paletteCol.className = 'palette';
   const paletteHeader = document.createElement('div');
   paletteHeader.className = 'palette-header';
-  paletteHeader.innerHTML = `<h4>${cfg.palette_title || 'Palette'}</h4>`;
+  const paletteTitle = document.createElement('h4');
+  paletteTitle.textContent = cfg.palette_title || 'Palette';
+  paletteHeader.appendChild(paletteTitle);
   if(cfg.palette_caption){
     const caption = document.createElement('p');
     caption.textContent = cfg.palette_caption;
     paletteHeader.appendChild(caption);
   }
   paletteCol.appendChild(paletteHeader);
+  const paletteActions = document.createElement('div');
+  paletteActions.className = 'palette-actions';
+  const connectBtn = document.createElement('button');
+  connectBtn.type = 'button';
+  connectBtn.className = 'button secondary';
+  connectBtn.textContent = 'Créer un lien';
+  connectBtn.disabled = true;
+  paletteActions.appendChild(connectBtn);
+  paletteCol.appendChild(paletteActions);
   const paletteList = document.createElement('div');
   paletteList.className = 'palette-list';
   paletteCol.appendChild(paletteList);
@@ -690,16 +710,18 @@ function renderArchitectureFreeform(step, cfg, mount){
   }
   const helper = document.createElement('div');
   helper.className = 'arch-help';
-  helper.innerHTML = cfg.help || 'Astuce : cliquez pour renommer, clic droit pour supprimer, reliez les ports latéraux.';
+  helper.innerHTML = cfg.help || 'Astuce : double-clique pour configurer, clic droit pour supprimer, relie les ports latéraux.';
   canvasWrap.appendChild(helper);
 
   const inspector = document.createElement('div');
   inspector.className = 'arch-inspector';
-  inspector.setAttribute('data-state', 'empty');
+  inspector.setAttribute('data-state', 'hidden');
+  inspector.hidden = true;
+  inspector.setAttribute('aria-hidden', 'true');
   const inspectorTitle = document.createElement('h4');
   inspectorTitle.textContent = 'Sélectionne un composant';
   const inspectorSubtitle = document.createElement('p');
-  inspectorSubtitle.textContent = 'Clique sur un élément de la topologie pour saisir ses commandes standard.';
+  inspectorSubtitle.textContent = 'Double-clique sur un élément de la topologie pour saisir ses commandes standard.';
   const labelField = document.createElement('label');
   const labelSpan = document.createElement('span');
   labelSpan.textContent = 'Nom affiché';
@@ -717,16 +739,10 @@ function renderArchitectureFreeform(step, cfg, mount){
   });
   configField.appendChild(configSpan);
   configField.appendChild(configTerminal.root);
-  const connectBtn = document.createElement('button');
-  connectBtn.className = 'button secondary';
-  connectBtn.textContent = 'Créer un lien';
-  connectBtn.disabled = true;
-  connectBtn.style.marginTop = '0.75rem';
   inspector.appendChild(inspectorTitle);
   inspector.appendChild(inspectorSubtitle);
   inspector.appendChild(labelField);
   inspector.appendChild(configField);
-  inspector.appendChild(connectBtn);
   canvasWrap.appendChild(inspector);
 
   layout.appendChild(paletteCol);
@@ -791,39 +807,71 @@ function renderArchitectureFreeform(step, cfg, mount){
   let pendingFrom = null;
   let selectedNode = null;
   let inspectorNodeId = null;
+  let inspectorVisible = false;
 
-  function updateInspector(node){
-    inspectorNodeId = node ? node.id : null;
-    if(!node){
-      inspector.setAttribute('data-state', 'empty');
-      inspectorTitle.textContent = 'Sélectionne un composant';
-      inspectorSubtitle.textContent = 'Clique sur un élément de la topologie pour saisir ses commandes standard.';
-      labelInput.value = '';
-      labelInput.disabled = true;
-      configTerminal.setValue('');
-      configTerminal.setEnabled(false);
-      connectBtn.disabled = true;
+  function updateLinkButton(){
+    const hasSelection = !!selectedNode;
+    connectBtn.disabled = !hasSelection;
+    if(!hasSelection){
       connectBtn.textContent = 'Créer un lien';
       connectBtn.classList.remove('is-armed');
       return;
     }
-    inspector.setAttribute('data-state', 'active');
-    const currentLabel = node.labelNode.text();
-    inspectorTitle.textContent = currentLabel || 'Composant';
-    inspectorSubtitle.textContent = 'Saisis ou colle la configuration attendue pour ce composant.';
-    labelInput.disabled = false;
-    configTerminal.setEnabled(true);
-    labelInput.value = currentLabel;
-    configTerminal.setValue(node.configText || '');
-    configTerminal.focus();
-    connectBtn.disabled = false;
-    if(pendingFrom === node.id){
+    if(pendingFrom && pendingFrom === selectedNode){
       connectBtn.textContent = 'Sélectionne la cible…';
       connectBtn.classList.add('is-armed');
     } else {
       connectBtn.textContent = 'Créer un lien';
       connectBtn.classList.remove('is-armed');
     }
+  }
+
+  function updateInspector(){
+    if(!inspectorVisible){
+      inspectorNodeId = null;
+      inspector.classList.remove('is-visible');
+      inspector.setAttribute('data-state', 'hidden');
+      inspector.hidden = true;
+      inspector.setAttribute('aria-hidden', 'true');
+      inspectorTitle.textContent = 'Sélectionne un composant';
+      inspectorSubtitle.textContent = 'Double-clique sur un élément de la topologie pour saisir ses commandes standard.';
+      labelInput.disabled = true;
+      configTerminal.setEnabled(false);
+      return;
+    }
+    const node = getNodeById(inspectorNodeId);
+    if(!node){
+      closeInspector();
+      return;
+    }
+    inspector.hidden = false;
+    inspector.setAttribute('aria-hidden', 'false');
+    inspector.classList.add('is-visible');
+    inspector.setAttribute('data-state', 'active');
+    const currentLabel = node.labelNode.text();
+    inspectorTitle.textContent = currentLabel || 'Composant';
+    inspectorSubtitle.textContent = 'Saisis ou colle la configuration attendue pour ce composant.';
+    if(document.activeElement !== labelInput){
+      labelInput.value = currentLabel;
+    }
+    labelInput.disabled = false;
+    configTerminal.setEnabled(true);
+  }
+
+  function closeInspector(){
+    inspectorVisible = false;
+    inspectorNodeId = null;
+    updateInspector();
+  }
+
+  function openInspectorFor(nodeId){
+    const node = getNodeById(nodeId);
+    if(!node) return;
+    inspectorVisible = true;
+    inspectorNodeId = nodeId;
+    configTerminal.setValue(node.configText || '');
+    updateInspector();
+    configTerminal.focus();
   }
 
   labelInput.addEventListener('input', ()=>{
@@ -844,13 +892,13 @@ function renderArchitectureFreeform(step, cfg, mount){
     node.configText = value;
   });
 
-  configTerminal.setEnabled(false);
+  updateInspector();
+  updateLinkButton();
 
-  updateInspector(null);
   connectBtn.addEventListener('click', ()=>{
-    if(!inspectorNodeId) return;
-    if(pendingFrom === inspectorNodeId){ cancelPendingLink(); }
-    else { startLinking(inspectorNodeId); }
+    if(!selectedNode) return;
+    if(pendingFrom === selectedNode){ cancelPendingLink(); }
+    else { startLinking(selectedNode); }
   });
 
   const paletteLookup = (id)=>{
@@ -894,15 +942,16 @@ function renderArchitectureFreeform(step, cfg, mount){
     stage.container().classList.remove('is-linking');
     previewLine.visible(false);
     layerLinks.batchDraw();
-    updateInspector(getNodeById(selectedNode));
+    updateLinkButton();
+    if(inspectorVisible){ updateInspector(); }
   }
 
   function startLinking(nodeId){
     pendingFrom = nodeId;
     stage.container().classList.add('is-linking');
-    updateInspector(getNodeById(nodeId));
     drawLinkPreview();
     layerLinks.batchDraw();
+    updateLinkButton();
   }
 
   function finishLink(targetId){
@@ -974,20 +1023,17 @@ function renderArchitectureFreeform(step, cfg, mount){
       drawLinks();
     });
     group.on('dblclick', (evt)=>{
-      evt.cancelBubble=true;
-      const previous = label.text();
-      const next = prompt('Nom du composant', previous);
-      if(next!==null){
-        const trimmed = next.trim();
-        label.text(trimmed || previous);
-        layerNodes.draw();
-        drawLinks();
-        if(selectedNode===id){ updateInspector(getNodeById(id)); }
-      }
+      evt.cancelBubble = true;
+      selectNode(id);
+      openInspectorFor(id);
     });
     group.on('contextmenu', (evt)=>{ evt.evt.preventDefault(); removeNode(id); });
 
-    const handleBeginLink = (evt)=>{ evt.cancelBubble=true; startLinking(id); };
+    const handleBeginLink = (evt)=>{
+      evt.cancelBubble = true;
+      if(selectedNode!==id){ selectNode(id); }
+      startLinking(id);
+    };
     const handleFinishLink = (evt)=>{ evt.cancelBubble=true; finishLink(id); };
     portOut.on('mousedown touchstart', handleBeginLink);
     portOut.on('click tap', handleBeginLink);
@@ -1035,7 +1081,16 @@ function renderArchitectureFreeform(step, cfg, mount){
       node.rect.shadowOpacity(active ? 0.55 : 0);
     });
     layerNodes.batchDraw();
-    updateInspector(getNodeById(id));
+    if(!id){
+      closeInspector();
+    } else if(inspectorVisible){
+      if(inspectorNodeId === id){
+        updateInspector();
+      } else {
+        closeInspector();
+      }
+    }
+    updateLinkButton();
   }
 
   function getNodeById(id){ return nodes.find(n=> n.id===id); }
@@ -1051,7 +1106,7 @@ function renderArchitectureFreeform(step, cfg, mount){
   function calcPoints(fromId, toId){ const A=centerPoint(fromId,'out'); const B=centerPoint(toId,'in'); return [A.x,A.y,B.x,B.y]; }
 
   function drawLinks(){
-    links.forEach(link=>{ link.arrow.points(calcPoints(link.fromNode, link.toNode)); });
+    links.forEach(link=>{ link.shape.points(calcPoints(link.fromNode, link.toNode)); });
     drawLinkPreview();
     layerLinks.batchDraw();
   }
@@ -1059,19 +1114,19 @@ function renderArchitectureFreeform(step, cfg, mount){
   function addLink(fromId, toId){
     if(!fromId || !toId || fromId===toId) return;
     if(links.some(l=> l.fromNode===fromId && l.toNode===toId)) return;
-    const arrow = new Konva.Arrow({ points:calcPoints(fromId,toId), stroke:'#47f5c0', fill:'#47f5c0', strokeWidth:2.2, pointerLength:12, pointerWidth:10, lineCap:'round', lineJoin:'round' });
+    const line = new Konva.Line({ points:calcPoints(fromId,toId), stroke:'#47f5c0', strokeWidth:2.2, lineCap:'round', lineJoin:'round' });
     const linkId = 'l'+(linkUid++);
-    arrow.on('mouseenter', ()=>{ stage.container().style.cursor='pointer'; });
-    arrow.on('mouseleave', ()=>{ stage.container().style.cursor='default'; });
-    arrow.on('contextmenu', (evt)=>{ evt.evt.preventDefault(); removeLink(linkId); });
-    links.push({ id:linkId, fromNode:fromId, toNode:toId, arrow });
-    layerLinks.add(arrow);
+    line.on('mouseenter', ()=>{ stage.container().style.cursor='pointer'; });
+    line.on('mouseleave', ()=>{ stage.container().style.cursor='default'; });
+    line.on('contextmenu', (evt)=>{ evt.evt.preventDefault(); removeLink(linkId); });
+    links.push({ id:linkId, fromNode:fromId, toNode:toId, shape: line });
+    layerLinks.add(line);
     drawLinks();
   }
 
   function removeLink(id){
     const idx = links.findIndex(l=> l.id===id);
-    if(idx>=0){ links[idx].arrow.destroy(); links.splice(idx,1); layerLinks.draw(); }
+    if(idx>=0){ links[idx].shape.destroy(); links.splice(idx,1); layerLinks.draw(); }
   }
 
   function removeNode(id){
@@ -1084,11 +1139,11 @@ function renderArchitectureFreeform(step, cfg, mount){
     const inspectorWasNode = inspectorNodeId===id;
     node.group.destroy();
     nodes.splice(idx,1);
-    for(let i=links.length-1;i>=0;i--){ if(links[i].fromNode===id || links[i].toNode===id){ links[i].arrow.destroy(); links.splice(i,1); } }
+    for(let i=links.length-1;i>=0;i--){ if(links[i].fromNode===id || links[i].toNode===id){ links[i].shape.destroy(); links.splice(i,1); } }
     layerNodes.draw();
     layerLinks.draw();
     if(wasSelected){ selectNode(null); }
-    else if(inspectorWasNode){ updateInspector(null); }
+    else if(inspectorWasNode){ closeInspector(); }
   }
 
   function resolveNodeRef(ref){
@@ -1176,8 +1231,7 @@ function renderArchitectureFreeform(step, cfg, mount){
       if(fromId && toId) addLink(fromId, toId);
     });
     drawLinks();
-    if(nodes.length){ selectNode(null); }
-    else { updateInspector(null); }
+    selectNode(null);
   }
 
   function clearScene(){
@@ -1190,7 +1244,8 @@ function renderArchitectureFreeform(step, cfg, mount){
     cancelPendingLink();
     selectedNode = null;
     inspectorNodeId = null;
-    updateInspector(null);
+    closeInspector();
+    updateLinkButton();
   }
 
   const actions = document.createElement('div');
@@ -1235,7 +1290,7 @@ function renderArchitectureFreeform(step, cfg, mount){
   mount.appendChild(actions);
 
   setupInitial();
-  stage.on('mouseup touchend', ()=>{ pendingFrom=null; stage.container().classList.remove('is-linking'); });
+  stage.on('mouseup touchend', ()=>{ if(pendingFrom){ cancelPendingLink(); } });
 }
 
 function renderArchitectureSlots(step, cfg, mount){

@@ -472,6 +472,8 @@
     .palette-header h4 { margin: 0; font-size: 1rem; color: var(--text-primary); }
     .palette-header p { margin: 0.35rem 0 0; font-size: 0.85rem; color: var(--text-muted); line-height: 1.4; }
     .palette-list { display:flex; flex-direction:column; gap:0.55rem; }
+    .palette-actions { display:flex; margin-top:0.75rem; }
+    .palette-actions .button { flex:1; width:100%; }
 
     .chip {
       display: flex;
@@ -504,6 +506,8 @@
       flex-direction: column;
       gap: 0.75rem;
     }
+    .arch-inspector[hidden],
+    .arch-inspector[data-state='hidden'] { display: none !important; }
     .arch-inspector[data-state='empty'] { opacity: 0.6; }
     .arch-inspector h4 { margin: 0; font-size: 0.95rem; color: var(--text-primary); }
     .arch-inspector p { margin: 0; font-size: 0.82rem; color: rgba(198, 212, 255, 0.72); line-height: 1.45; }
@@ -595,7 +599,8 @@
     .arch-inspector .button {
       width: 100%;
     }
-    .arch-inspector .button.is-armed {
+    .arch-inspector .button.is-armed,
+    .palette-actions .button.is-armed {
       background: linear-gradient(135deg, rgba(71, 245, 192, 0.28), rgba(71, 245, 192, 0.6));
       color: #0b1733;
       box-shadow: 0 0 0 1px rgba(71, 245, 192, 0.65), 0 12px 28px rgba(15, 38, 52, 0.55);
