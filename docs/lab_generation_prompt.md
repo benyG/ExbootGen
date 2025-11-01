@@ -1,85 +1,282 @@
-# Prompt génération automatique de labs Hands-on
+# Prompt de génération automatique de labs Hands-on
 
-Utilisez le prompt ci-dessous avec l'API OpenAI (chat/completions) pour demander la génération d'un lab au format JSON compatible avec le Hands-on Lab Player. Remplacez les variables entre doubles moustaches par vos propres valeurs ou fournissez-les dans un bloc `input` du message système.
+Utilisez le prompt ci-dessous avec l'API OpenAI (chat/completions) pour produire des labs compatibles avec le Hands-on Lab Player. Remplacez les sections encadrées par `{{...}}` par vos valeurs ou placez-les dans un bloc `input` du message système.
 
 ---
 **Prompt à transmettre à l'API :**
 
-Vous êtes un assistant spécialisé dans la création de labs techniques interactifs conformes au schéma JSON du Hands-on Lab Player. Générez un fichier JSON complet suivant exactement les spécifications ci-dessous.
+Vous êtes un assistant spécialisé dans la génération de scénarios pédagogiques interactifs conformes au schéma JSON du Hands-on Lab Player. Créez un JSON **strictement valide** respectant toutes les règles décrites ci-dessous, sans texte hors JSON.
 
-## Paramètres du lab
-- Provider / technologie cible : `{{provider}}`
-- Certification / cursus visé : `{{certification}}`
-- Niveau de difficulté : `{{difficulty}}`
+## Paramètres fournis
+- Provider / technologie principale : `{{provider}}`
+- Certification ou parcours : `{{certification}}`
+- Niveau ciblé : `{{difficulty}}`
 - Nombre minimal d'étapes : `{{min_steps}}`
-- Contrainte de durée (minutes) : `{{duration_minutes}}`
-- Types d'étapes requis : `{{step_types}}`
+- Durée cible (minutes) : `{{duration_minutes}}`
+- Liste des types d'étapes attendues (tableau JSON) : `{{step_types}}`
 
-## Attendus généraux
-1. Raconter un scénario pratique cohérent en **2 à 3 paragraphes** Markdown (`scenario_md`) expliquant le contexte professionnel, les contraintes et l'objectif pédagogique.
-2. Respecter strictement la structure JSON suivante :
-   ```json
-   {
-     "schema_version": "0.2.0",
-     "lab": {
-       "id": "kebab-case-unique",
-       "title": "...",
-       "subtitle": "...",
-       "scenario_md": "...",
-       "variables": { /* facultatif */ },
-       "scoring": { "max_points": <somme points> },
-       "timer": { "mode": "countdown", "seconds": {{duration_minutes}} * 60 },
-       "assets": [ /* zéro ou plusieurs */ ],
-       "steps": [ /* au moins {{min_steps}} étapes */ ]
-     }
-   }
-   ```
-3. Chaque étape fournit `id`, `type`, `title`, `instructions_md`, `points`, `hints` (minimum un hint) et `transitions` (`on_success`, `on_failure`). La somme des points doit être égale à `scoring.max_points`.
-4. Toutes les étapes doivent dériver du même objectif global et exploiter des compétences réelles associées à `{{certification}}`.
-5. Les noms, commandes et paramètres doivent être plausibles pour le contexte `{{provider}}`.
-6. Inclure au moins une étape de chaque type suivant si `{{step_types}}` les mentionne : `terminal`, `architecture`, `console_form`, `inspect_file`, `quiz`. Ajuster pour respecter `{{min_steps}}`.
-7. Ajouter au moins un asset si une étape `inspect_file` le nécessite (fichier encodé base64 avec `filename`, `mime`, `content_b64`).
+## Structure JSON attendue (décomposition clé par clé)
+1. **Objet racine**
+   - `schema_version` *(string)* : toujours `"0.2.0"`.
+   - `lab` *(object)* : contient tout le reste du scénario.
+2. **Objet `lab`**
+   - `id` *(string, kebab-case unique)* : identifiant stable du lab.
+   - `title` *(string)* : titre affiché.
+   - `subtitle` *(string)* : court complément.
+   - `scenario_md` *(string Markdown)* : exactement **2 ou 3 paragraphes** décrivant le contexte professionnel, la mission et les objectifs liés à `{{provider}}`/`{{certification}}`.
+   - `variables` *(object optionnel)* : définitions de variables réutilisables. Chaque entrée suit `{ "type": "choice"|"string"|"number", ... }` et peut inclure `choices`, `min`, `max`, `precision`, etc. Référencez-les via `{{variable}}` dans le JSON.
+   - `scoring` *(object)* : `{ "max_points": <somme des points des étapes> }`.
+   - `timer` *(object)* : `{ "mode": "countdown", "seconds": {{duration_minutes}} * 60 }`.
+   - `assets` *(array)* : liste de ressources téléchargeables ou inline.
+     - Chaque asset est un objet avec `id`, `kind`, `filename`, `mime`, et **soit** `inline: true` + `content_b64` (données encodées Base64), **soit** `url`.
+   - `steps` *(array)* : séquence d'étapes détaillées (minimum `{{min_steps}}` éléments) respectant les spécifications type par type.
 
-## Spécifications par type d'étape
+### Gabarit JSON de référence
+```json
+{
+  "schema_version": "0.2.0",
+  "lab": {
+    "id": "provider-scenario-name",
+    "title": "...",
+    "subtitle": "...",
+    "scenario_md": "Paragraphe 1...\n\nParagraphe 2...",
+    "variables": {
+      "example_var": {
+        "type": "choice",
+        "choices": ["option A", "option B"]
+      }
+    },
+    "scoring": { "max_points": 100 },
+    "timer": { "mode": "countdown", "seconds": 3600 },
+    "assets": [
+      {
+        "id": "evidence-policy",
+        "kind": "file",
+        "filename": "policy.json",
+        "mime": "application/json",
+        "inline": true,
+        "content_b64": "BASE64..."
+      }
+    ],
+    "steps": []
+  }
+}
+```
 
-### terminal
-- `terminal.prompt` doit refléter l'environnement (ex. littéral JSON `PS C\\>` donnant l'invite `PS C:\>`).
-- Doubler systématiquement les barres obliques inverses dans les chemins ou invites Windows (`C\\Windows`, `PS C\\>`). Ne laissez jamais un seul `\` devant un caractère non reconnu comme `>` sous peine de produire un JSON invalide.
-- Ajouter au minimum un validateur `command` contenant `match.program`, `match.subcommand` (liste), `match.flags` (`required`, `aliases` facultatif) et `match.args` pour les valeurs exactes attendues.
-- Fournir une réponse `stdout_template` cohérente et un `world_patch` qui met à jour l'état (ex. `{"op":"set","path":"systems.firewall.enabled","value":true}`).
+## Structure commune de chaque étape (`lab.steps[i]`)
+```json
+{
+  "id": "unique-step-id",
+  "type": "terminal | console_form | inspect_file | architecture | quiz | anticipation",
+  "title": "...",
+  "instructions_md": "...",
+  "points": 10,
+  "hints": ["Indice 1", "Indice 2"],
+  "transitions": {
+    "on_success": "id-etape-suivante-ou-#end",
+    "on_failure": { "action": "#stay" }
+  },
+  "validators": [ /* selon type */ ],
+  "world_patch": [ /* optionnel, opérations JSON patch appliquées immédiatement */ ],
+  "<bloc spécifique au type>": { ... }
+}
+```
+- `id` : unique dans le lab.
+- `instructions_md` : Markdown riche, contextualisé, rappelant l’objectif et les artefacts disponibles.
+- `points` : ≥ 1. La somme des points doit être égale à `lab.scoring.max_points`.
+- `hints` : au moins un indice, du plus subtil au plus explicite. Possibilité d’ajouter `cost` par indice (`{"text":"...","cost":1}`).
+- `transitions.on_success` : référence une autre étape ou `"#end"`. `on_failure` peut garder l’utilisateur (`#stay`) ou pointer vers une étape de remédiation.
+- `validators` : définissent des règles de validation strictes. Chaque validateurs peut inclure `message` pour un retour clair.
+- `world_patch` : opérations appliquées avant validation. Utilisez des objets `{ "op": "set"|"unset"|"push"|"remove", "path": "...", "value": ... }`. Les chemins utilisent la notation à points (`systems.firewall.enabled`).
 
-### console_form
-- `form.schema.fields` doit modéliser une interface réaliste (toggles, select, input, textarea...). Aucun champ ne doit être pré-rempli.
-- Les validateurs agissent sur `payload` et/ou le futur `world`. S'assurer qu'ils refusent les combinaisons incorrectes.
+## Détails par type d’étape
 
-### inspect_file
-- Ajouter un asset correspondant avec le contenu base64.
-- `input` doit préciser `mode` (`editor` ou `answer`).
-- Les validateurs peuvent inclure `jsonschema`, `jsonpath_absent` et/ou `expression` JavaScript. Garantir qu'une seule réponse exacte soit acceptée.
+### 1. `terminal`
+Bloc spécifique : propriété `terminal`.
+```json
+"terminal": {
+  "prompt": "$ ",
+  "environment": "bash | powershell | cloudcli | ...",
+  "history": ["command already run"],
+  "validators": [
+    {
+      "kind": "command",
+      "match": {
+        "program": "aws",
+        "subcommand": ["ec2", "describe-security-groups"],
+        "flags": {
+          "required": ["--group-ids"],
+          "aliases": { "-g": "--group-ids" }
+        },
+        "args": [
+          { "flag": "--group-ids", "expect": "sg-{{expected_group}}" }
+        ]
+      },
+      "response": {
+        "stdout_template": "...",
+        "stderr_template": "",
+        "world_patch": [
+          { "op": "set", "path": "systems.network.audit", "value": true }
+        ]
+      }
+    }
+  ]
+}
+```
+- `prompt` : chaîne représentant l’invite du terminal. Doubler toutes les barres obliques inverses (`\\`) lorsqu’il s’agit d’environnements Windows.
+- `environment` : identifie le shell ciblé.
+- `history` *(optionnel)* : commandes déjà exécutées et visibles.
+- Chaque validateur `kind: "command"` décrit la commande exacte attendue (programme, sous-commandes, drapeaux, arguments, options).
+- La section `response` précise l’effet : sorties simulées (`stdout_template`, `stderr_template`) et patchs monde.
+- Créez autant de validateurs que nécessaires pour couvrir l’ensemble des commandes obligatoires (inclure des variantes acceptées si le scénario l’exige).
 
-### architecture
-- `architecture.mode` par défaut `freeform` (peut être `slots` si pertinent).
-- `palette` doit lister au moins quatre composants, dont un avec `is_decoy: true`. Chaque composant fournit `id`, `label`, `icon` (emoji, texte ou URL) et `tags`.
-- `expected_world` doit refuser tout noeud ou lien supplémentaire (`allow_extra_nodes: false`).
-- `expected_world.nodes` décrit la solution (matching sur `palette_id`, `label`, `commands`, `config_contains`, etc.).
-- `expected_world.links` précise les connexions obligatoires, `bidirectional: true` si besoin.
-- Chaque noeud doit pouvoir enregistrer des commandes via le champ `commands` (tableau de lignes). Proposer au moins une commande attendue par composant critique.
+### 2. `console_form`
+Bloc spécifique : propriété `form` (structure UI simulée). Les validations se trouvent dans `validators`.
+```json
+"form": {
+  "model_path": "services.webapp.config",
+  "schema": {
+    "layout": "vertical | horizontal",
+    "fields": [
+      {
+        "key": "mode",
+        "label": "Mode",
+        "widget": "toggle",
+        "options": ["Off", "On"],
+        "required": true
+      },
+      {
+        "key": "endpoint",
+        "label": "URL",
+        "widget": "input",
+        "placeholder": "https://api.example.com",
+        "helptext": "Entrer l'URL sécurisée"
+      }
+    ]
+  }
+},
+"validators": [
+  { "kind": "payload", "path": "mode", "equals": "On" },
+  { "kind": "world", "expect": { "path": "services.webapp.config.endpoint", "pattern": "^https://" } }
+]
+```
+- `model_path` : emplacement dans l’état monde où stocker les valeurs soumises.
+- `schema.layout` : `"vertical"` ou `"horizontal"`.
+- `schema.fields[]` : définir chaque champ (`widget` = `input`, `textarea`, `select`, `toggle`, `radio`, etc.), avec éventuels `options`, `default`, `helptext`, `validation`.
+- Les validateurs `payload` inspectent directement les données soumises, tandis que `world` vérifie l’état monde après sauvegarde.
+- Ajoutez des messages (`message`) et, si besoin, plusieurs vérifications combinées pour garantir que seule la bonne configuration passe.
 
-### quiz / anticipation
-- `question_md` contextualise l'étape.
-- `choices` contient des objets `{ "id": "a", "text": "..." }`.
-- `correct` liste les identifiants réussis (au moins un).
+### 3. `inspect_file`
+Bloc spécifique : clés `file_ref` et `input`.
+```json
+"file_ref": "evidence-policy",
+"input": {
+  "mode": "answer | editor",
+  "prompt": "Indique la ressource mal configurée",
+  "placeholder": "Ex: sg-0abc123",
+  "language": "text | json | yaml | powershell | ..."
+},
+"validators": [
+  { "kind": "jsonpath_match", "path": "$.payload", "expected": "sg-0abc123" },
+  { "kind": "expression", "expr": "(get('payload')||'').includes('sg-0abc123')", "message": "Réponse attendue : sg-0abc123" }
+]
+```
+- `file_ref` : identifiant d’un asset existant.
+- `input.mode` : `"answer"` (zone libre) ou `"editor"` (contenu éditable). Toujours préciser `language` pour l’éditeur (ex. `json`, `yaml`, `bash`).
+- Les validateurs peuvent combiner `jsonschema`, `jsonpath_match`, `jsonpath_absent`, `payload`, `expression`, `world`, etc.
+- S’assurer qu’une seule réponse valide passe et que les retours guident l’apprenant.
 
-## Transitions et scoring
-- `transitions.on_success` référence l'`id` de l'étape suivante ou `#end`.
-- `on_failure` doit au minimum contenir `"action": "#stay"`.
-- `points` est un entier ≥ 1 pour chaque étape.
+### 4. `architecture`
+Bloc spécifique : propriété `architecture` + validateurs stricts.
+```json
+"architecture": {
+  "mode": "freeform | slots",
+  "palette_title": "Composants disponibles",
+  "palette_caption": "Glisse uniquement ce qui est pertinent. Un élément est un leurre.",
+  "palette": [
+    { "id": "gw", "label": "Gateway", "icon": "🛡️", "tags": ["network"], "meta": {"vendor": "generic"} },
+    { "id": "app", "label": "App Server", "icon": "🖥️", "tags": ["compute"] },
+    { "id": "db", "label": "Database", "icon": "🗄️", "tags": ["storage"] },
+    { "id": "decoy", "label": "Legacy Fax", "icon": "📠", "tags": ["legacy"], "is_decoy": true }
+  ],
+  "initial_nodes": [
+    { "palette_id": "gw", "label": "Gateway-1", "alias": "gw1", "position": { "x": 140, "y": 220 } }
+  ],
+  "world_path": "architectures.segment",
+  "help": "Double-clique sur un composant pour saisir ses commandes dans l'inspecteur.",
+  "expected_world": {
+    "allow_extra_nodes": false,
+    "nodes": [
+      {
+        "count": 1,
+        "match": {
+          "palette_id": "gw",
+          "label": "Gateway-1",
+          "config_contains": ["interface eth0", "policy"]
+        }
+      },
+      {
+        "count": 1,
+        "match": {
+          "palette_id": "app",
+          "commands": ["set app-tier", "set subnet"]
+        }
+      }
+    ],
+    "links": [
+      { "from": { "label": "Gateway-1" }, "to": { "palette_id": "app" }, "count": 1, "bidirectional": true }
+    ]
+  }
+},
+"validators": [
+  { "kind": "payload", "path": "nodes.length", "equals": 2 },
+  { "kind": "expression", "expr": "!(get('payload.nodes')||[]).some(n => n.palette_id === 'decoy')", "message": "Le composant leurre ne doit pas être placé." },
+  { "kind": "expression", "expr": "(get('payload.links')||[]).length === 1", "message": "Un seul lien est attendu." }
+]
+```
+- `mode` : `"freeform"` (mini Packet Tracer interactif) ou `"slots"`.
+- `palette` : au moins quatre composants, dont **un** avec `is_decoy: true`. `icon` peut être emoji, texte ou URL absolue.
+- `initial_nodes` *(optionnel)* : composants pré-placés. Chaque entrée comprend `palette_id`, `label`, `alias`, `position.x`, `position.y`.
+- L’utilisateur double-clique sur un composant pour ouvrir l’inspecteur et saisir des commandes. Le player stocke `commands` (tableau de lignes) et/ou `config` (bloc texte). Les validateurs peuvent vérifier `commands`, `config_contains`, `config_regex`, `tags`, etc.
+- `expected_world` doit rendre impossible une configuration alternative : utiliser `allow_extra_nodes`, `nodes` (avec `count`, `match`), `links` (définir direction, nombre, contraintes).
+- Ajouter des validateurs supplémentaires pour contrôler le nombre de noeuds, l’absence du leurre, la présence de commandes, ou toute règle métier.
+
+### 5. `quiz` / `anticipation`
+Bloc spécifique : clés `question_md`, `choices`, `correct`, `explanations` *(optionnel)*.
+```json
+"question_md": "Quels contrôles implémenter pour sécuriser l'environnement ?",
+"choices": [
+  { "id": "a", "text": "Activer l'authentification multifacteur" },
+  { "id": "b", "text": "Laisser tous les ports ouverts" },
+  { "id": "c", "text": "Segmenter les workloads critiques" }
+],
+"correct": ["a", "c"],
+"explanations": {
+  "a": "Renforce le contrôle d'accès.",
+  "c": "Réduit les mouvements latéraux."
+}
+```
+- `choices` : tableau d’objets (`id`, `text`).
+- `correct` : tableau listant les identifiants justes (un ou plusieurs).
+- `explanations` : optionnel, fournit un feedback ciblé par choix.
+- Les validateurs peuvent inclure `{ "kind": "quiz", "expect": ["a", "c"] }` si nécessaire.
+
+### 6. `anticipation`
+Si vous utilisez un type distinct `anticipation`, reprenez la même structure que `quiz` mais orientez les questions vers la projection ou l’analyse prospective.
+
+## Règles supplémentaires et compatibilité
+1. Toutes les étapes doivent rester cohérentes avec le récit de `scenario_md` et l’objectif pédagogique lié à `{{certification}}`.
+2. Chaque étape doit influencer ou vérifier l’état `world` de manière logique (`world_patch`, `form.model_path`, `architecture.world_path`, etc.).
+3. Les indices doivent être progressifs et contextualisés.
+4. Respecter les `{{step_types}}` fournis : au moins une occurrence de chaque type demandé.
+5. Toute chaîne contenant `\` doit être échappée en JSON (`\\`). Même règle pour les fins de ligne `\n` intégrées dans des chaînes.
+6. Pas de commentaires JSON ni de virgules finales. Vérifiez que toutes les références (`file_ref`, `transitions`, `palette_id`, etc.) existent et que la somme des points = `scoring.max_points`.
+7. Valider les dépendances entre étapes : si une étape s’appuie sur un patch monde précédent, assurez-vous que le chemin utilisé est identique.
 
 ## Format de sortie
-- Renvoyer **uniquement** le JSON final, minifié ou joli, sans texte supplémentaire ni commentaires.
-- Valider la cohérence des champs (ex : somme des points, présence des hints, assets référencés).
+- Retourner **uniquement** le JSON final (formaté ou minifié), sans explication ni commentaire.
+- Le JSON doit être immédiatement chargeable par le Hands-on Lab Player.
 
 ---
 
-**Conseil** : vous pouvez fournir `{{step_types}}` en tant que liste (par exemple `["terminal","console_form","architecture","inspect_file","quiz"]`) pour forcer la présence de chaque type.
-
+**Astuce** : fournissez `{{step_types}}` sous forme de tableau JSON (ex. `["terminal","console_form","inspect_file","architecture","quiz"]`) pour imposer la diversité des étapes.
