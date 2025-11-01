@@ -28,7 +28,7 @@
         "title": "Activer le pare-feu sur {{device_name}}",
         "instructions_md": "Depuis une console PowerShell élevée sur **{{device_name}}**, active les trois profils du pare-feu Windows. Utilise l'applet `Set-NetFirewallProfile` pour basculer Domain, Private et Public sur *Enabled*.",
         "terminal": {
-          "prompt": "{{device_name}} PS C:\\\>",
+          "prompt": "{{device_name}} PS C\\>",
           "validators": [
             {
               "kind": "command",
