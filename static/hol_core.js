@@ -11,7 +11,67 @@ const stableStringify=(val)=>{
 const deepEqual=(a,b)=> stableStringify(a)===stableStringify(b);
 const getByPath=(o,p)=> p.split('.').reduce((a,k)=> (a==null?undefined:a[k]), o);
 const setByPath=(o,p,val)=>{const parts=p.split('.');let cur=o;for(let i=0;i<parts.length-1;i++){if(cur[parts[i]]==null)cur[parts[i]]={};cur=cur[parts[i]];}cur[parts[parts.length-1]]=val;};
-const applyWorldPatch=(world,patch,vars)=> (patch||[]).forEach(p=> p.op==='set' && setByPath(world, templateString(p.path,vars), templateAny(p.value,vars)) );
+const unsetByPath=(o,p)=>{
+  const parts=p.split('.');
+  if(!parts.length) return;
+  let parent=o;
+  for(let i=0;i<parts.length-1;i++){
+    if(parent==null) return;
+    parent=parent[parts[i]];
+  }
+  if(parent==null) return;
+  const last=parts[parts.length-1];
+  if(Array.isArray(parent)){
+    const idx=Number(last);
+    if(Number.isInteger(idx) && idx>=0){ parent.splice(idx,1); return; }
+    const fallbackIndex=parent.findIndex(item=> item && typeof item==='object' && (item.id===last || item.key===last));
+    if(fallbackIndex>=0) parent.splice(fallbackIndex,1);
+  } else {
+    delete parent[last];
+  }
+};
+const applyWorldPatch=(world,patch,vars)=>{
+  for(const p of (patch||[])){
+    if(!p || !p.op) continue;
+    const op=String(p.op).toLowerCase();
+    const pathRaw=p.path||'';
+    const path=templateString(pathRaw,vars);
+    if(!path) continue;
+    if(op==='set'){
+      setByPath(world, path, templateAny(p.value,vars));
+      continue;
+    }
+    if(op==='unset'){
+      unsetByPath(world, path);
+      continue;
+    }
+    if(op==='push'){
+      let target=getByPath(world, path);
+      if(!Array.isArray(target)){
+        setByPath(world, path, []);
+        target=getByPath(world, path);
+        if(!Array.isArray(target)) continue;
+      }
+      const val=p.value===undefined?undefined:templateAny(p.value,vars);
+      if(val===undefined) continue;
+      if(Array.isArray(val)) target.push(...val);
+      else target.push(val);
+      continue;
+    }
+    if(op==='remove'){
+      const target=getByPath(world, path);
+      const val=p.value===undefined?undefined:templateAny(p.value,vars);
+      if(Array.isArray(target)){
+        if(val===undefined){ target.pop(); continue; }
+        let idx=target.findIndex(item=> deepEqual(item,val));
+        if(idx<0 && val && typeof val==='object' && val.id!==undefined){ idx=target.findIndex(item=> item && typeof item==='object' && item.id===val.id); }
+        if(idx<0 && typeof val==='string'){ idx=target.findIndex(item=> item && typeof item==='object' && (item.id===val || item.name===val)); }
+        if(idx>=0){ target.splice(idx,1); continue; }
+      }
+      unsetByPath(world, path);
+    }
+  }
+};
 const md = (s='')=> s.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>');
 
 function normalizeIconSpec(icon){
