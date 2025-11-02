@@ -1,0 +1,126 @@
+{
+  "schema_version": "0.2.0",
+  "lab": {
+    "id": "ccna-access-fundamentals",
+    "title": "CCNA - Construire l'accès commuté",
+    "subtitle": "VLANs, ports d'accès et topologie de base",
+    "variables": {
+      "access_vlan": { "type": "choice", "choices": ["10", "20", "30"] },
+      "native_vlan": { "type": "choice", "choices": ["99", "100"] }
+    },
+    "scoring": { "max_points": 90 },
+    "timer": { "mode": "countdown", "seconds": 1800 },
+    "steps": [
+      {
+        "id": "create-vlan",
+        "type": "terminal",
+        "title": "Créer le VLAN d'accès",
+        "instructions_md": "Sur le commutateur de distribution **dist01**, crée le VLAN **{{access_vlan}}** et nomme-le *Users*.",
+        "terminal": {
+          "prompt": "dist01#",
+          "validators": [
+            {
+              "kind": "command",
+              "match": {
+                "program": "ios",
+                "subcommand": ["vlan", "create"],
+                "flags": { "required": ["--id", "--name"] },
+                "args": [
+                  { "flag": "--id", "expect": "{{access_vlan}}" },
+                  { "flag": "--name", "expect": "Users" }
+                ]
+              },
+              "response": {
+                "stdout_template": "Creating VLAN {{access_vlan}} (Users)... done\n",
+                "world_patch": [
+                  { "op": "set", "path": "campus.vlans.{{access_vlan}}.name", "value": "Users" },
+                  { "op": "set", "path": "campus.vlans.{{access_vlan}}.status", "value": "active" }
+                ]
+              }
+            }
+          ]
+        },
+        "points": 30,
+        "hints": [
+          "Utilise la commande fictive **ios vlan create --id X --name Y** pour valider l'étape."
+        ],
+        "transitions": { "on_success": "switchport-access", "on_failure": "#stay" }
+      },
+      {
+        "id": "switchport-access",
+        "type": "console_form",
+        "title": "Configurer le port d'accès",
+        "instructions_md": "Bascule l'interface **Gi0/1** du commutateur sur le VLAN d'accès **{{access_vlan}}** et renseigne la description *Native VLAN {{native_vlan}} uplink*.",
+        "form": {
+          "model_path": "campus.switches.dist01.interfaces.Gi0/1",
+          "schema": {
+            "fields": [
+              { "key": "mode", "widget": "toggle", "label": "Mode du port", "options": ["access", "trunk"] },
+              { "key": "access_vlan", "label": "VLAN d'accès" },
+              { "key": "description", "label": "Description" }
+            ]
+          }
+        },
+        "validators": [
+          { "kind": "world", "expect": { "path": "campus.switches.dist01.interfaces.Gi0/1.mode", "equals": "access" } },
+          { "kind": "world", "expect": { "path": "campus.switches.dist01.interfaces.Gi0/1.access_vlan", "equals": "{{access_vlan}}" } },
+          { "kind": "world", "expect": { "path": "campus.switches.dist01.interfaces.Gi0/1.description", "equals": "Native VLAN {{native_vlan}} uplink" } }
+        ],
+        "hints": [
+          "Passe le mode du port sur *access* et renseigne le VLAN cible.",
+          "Ajoute la description *Native VLAN {{native_vlan}} uplink*."
+        ],
+        "points": 30,
+        "transitions": { "on_success": "design-topology", "on_failure": "#stay" }
+      },
+      {
+        "id": "design-topology",
+        "type": "architecture",
+        "title": "Assembler la topologie d'accès",
+        "instructions_md": "Place un routeur, un commutateur, un poste utilisateur et un serveur. Renomme-les comme indiqué puis relie-les : le routeur vers le commutateur, et le commutateur vers chaque hôte.\n\nSélectionne ensuite chaque équipement dans l'espace de travail et saisis les commandes exécutées :\n- **Edge Router** : `interface Gi0/0`, `ip address 192.168.10.1 255.255.255.0`, `no shutdown`\n- **Distribution Switch** : `interface Gi0/1`, `switchport access vlan {{access_vlan}}`\n- **User PC** : `ip address 192.168.10.10 255.255.255.0`\n- **Web Server** : `ip address 192.168.10.20 255.255.255.0`",
+        "architecture": {
+          "palette_title": "Équipements",
+          "palette_caption": "Ajoute uniquement les équipements listés et renomme-les si besoin. Ignore le composant leurre éventuel.",
+          "palette": [
+            { "id": "router", "label": "Routeur", "icon": "🛜", "tags": ["layer3"] },
+            { "id": "switch", "label": "Commutateur", "icon": "🖧", "tags": ["layer2"] },
+            { "id": "pc", "label": "Poste Utilisateur", "icon": "💻", "tags": ["endpoint"] },
+            { "id": "server", "label": "Serveur", "icon": "🗄️", "tags": ["endpoint"] }
+          ],
+          "initial_nodes": [
+            { "palette_id": "router", "label": "Edge Router", "alias": "edge", "position": { "x": 140, "y": 200 } },
+            { "palette_id": "switch", "label": "Distribution Switch", "alias": "dist", "position": { "x": 360, "y": 200 } },
+            { "palette_id": "pc", "label": "User PC", "alias": "pc1", "position": { "x": 360, "y": 60 } },
+            { "palette_id": "server", "label": "Web Server", "alias": "srv1", "position": { "x": 360, "y": 340 } }
+          ],
+          "help": "Clique sur les ports latéraux pour créer les liens. Clic droit supprime un lien ou un équipement. Sélectionne un élément pour saisir sa configuration dans le panneau dédié.",
+          "world_path": "campus.topology.access",
+          "expected_world": {
+            "nodes": [
+              { "match": { "label": "Edge Router", "palette_id": "router", "config_contains": ["interface Gi0/0", "ip address 192.168.10.1 255.255.255.0"] }, "count": 1 },
+              { "match": { "label": "Distribution Switch", "palette_id": "switch", "config_contains": ["interface Gi0/1", "switchport access vlan {{access_vlan}}"] }, "count": 1 },
+              { "match": { "label": "User PC", "palette_id": "pc", "config_contains": ["ip address 192.168.10.10 255.255.255.0"] }, "count": 1 },
+              { "match": { "label": "Web Server", "palette_id": "server", "config_contains": ["ip address 192.168.10.20 255.255.255.0"] }, "count": 1 }
+            ],
+            "links": [
+              { "from": { "label": "Edge Router" }, "to": { "label": "Distribution Switch" }, "count": 1, "bidirectional": true },
+              { "from": { "label": "Distribution Switch" }, "to": { "label": "User PC" }, "count": 1, "bidirectional": true },
+              { "from": { "label": "Distribution Switch" }, "to": { "label": "Web Server" }, "count": 1, "bidirectional": true }
+            ],
+            "allow_extra_nodes": false
+          }
+        },
+        "validators": [
+          { "kind": "payload", "path": "nodes.length", "equals": 4, "message": "Garde uniquement les quatre équipements requis." },
+          { "kind": "expression", "expr": "get('payload.nodes') && get('payload.nodes').every(n => n.config && n.config.trim().length > 0)", "message": "Renseigne la configuration attendue pour chaque équipement." }
+        ],
+        "hints": [
+          "Renomme les équipements avec les intitulés Edge Router, Distribution Switch, User PC et Web Server.",
+          "Relie le routeur au commutateur puis le commutateur aux deux hôtes."
+        ],
+        "points": 30,
+        "transitions": { "on_success": "#end", "on_failure": "#stay" }
+      }
+    ]
+  }
+}
