@@ -815,7 +815,7 @@ def generate_lab_blueprint(
 
     step_types_json = json.dumps(step_types, ensure_ascii=False)
     domains_label = ", ".join(domains)
-    prompt = f"""You are an expert specializing in generating interactive labs intended to be executed in a custom tool called Lab_Player.
+    prompt_template = """You are an expert specializing in generating interactive labs intended to be executed in a custom tool called Lab_Player.
 The interactive labs are based on practical scenarios for preparing for specific areas of the certification exam identified below.
 
 ### TASK:
@@ -1067,6 +1067,19 @@ Validate dependencies between steps: if a step relies on a previous world patch,
 Return only the final JSON (formatted or minified), without explanation or comments.
 The JSON must be immediately loadable by the Lab_Player.
 """
+
+    prompt = (
+        prompt_template
+        .replace("{domains_label}", domains_label)
+        .replace("{certification}", certification)
+        .replace("{min_steps}", str(min_steps))
+        .replace("{domain_descr}", domain_descr)
+        .replace("{difficulty}", difficulty)
+        .replace("{step_types_json}", step_types_json)
+        .replace("{provider}", provider)
+        .replace("{duration_minutes}", str(duration_minutes))
+    )
+    prompt = prompt.replace("{{", "{").replace("}}", "}")
 
     payload = {
         "model": OPENAI_MODEL,
