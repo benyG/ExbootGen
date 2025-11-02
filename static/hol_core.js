@@ -773,15 +773,34 @@ function renderArchitectureFreeform(step, cfg, mount){
   helper.innerHTML = cfg.help || 'Astuce : double-clique pour configurer, clic droit pour supprimer, relie les ports latéraux.';
   canvasWrap.appendChild(helper);
 
+  const inspectorModal = document.createElement('div');
+  inspectorModal.className = 'arch-inspector-modal';
+  inspectorModal.setAttribute('data-state', 'hidden');
+  inspectorModal.hidden = true;
+  inspectorModal.setAttribute('aria-hidden', 'true');
+  inspectorModal.setAttribute('role', 'dialog');
+  inspectorModal.setAttribute('aria-modal', 'true');
+  inspectorModal.tabIndex = -1;
+
   const inspector = document.createElement('div');
   inspector.className = 'arch-inspector';
-  inspector.setAttribute('data-state', 'hidden');
-  inspector.hidden = true;
-  inspector.setAttribute('aria-hidden', 'true');
+
+  const inspectorCloseBtn = document.createElement('button');
+  inspectorCloseBtn.type = 'button';
+  inspectorCloseBtn.className = 'arch-inspector-close';
+  inspectorCloseBtn.setAttribute('aria-label', 'Fermer l\'inspecteur');
+  inspectorCloseBtn.innerHTML = '&times;';
+  inspector.appendChild(inspectorCloseBtn);
   const inspectorTitle = document.createElement('h4');
   inspectorTitle.textContent = 'Sélectionne un composant';
   const inspectorSubtitle = document.createElement('p');
   inspectorSubtitle.textContent = 'Double-clique sur un élément de la topologie pour saisir ses commandes standard.';
+  const inspectorTitleId = `arch-inspector-title-${Math.random().toString(36).slice(2)}`;
+  const inspectorDescId = `arch-inspector-desc-${Math.random().toString(36).slice(2)}`;
+  inspectorTitle.id = inspectorTitleId;
+  inspectorSubtitle.id = inspectorDescId;
+  inspectorModal.setAttribute('aria-labelledby', inspectorTitleId);
+  inspectorModal.setAttribute('aria-describedby', inspectorDescId);
   const labelField = document.createElement('label');
   const labelSpan = document.createElement('span');
   labelSpan.textContent = 'Nom affiché';
@@ -812,7 +831,13 @@ function renderArchitectureFreeform(step, cfg, mount){
   inspector.appendChild(labelField);
   inspector.appendChild(configField);
   inspector.appendChild(inspectorActions);
-  canvasWrap.appendChild(inspector);
+  inspectorModal.appendChild(inspector);
+  canvasWrap.appendChild(inspectorModal);
+
+  inspectorCloseBtn.addEventListener('click', ()=>{ closeInspector(); });
+  inspectorModal.addEventListener('click', (event)=>{
+    if(event.target === inspectorModal){ closeInspector(); }
+  });
 
   layout.appendChild(paletteCol);
   layout.appendChild(canvasWrap);
@@ -898,10 +923,10 @@ function renderArchitectureFreeform(step, cfg, mount){
   function updateInspector(){
     if(!inspectorVisible){
       inspectorNodeId = null;
-      inspector.classList.remove('is-visible');
-      inspector.setAttribute('data-state', 'hidden');
-      inspector.hidden = true;
-      inspector.setAttribute('aria-hidden', 'true');
+      inspectorModal.classList.remove('is-visible');
+      inspectorModal.setAttribute('data-state', 'hidden');
+      inspectorModal.hidden = true;
+      inspectorModal.setAttribute('aria-hidden', 'true');
       inspectorTitle.textContent = 'Sélectionne un composant';
       inspectorSubtitle.textContent = 'Double-clique sur un élément de la topologie pour saisir ses commandes standard.';
       labelInput.disabled = true;
@@ -914,10 +939,10 @@ function renderArchitectureFreeform(step, cfg, mount){
       closeInspector();
       return;
     }
-    inspector.hidden = false;
-    inspector.setAttribute('aria-hidden', 'false');
-    inspector.classList.add('is-visible');
-    inspector.setAttribute('data-state', 'active');
+    inspectorModal.hidden = false;
+    inspectorModal.setAttribute('aria-hidden', 'false');
+    inspectorModal.classList.add('is-visible');
+    inspectorModal.setAttribute('data-state', 'active');
     const currentLabel = node.labelNode.text();
     inspectorTitle.textContent = currentLabel || 'Composant';
     inspectorSubtitle.textContent = 'Saisis ou colle la configuration attendue pour ce composant.';
@@ -1148,7 +1173,17 @@ function renderArchitectureFreeform(step, cfg, mount){
   });
   stage.on('mouseleave', ()=>{ if(isLinking()) cancelPendingLink(); });
   stage.on('mousemove touchmove', ()=>{ if(isLinking()){ drawLinkPreview(); layerLinks.batchDraw(); } });
-  window.addEventListener('keydown', (evt)=>{ if(evt.key==='Escape' && isLinking()) cancelPendingLink(); });
+  window.addEventListener('keydown', (evt)=>{
+    if(evt.key==='Escape'){
+      if(isLinking()){
+        cancelPendingLink();
+        return;
+      }
+      if(inspectorVisible){
+        closeInspector();
+      }
+    }
+  });
 
   function selectNode(id){
     selectedNode = id;
