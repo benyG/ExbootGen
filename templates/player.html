@@ -496,6 +496,19 @@
     .chip-label { flex: 1; }
 
     .arch-canvas { position:relative; display:flex; flex-direction:column; gap:0.85rem; }
+    .arch-inspector-modal {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1.5rem;
+      background: rgba(4, 12, 28, 0.72);
+      backdrop-filter: blur(6px);
+      z-index: 40;
+    }
+    .arch-inspector-modal[hidden],
+    .arch-inspector-modal[data-state='hidden'] { display: none !important; }
     .arch-inspector {
       background: rgba(10, 16, 32, 0.86);
       border: 1px solid rgba(71, 97, 148, 0.35);
@@ -505,12 +518,41 @@
       display: flex;
       flex-direction: column;
       gap: 0.75rem;
+      max-width: min(520px, 100%);
+      width: min(520px, 100%);
+      max-height: min(80vh, 560px);
+      overflow-y: auto;
+      position: relative;
     }
     .arch-inspector[hidden],
     .arch-inspector[data-state='hidden'] { display: none !important; }
     .arch-inspector[data-state='empty'] { opacity: 0.6; }
     .arch-inspector h4 { margin: 0; font-size: 0.95rem; color: var(--text-primary); }
     .arch-inspector p { margin: 0; font-size: 0.82rem; color: rgba(198, 212, 255, 0.72); line-height: 1.45; }
+    .arch-inspector-close {
+      position: absolute;
+      top: 0.65rem;
+      right: 0.65rem;
+      border: none;
+      background: rgba(9, 16, 32, 0.6);
+      color: rgba(198, 212, 255, 0.65);
+      font-size: 1.45rem;
+      line-height: 1;
+      width: 2.2rem;
+      height: 2.2rem;
+      border-radius: 999px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: background 0.25s ease, color 0.25s ease, transform 0.25s ease;
+    }
+    .arch-inspector-close:hover,
+    .arch-inspector-close:focus-visible {
+      background: rgba(71, 245, 192, 0.25);
+      color: rgba(255, 255, 255, 0.92);
+      transform: scale(1.05);
+      outline: none;
+    }
     .arch-inspector label { display:flex; flex-direction:column; gap:0.35rem; font-size:0.78rem; color: rgba(198, 212, 255, 0.72); }
     .arch-inspector label span { font-weight:600; color: rgba(198, 212, 255, 0.85); letter-spacing: 0.04em; text-transform: uppercase; }
     .arch-inspector input {

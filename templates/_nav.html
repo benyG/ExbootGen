@@ -1,15 +1,15 @@
 <nav class="stellar-nav" id="stellarNav">
   <a href="{{ url_for('home') }}" data-route="{{ url_for('home') }}"{% if active_page|default('') == 'home' %} class="active"{% endif %}>Home</a>
   <a href="{{ url_for('populate_index') }}" data-route="{{ url_for('populate_index') }}"{% if active_page|default('') == 'populate' %} class="active"{% endif %}>Populate(AI)</a>
-  <a href="{{ url_for('dom.index') }}" data-route="{{ url_for('dom.index') }}"{% if active_page|default('') == 'domains' %} class="active"{% endif %}>Domains</a>
-  <a href="{{ url_for('move.index') }}" data-route="{{ url_for('move.index') }}"{% if active_page|default('') == 'move' %} class="active"{% endif %}>Move Q</a>
+  <a href="{{ url_for('dom.index') }}" data-route="{{ url_for('dom.index') }}"{% if active_page|default('') == 'domains' %} class="active"{% endif %}>Domains(AI)</a>
+  <a href="{{ url_for('move.index') }}" data-route="{{ url_for('move.index') }}"{% if active_page|default('') == 'move' %} class="active"{% endif %}>Move Question</a>
   <a href="{{ url_for('reloc.index') }}" data-route="{{ url_for('reloc.index') }}"{% if active_page|default('') == 'relocate' %} class="active"{% endif %}>Relocate(AI)</a>
   <a href="{{ url_for('pdf.index') }}" data-route="{{ url_for('pdf.index') }}"{% if active_page|default('') == 'pdf_import' %} class="active"{% endif %}>PDF Import</a>
   <a href="{{ url_for('pdf.generate_index') }}" data-route="{{ url_for('pdf.generate_index') }}"{% if active_page|default('') == 'pdf_generate' %} class="active"{% endif %}>Generate via PDF</a>
   <a href="{{ url_for('quest.index') }}" data-route="{{ url_for('quest.index') }}"{% if active_page|default('') == 'json_import' %} class="active"{% endif %}>JSON Import</a>
-  <a href="{{ url_for('articles.index') }}" data-route="{{ url_for('articles.index') }}"{% if active_page|default('') == 'articles' %} class="active"{% endif %}>Article Builder</a>
+  <a href="{{ url_for('articles.index') }}" data-route="{{ url_for('articles.index') }}"{% if active_page|default('') == 'articles' %} class="active"{% endif %}>Article Builder(AI)</a>
   <a href="{{ url_for('hol.player') }}" data-route="{{ url_for('hol.player') }}"{% if active_page|default('') == 'hol_player' %} class="active"{% endif %}>Hands-on Labs</a>
-  <a href="{{ url_for('hol.labs_generator') }}" data-route="{{ url_for('hol.labs_generator') }}"{% if active_page|default('') == 'hol_generator' %} class="active"{% endif %}>Labs Generator</a>
-  <a href="{{ url_for('fix_index') }}" data-route="{{ url_for('fix_index') }}"{% if active_page|default('') == 'fix' %} class="active"{% endif %}>Fix Q(AI)</a>
+  <a href="{{ url_for('hol.labs_generator') }}" data-route="{{ url_for('hol.labs_generator') }}"{% if active_page|default('') == 'hol_generator' %} class="active"{% endif %}>Labs Generator(AI)</a>
+  <a href="{{ url_for('fix_index') }}" data-route="{{ url_for('fix_index') }}"{% if active_page|default('') == 'fix' %} class="active"{% endif %}>Fix Question(AI)</a>
   <a href="{{ url_for('reports') }}" data-route="{{ url_for('reports') }}"{% if active_page|default('') == 'reports' %} class="active"{% endif %}>Reports</a>
 </nav>
