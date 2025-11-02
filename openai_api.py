@@ -15,9 +15,9 @@ from config import (
 )
 
 DOMAIN_PROMPT_TEMPLATE = (
-    "Retrieve the official domains of the exam outline course for the certification "
+    "Retrieve the official domains of the exam outline course for the certification."
     "{{NAME_OF_CERTIFICATION}} along with their descriptions.\n"
-    "Reference Sources: only from official website of the specified certification vendor.\n"
+    "Reference Sources: only from the official website of the specified certification vendor.\n"
     "If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate domains and descriptions, without mentioning any limitations.\n"
     "Each domain must correspond to a section from the official outline and include a concise vendor-aligned description.\n"
     "Format your response as a decodable JSON object in a single line without line breaks.\n"
@@ -32,13 +32,13 @@ DOMAIN_PROMPT_TEMPLATE = (
 ARTICLE_PROMPT_TEMPLATES = {
     "certification_presentation": """
 Retrieve official information about exam certification: {certification} from vendor {vendor}.
-Your mission is to write a SEO optimized, clear, actionable and up-to-date article, which presents the certification to the reader.
-Reference Sources: only from official website of the specified certification vendor.
-If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate informations.
+Your mission is to write an SEO-optimized, clear, actionable, and up-to-date article that presents the certification to the reader.
+Reference Sources: only from the official website of the specified certification vendor.
+If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate information.
 RULES:
 - Format your response in Markdown.
 - Titles should be short.
-- respect scrupulously the given Article structure only
+- Respect scrupulously the given Article structure only
 - Formulates complete, non-robotic sentences
 - Target length: 1,500–2,200 words.
 - Tone: motivating, factual, without unexplained jargon.
@@ -54,9 +54,9 @@ STRUCTURE:
 - A call to action with a link to start a free test: {exam_url}.
 """,
     "preparation_methodology": """
-Write a SEO optimized, clear, actionable and up-to-date step-by-step guide on how to Prepare for the certification exam: {certification} from {vendor}.
+Write a SEO optimized, clear, actionable, and up-to-date step-by-step guide on how to prepare for the certification exam: {certification} from {vendor}.
 Include study duration, key topics, common mistakes, and preparation resources.
-Integrate how ExamBoot.net features like qustions bank, AI coach, performances analysis and realistic simulations, can help accelerate learning.
+Integrate how ExamBoot.net features like a question bank, AI coach, performance analysis, and realistic simulations can help accelerate learning.
 Format with headings, bullet points, and a motivational tone.
 Explicitly include the link to start a free ExamBoot test: {exam_url}.
 RULES:
@@ -66,7 +66,7 @@ RULES:
 - Target length: 1,500–2,200 words.
 """,
     "experience_testimony": """
-Write a SEO optimized, clear, actionable and up-to-date third-person or storytelling-style blog post testimony on how to pass the certification exam: {certification} from {vendor}.
+Write a SEO optimized, clear, actionable, and up-to-date third-person or storytelling-style blog post testimony on how to pass the certification exam: {certification} from {vendor}.
 Structure: presentation, motivation, challenges, strategy, results.
 Make it inspiring and motivating.
 Include realistic study milestones, use of ExamBoot.net, and takeaways for other candidates.
@@ -106,7 +106,7 @@ Produce a JSON object describing the certification with the following exact stru
 {{
   "prerequisites": ["text1", "text2", "text3"],
   "targeted_profession": ["job title1", "job title2", "job title3"],
-  "studytip": "In 20-25 words tell here how ExamBoot.net can help to prepare for the certification"
+  "studytip": "In 20-25 words, tell here how ExamBoot.net can help to prepare for the certification"
 }}
 Guidelines:
 - Return exactly three concise bullet-style strings in both arrays, each 6-12 words.
@@ -131,7 +131,7 @@ Include 3 relevant hashtags and no additional commentary.
 max 280 characters.
 """,
     "experience_testimony": """
-Post a motivational cote on how to pass the certification exam: {certification} from {vendor} after specified weeks of focused prep.
+Post a motivational quote on how to pass the certification exam: {certification} from {vendor} after specified weeks of focused prep.
 Try ExamBoot.net for your journey with a link to start a free test: 👉{exam_url}
 Include 3 relevant hashtags.
 Return only the tweet body.
