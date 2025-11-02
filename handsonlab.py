@@ -106,6 +106,8 @@ def _generate_single_lab(
         step_types=allowed_step_types,
         duration_minutes=duration_minutes,
     )
+    if not isinstance(lab_payload, dict):
+        raise TypeError("Réponse inattendue lors de la génération du lab.")
     if API_REQUEST_DELAY:
         time.sleep(API_REQUEST_DELAY)
     lab_object = lab_payload.setdefault("lab", {})

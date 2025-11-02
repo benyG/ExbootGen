@@ -568,7 +568,7 @@
       const labsContainer = document.getElementById('labsContainer');
       const errorsContainer = document.getElementById('errorsContainer');
       const loadingOverlay = document.getElementById('loadingOverlay');
-      const base = ('{{ url_for('hol.labs_generator') }}').replace(/\/$/, '') + '/';
+      const base = ({{ url_for('hol.labs_generator') | tojson }}).replace(/\/$/, '') + '/';
 
       const providerSearch = window.makeSelectSearchable ? window.makeSelectSearchable(providerSelect, { placeholder: 'Rechercher un provider…' }) : null;
       const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certSelect, { placeholder: 'Rechercher une certification…' }) : null;
@@ -587,7 +587,10 @@
 
       function populateProviders(list) {
         if (providerSearch) {
-          providerSearch.setOptions(list.map(p => ({ value: String(p.id), label: p.name })), { keepSearch: false });
+          const options = [{ value: '', label: 'Sélectionner…' }].concat(
+            list.map(p => ({ value: String(p.id), label: p.name }))
+          );
+          providerSearch.setOptions(options, { keepSearch: false, selectedValue: '' });
         } else {
           providerSelect.innerHTML = '<option value="">Sélectionner…</option>';
           list.forEach(item => {
@@ -597,11 +600,16 @@
             providerSelect.appendChild(opt);
           });
         }
+        providerSelect.value = '';
+        providerSelect.dispatchEvent(new Event('change', { bubbles: true }));
       }
 
       function populateCertifications(list) {
         if (certSearch) {
-          certSearch.setOptions(list.map(c => ({ value: String(c.id), label: c.name })), { keepSearch: false });
+          const options = [{ value: '', label: 'Sélectionner…' }].concat(
+            list.map(c => ({ value: String(c.id), label: c.name }))
+          );
+          certSearch.setOptions(options, { keepSearch: false, selectedValue: '' });
         } else {
           certSelect.innerHTML = '<option value="">Sélectionner…</option>';
           list.forEach(item => {
@@ -611,6 +619,8 @@
             certSelect.appendChild(opt);
           });
         }
+        certSelect.value = '';
+        certSelect.dispatchEvent(new Event('change', { bubbles: true }));
       }
 
       async function fetchJSON(url) {
@@ -654,22 +664,20 @@
         }
         try {
           const data = await fetchJSON(base + 'api/domains/' + certId);
+          domainsPanel.innerHTML = '';
+          domainsPanel.appendChild(domainList);
+          domainList.innerHTML = '';
           if (!data.length) {
             const msg = document.createElement('span');
             msg.className = 'muted';
             msg.textContent = 'Aucun domaine enregistré pour cette certification.';
-            domainsPanel.innerHTML = '';
-            domainsPanel.appendChild(msg);
-            domainsPanel.appendChild(domainList);
+            domainsPanel.insertBefore(msg, domainList);
             return;
           }
-          domainsPanel.innerHTML = '';
           const title = document.createElement('span');
           title.className = 'muted';
           title.textContent = 'Domaines disponibles :';
-          domainsPanel.appendChild(title);
-          domainsPanel.appendChild(domainList);
-          domainList.innerHTML = '';
+          domainsPanel.insertBefore(title, domainList);
           data.forEach(domain => {
             const li = document.createElement('li');
             li.textContent = domain.name;
@@ -677,6 +685,12 @@
           });
         } catch (err) {
           console.error(err);
+          const errorMsg = document.createElement('span');
+          errorMsg.className = 'muted';
+          errorMsg.textContent = 'Impossible de récupérer les domaines pour cette certification.';
+          domainsPanel.innerHTML = '';
+          domainsPanel.appendChild(errorMsg);
+          domainsPanel.appendChild(domainList);
         }
       }
 
@@ -743,11 +757,20 @@
             : '<span class="muted">Aucun type de step détecté.</span>';
           analysisSection.style.display = 'block';
 
-          if (data.errors && data.errors.length) {
-            errorsContainer.innerHTML = '<strong>Erreurs détectées :</strong><br>' + data.errors.map(err => `Cycle ${err.index + 1}: ${err.message}`).join('<br>');
+          const hasErrors = Array.isArray(data.errors) && data.errors.length > 0;
+          const hasLabs = Array.isArray(data.labs) && data.labs.length > 0;
+
+          errorsContainer.innerHTML = '';
+          labsContainer.innerHTML = '';
+
+          if (hasErrors) {
+            errorsContainer.innerHTML = '<strong>Erreurs détectées :</strong><br>' + data.errors
+              .sort((a, b) => a.index - b.index)
+              .map(err => `Cycle ${err.index + 1}: ${err.message}`)
+              .join('<br>');
           }
 
-          if (data.labs && data.labs.length) {
+          if (hasLabs) {
             data.labs
               .sort((a, b) => a.index - b.index)
               .forEach(item => {
@@ -768,8 +791,16 @@
                 labsContainer.appendChild(card);
               });
             resultsSection.style.display = 'block';
+          } else if (hasErrors) {
+            const placeholder = document.createElement('p');
+            placeholder.className = 'muted';
+            placeholder.textContent = 'Aucun lab n\'a pu être généré.';
+            labsContainer.appendChild(placeholder);
+            resultsSection.style.display = 'block';
+            statusMessage.textContent = 'La génération a rencontré des erreurs.';
           } else {
             statusMessage.textContent = 'Aucun lab généré.';
+            resultsSection.style.display = 'none';
           }
         } catch (error) {
           console.error(error);
