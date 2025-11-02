@@ -6,11 +6,13 @@ import re
 import json
 import time
 import random
+from typing import Optional
 from config import (
     OPENAI_API_KEY,
     OPENAI_MODEL,
     OPENAI_API_URL,
     OPENAI_MAX_RETRIES,
+    OPENAI_TIMEOUT_SECONDS,
 )
 
 DOMAIN_PROMPT_TEMPLATE = (
@@ -357,6 +359,21 @@ def generate_certification_course_art(certification: str, vendor: str) -> dict:
     return clean_and_decode_json(raw_content)
 
 
+def _model_temperature_override(model: str) -> Optional[float]:
+    """Return the temperature override to use for the supplied model.
+
+    Some provider models (notably ``gpt-5-mini``) reject custom temperature
+    values and only accept the default setting.  Returning ``None`` ensures the
+    payload omits the ``temperature`` field altogether so that the provider can
+    apply its default configuration.
+    """
+
+    if model == "gpt-5-mini":
+        return None
+
+    return 0.2
+
+
 def _post_with_retry(payload: dict) -> requests.Response:
     """Send a POST request to the OpenAI API with retry and backoff.
 
@@ -374,7 +391,7 @@ def _post_with_retry(payload: dict) -> requests.Response:
                 OPENAI_API_URL,
                 headers=headers,
                 json=payload,
-                timeout=60,
+                timeout=OPENAI_TIMEOUT_SECONDS,
             )
 
             # Treat 429 and 5xx responses as retryable
@@ -389,8 +406,16 @@ def _post_with_retry(payload: dict) -> requests.Response:
 
         except requests.HTTPError as e:
             attempt += 1
-            if attempt > OPENAI_MAX_RETRIES:
-                raise Exception(f"API Request Error: {e}") from e
+            if attempt >= OPENAI_MAX_RETRIES:
+                error_detail = ""
+                if getattr(e, "response", None) is not None:
+                    error_detail = e.response.text
+                message = (
+                    f"API Request Error after {attempt} attempts: {e}"
+                )
+                if error_detail:
+                    message += f" | Details: {error_detail}"
+                raise Exception(message) from e
 
             retry_after = getattr(e.response, "headers", {}).get("Retry-After")
             if retry_after:
@@ -413,8 +438,10 @@ def _post_with_retry(payload: dict) -> requests.Response:
 
         except requests.RequestException as e:
             attempt += 1
-            if attempt > OPENAI_MAX_RETRIES:
-                raise Exception(f"API Request Error: {e}") from e
+            if attempt >= OPENAI_MAX_RETRIES:
+                raise Exception(
+                    f"API Request Error after {attempt} attempts: {e}"
+                ) from e
 
             delay = min(60, (2 ** (attempt - 1))) + random.uniform(0, 1)
             logging.warning(
@@ -746,19 +773,7 @@ RULES:
             ]
         }
 
-        try:
-            response = requests.post(
-                'https://api.openai.com/v1/chat/completions',
-                headers={
-                    'Content-Type': 'application/json',
-                    'Authorization': f'Bearer {OPENAI_API_KEY}'
-                },
-                json=data,
-                timeout=60
-            )
-            response.raise_for_status()
-        except requests.RequestException as e:
-            raise Exception(f"API Request Error: {e}") from e
+        response = _post_with_retry(data)
 
         resp_json = response.json()
         if 'choices' not in resp_json or not resp_json['choices']:
@@ -1081,8 +1096,11 @@ Return only the final JSON (formatted or minified), with no extra text.
     payload = {
         "model": OPENAI_MODEL,
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2,
     }
+
+    temperature = _model_temperature_override(OPENAI_MODEL)
+    if temperature is not None:
+        payload["temperature"] = temperature
     response = _post_with_retry(payload)
     resp_json = response.json()
     if "choices" not in resp_json or not resp_json["choices"]:

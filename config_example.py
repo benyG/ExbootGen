@@ -49,8 +49,10 @@ class RedisSettings:
 @dataclass(frozen=True)
 class OpenAISettings:
     api_key: str
+    model: str = "gpt-5-mini"
     api_url: str = "https://api.openai.com/v1/chat/completions"
     max_retries: int = 5
+    timeout_seconds: float = 120.0
     request_delay: float = 1.0
 
 
@@ -92,10 +94,12 @@ CONFIG = AppConfig(
     ),
     openai=OpenAISettings(
         api_key=os.getenv("OPENAI_API_KEY", "sk-remplacez-moi"),
+        model=os.getenv("OPENAI_MODEL", "gpt-5-mini"),
         api_url=os.getenv(
             "OPENAI_API_URL", "https://api.openai.com/v1/chat/completions"
         ),
         max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "5")),
+        timeout_seconds=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "120")),
         request_delay=float(os.getenv("API_REQUEST_DELAY", "1")),
     ),
     gui=GUISettings(password=os.getenv("GUI_PASSWORD", "admin")),
