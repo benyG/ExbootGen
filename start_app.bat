@@ -18,6 +18,7 @@ set "OPENAI_API_KEY=sk-remplacez-moi"
 set "OPENAI_API_URL=https://api.openai.com/v1/chat/completions"
 set "OPENAI_MAX_RETRIES=5"
 set "API_REQUEST_DELAY=1"
+set "OPENAI_MODEL=gpt-5-mini"
 
 REM === Parametres X (Twitter) ===
 REM  Pour publier un tweet, fournissez les identifiants OAuth 1.0a ci-dessous
@@ -28,8 +29,8 @@ set "X_API_ACCESS_TOKEN=votre-access-token"
 set "X_API_ACCESS_TOKEN_SECRET=votre-access-token-secret"
 
 REM === Paramètres Redis / Celery ===
-set "REDIS_HOST=redis-25453.crce197.us-east-2-1.ec2.redns.redis-cloud.com:15453"
-set "REDIS_PASSWORD=yACmUW5fjfEFG3MVcKrGJw0s0HNDLIt2"
+set "REDIS_HOST=redis-xxxxxxxxxxxx"
+set "REDIS_PASSWORD=xxxxxxxxxxxxxxx"
 
 set "JOB_STORE_URL=redis://:%REDIS_PASSWORD%@%REDIS_HOST%/0"
 set "CELERY_BROKER_URL=redis://:%REDIS_PASSWORD%@%REDIS_HOST%/0"
