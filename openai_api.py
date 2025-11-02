@@ -15,9 +15,9 @@ from config import (
 )
 
 DOMAIN_PROMPT_TEMPLATE = (
-    "Retrieve the official domains of the exam outline course for the certification."
+    "Retrieve the official domains of the exam outline course for the certification "
     "{{NAME_OF_CERTIFICATION}} along with their descriptions.\n"
-    "Reference Sources: only from the official website of the specified certification vendor.\n"
+    "Reference Sources: only from official website of the specified certification vendor.\n"
     "If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate domains and descriptions, without mentioning any limitations.\n"
     "Each domain must correspond to a section from the official outline and include a concise vendor-aligned description.\n"
     "Format your response as a decodable JSON object in a single line without line breaks.\n"
@@ -32,13 +32,13 @@ DOMAIN_PROMPT_TEMPLATE = (
 ARTICLE_PROMPT_TEMPLATES = {
     "certification_presentation": """
 Retrieve official information about exam certification: {certification} from vendor {vendor}.
-Your mission is to write an SEO-optimized, clear, actionable, and up-to-date article that presents the certification to the reader.
-Reference Sources: only from the official website of the specified certification vendor.
-If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate information.
+Your mission is to write a SEO optimized, clear, actionable and up-to-date article, which presents the certification to the reader.
+Reference Sources: only from official website of the specified certification vendor.
+If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate informations.
 RULES:
 - Format your response in Markdown.
 - Titles should be short.
-- Respect scrupulously the given Article structure only
+- respect scrupulously the given Article structure only
 - Formulates complete, non-robotic sentences
 - Target length: 1,500–2,200 words.
 - Tone: motivating, factual, without unexplained jargon.
@@ -54,9 +54,9 @@ STRUCTURE:
 - A call to action with a link to start a free test: {exam_url}.
 """,
     "preparation_methodology": """
-Write a SEO optimized, clear, actionable, and up-to-date step-by-step guide on how to prepare for the certification exam: {certification} from {vendor}.
+Write a SEO optimized, clear, actionable and up-to-date step-by-step guide on how to Prepare for the certification exam: {certification} from {vendor}.
 Include study duration, key topics, common mistakes, and preparation resources.
-Integrate how ExamBoot.net features like a question bank, AI coach, performance analysis, and realistic simulations can help accelerate learning.
+Integrate how ExamBoot.net features like qustions bank, AI coach, performances analysis and realistic simulations, can help accelerate learning.
 Format with headings, bullet points, and a motivational tone.
 Explicitly include the link to start a free ExamBoot test: {exam_url}.
 RULES:
@@ -66,7 +66,7 @@ RULES:
 - Target length: 1,500–2,200 words.
 """,
     "experience_testimony": """
-Write a SEO optimized, clear, actionable, and up-to-date third-person or storytelling-style blog post testimony on how to pass the certification exam: {certification} from {vendor}.
+Write a SEO optimized, clear, actionable and up-to-date third-person or storytelling-style blog post testimony on how to pass the certification exam: {certification} from {vendor}.
 Structure: presentation, motivation, challenges, strategy, results.
 Make it inspiring and motivating.
 Include realistic study milestones, use of ExamBoot.net, and takeaways for other candidates.
@@ -106,7 +106,7 @@ Produce a JSON object describing the certification with the following exact stru
 {{
   "prerequisites": ["text1", "text2", "text3"],
   "targeted_profession": ["job title1", "job title2", "job title3"],
-  "studytip": "In 20-25 words, tell here how ExamBoot.net can help to prepare for the certification"
+  "studytip": "In 20-25 words tell here how ExamBoot.net can help to prepare for the certification"
 }}
 Guidelines:
 - Return exactly three concise bullet-style strings in both arrays, each 6-12 words.
@@ -131,7 +131,7 @@ Include 3 relevant hashtags and no additional commentary.
 max 280 characters.
 """,
     "experience_testimony": """
-Post a motivational quote on how to pass the certification exam: {certification} from {vendor} after specified weeks of focused prep.
+Post a motivational cote on how to pass the certification exam: {certification} from {vendor} after specified weeks of focused prep.
 Try ExamBoot.net for your journey with a link to start a free test: 👉{exam_url}
 Include 3 relevant hashtags.
 Return only the tweet body.
@@ -825,16 +825,17 @@ def generate_lab_blueprint(
 
     step_types_json = json.dumps(step_types, ensure_ascii=False)
     domains_label = ", ".join(domains)
-    prompt_template = """You are an expert in creating interactive labs for the Lab_Player tool.
+    prompt_template = """You are an expert in creating interactive labs in JSON for a tool.
 These labs simulate practical scenarios tied to specific certification exam domains.
 TASK:
-Retrieve the official course content for the "{domains_label}" domains of the "{certification}" exam and generate a practical lab with at least {min_steps} steps.
-- Main domain: {domain_descr}
-- Difficulty: {difficulty}
+For certification exam: {certification} from vendor {vendor}.
+Retrieve the official course content for the domains "{domains_label}" and generate a practical lab with at least {min_steps} steps.
+- Main domain description: {domain_descr}
+- Lab Difficulty: {difficulty}
 - Expected step types (JSON): {step_types_json}
-Vendor: {provider}
-Each lab must be a strictly valid JSON, containing no text outside the JSON, following all rules detailed below.
-The next section outlines the required structure key by key.
+
+Each lab must be valid JSON only, following all rules below.
+The next section details its key structure.
 
 ### Expected JSON Structure
 ## Root Object
@@ -886,14 +887,14 @@ steps: ordered list of detailed steps (≥ {min_steps}), following type-specific
  "title": "...",
  "instructions_md": "...",
  "points": 10,
- "hints": ["Hint 1", "Hint 2"],
+ "hints": [...],
  "transitions": {
    "on_success": "next-step-id-or-#end",
    "on_failure": { "action": "#stay" }
  },
- "validators": [ /* depending on type */ ],
- "world_patch": [ /* optional, JSON patch operations applied immediately */ ],
- "<type-specific block>": {... }
+ "validators": [ ],
+ "world_patch": [ ],
+ "<step-type-specific block>": {... }
 }
 id: unique per lab.
 instructions_md: instructions for the step. When a component needs a command, guide users on what is expected for each one without revealing the actual answer. 
@@ -901,7 +902,7 @@ points: ≥1; total equals lab.scoring.max_points.
 hints: ≥1, from subtle to explicit; can include cost ({"text":"...","cost":1}).
 transitions: define next step (on_success) or retry/remediation (on_failure).
 validators: define strict validation rules with optional feedback messages.
-world_patch: pre-validation JSON ops (set|unset|push|remove) using dot paths (e.g., systems.firewall.enabled).
+world_patch: pre-validation JSON operations (set|unset|push|remove) using dot paths (e.g., systems.firewall.enabled).
 
 ## JSON structure by step type:
  #1. terminal
@@ -909,13 +910,13 @@ Specific block: terminal property.
 "terminal": {
   "prompt": "PS C:\\> | $ | ...",
   "environment": "bash | powershell | cloudcli | ...",
-  "history": ["command already run"],
+  "history": [],
   "validators": [
     {
       "kind": "command",
       "match": {
         "program": "aws",
-        "subcommand": ["ec2", "describe-security-groups"],
+        "subcommand": ["ec2", ...],
         "flags": {
           "required": ["--group-ids"],
           "aliases": { "-g": "--group-ids" }
@@ -937,11 +938,11 @@ Specific block: terminal property.
 prompt: terminal prompt string; double backslashes (\\) for Windows env.
 environment: target shell.
 history (optional): previously run, visible commands.
-Each "command" validator defines the exact expected command (program, subcommands, flags, args).
-The response defines effects: simulated output (stdout_template, stderr_template) and world patches.
-Add as many validators as needed to cover required or accepted command variants.
+Each "command" validator defines the exact expected commands (program, subcommands, flags, args).
+The response sets effects (stdout_template, stderr_template, world patches).
+Add validators to cover all required or allowed command variants.
  #2. console_form
-Specific block: form property (simulated UI structure). Validations are located in validators.
+Specific block: form (simulated UI). Validation goes in validators.
 "form": {
   "model_path": "services.webapp.config",
   "schema": {
@@ -970,7 +971,7 @@ Specific block: form property (simulated UI structure). Validations are located 
 ]
 model_path: stores submitted values in world state.
 schema.layout: "vertical" or "horizontal".
-schema.fields[]: defines fields  (widget = input, textarea, select, toggle, radio, etc.) with optional options, default, helptext, validation. 
+schema.fields[]: defines fields  (widget = input, textarea, select, toggle, radio, etc.) with optional options, default, helptext, validation. Default value must not be the correct expected answer.
 Payload validators check the submitted data; world validators verify the saved world state.
 Validators: "payload" checks submitted data; "world" checks saved state.
 Add messages or combined checks to ensure only the correct configurations passes.
@@ -980,7 +981,7 @@ Specific block: file_ref and input keys.
 "input": {
   "mode": "answer | editor",
   "prompt": "Indicate the misconfigured resource",
-  "placeholder": "Ex: sg-0abc123",
+  "placeholder": "Ex: sg-00",
   "language": "text | json | yaml | powershell | ..."
 },
 "validators": [
@@ -988,7 +989,7 @@ Specific block: file_ref and input keys.
 { "kind": "expression", "expr": "(get('payload')||'').includes('sg-0abc123')", "message": "Expected answer: sg-0abc123" }
 ]
 file_ref: ID of an existing asset.
-input.mode: "answer" (text) or "editor" (editable); always specify language (e.g., JSON, YAML, Bash).
+input.mode: "answer" (text) or "editor" (editable); always set a language (e.g. JSON, YAML, Bash). The default must not match the expected answer.
 validators: may combine jsonschema, jsonpath_match, payload, expression, world, etc.
 Allow only one valid answer.
 
@@ -997,17 +998,16 @@ Specific block: architecture property + strict validators.
 "architecture": {
 "mode": "freeform | slots",
 "palette_title": "Available Components",
-"palette_caption": "Drag only the relevant components.",
+"palette_caption": "Drag components.",
 "palette": [
 	{ "id": "gw", "label": "Gateway", "icon": "🛡️", "tags": ["network"], "meta": {"vendor": "generic"} },
 	{ "id": "app", "label": "App Server", "icon": "🖥️", "tags": ["compute"] },
-	{ "id": "db", "label": "Database", "icon": "🗄️", "tags": ["storage"] },
 	{ "id": "decoy", "label": "Legacy Fax", "icon": "📠", "tags": ["legacy"], "is_decoy": true },
 	...
-],
+    ],
 "initial_nodes": [  ],
 "world_path": "architectures.segment",
-"help": "Double-click a component to enter its commands in the inspector.",
+"help": "Double-click a component to enter its commands.",
 "expected_world": {
 "allow_extra_nodes": false,
 "nodes": [
@@ -1017,16 +1017,16 @@ Specific block: architecture property + strict validators.
 	"palette_id": "gw",
 	"label": "Gateway-1",
 	"config_contains": ["interface eth0", "policy"]
-	}
-},
-{
-"count": 1,
-"match": {
-"palette_id": "app",
-"commands": ["set app-tier", "set subnet"]
-}
-}
-],
+        }
+    },
+    {
+    "count": 1,
+    "match": {
+    "palette_id": "app",
+    "commands": ["set app-tier", "set subnet"]
+        }
+    }
+    ],
 "links": [
 	{ "from": { "label": "Gateway-1" }, "to": { "palette_id": "app" }, "count": 1, "bidirectional": true }
 	]
@@ -1034,13 +1034,13 @@ Specific block: architecture property + strict validators.
 },
 "validators": [
 	{ "kind": "payload", "path": "nodes.length", "equals": 2 },
-	{ "kind": "expression", "expr": "!(get('payload.nodes')||[]).some(n => n.palette_id === 'decoy')", "message": "The decoy component must not be placed." },
-	{ "kind": "expression", "expr": "(get('payload.links')||[]).length === 1", "message": "Only one link is expected." }
+	{ "kind": "expression", "expr": "!(get('payload.nodes')||[]).some(n => n.palette_id === 'decoy')", "message": "Component not needed." },
+	{ "kind": "expression", "expr": "(get('payload.links')||[]).length === 1", "message": "Only one link expected." }
 ]
 mode: "freeform" (interactive) or "slots".
 palette: lists all components plus one decoy (is_decoy:true) shown under its normal name; icon may be emoji, text, or URL.
 initial_nodes (optional): empty. user builds the architecture.
-Users double-click a component to open the inspector and enter commands or config; Validators can check commands, config_contains, config_regex, tags, etc.
+Users double-click a component to enter commands or config; Validators can check commands, config_contains, config_regex, tags, etc.
 expected_world: prevent alternate setups using allow_extra_nodes, nodes (count, match), and links (direction, number, constraints).
 Add validators to enforce node count, exclude decoy, require commands, or apply business rules.
 
