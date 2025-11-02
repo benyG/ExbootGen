@@ -6,6 +6,7 @@ import re
 import json
 import time
 import random
+from typing import Optional
 from config import (
     OPENAI_API_KEY,
     OPENAI_MODEL,
@@ -355,6 +356,21 @@ def generate_certification_course_art(certification: str, vendor: str) -> dict:
     prompt = _build_course_art_prompt(certification, vendor)
     raw_content = _run_completion(prompt)
     return clean_and_decode_json(raw_content)
+
+
+def _model_temperature_override(model: str) -> Optional[float]:
+    """Return the temperature override to use for the supplied model.
+
+    Some provider models (notably ``gpt-5-mini``) reject custom temperature
+    values and only accept the default setting.  Returning ``None`` ensures the
+    payload omits the ``temperature`` field altogether so that the provider can
+    apply its default configuration.
+    """
+
+    if model == "gpt-5-mini":
+        return None
+
+    return 0.2
 
 
 def _post_with_retry(payload: dict) -> requests.Response:
@@ -1075,8 +1091,11 @@ Return only the final JSON (formatted or minified), with no extra text.
     payload = {
         "model": OPENAI_MODEL,
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2,
     }
+
+    temperature = _model_temperature_override(OPENAI_MODEL)
+    if temperature is not None:
+        payload["temperature"] = temperature
     response = _post_with_retry(payload)
     resp_json = response.json()
     if "choices" not in resp_json or not resp_json["choices"]:
