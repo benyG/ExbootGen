@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Labs Generator · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 16% 18%, rgba(124,247,255,0.18), transparent 55%),
+                     radial-gradient(circle at 82% 20%, rgba(244,114,182,0.2), transparent 60%),
+                     radial-gradient(circle at 45% 80%, rgba(71,245,192,0.24), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.78);
+      --glass-soft: rgba(15, 19, 32, 0.86);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 22px 48px rgba(7, 11, 23, 0.5);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb {
+      position: fixed;
+      width: 32rem;
+      height: 32rem;
+      border-radius: 50%;
+      opacity: 0.42;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      background: radial-gradient(circle, rgba(71,245,192,0.32) 0%, rgba(4,7,17,0) 70%);
+      animation: drift 22s ease-in-out infinite;
+      z-index: 0;
+    }
+
+    .orb-1 { top: -12rem; left: -6rem; }
+    .orb-2 { bottom: -10rem; right: -4rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.25) 0%, rgba(4,7,17,0) 70%); }
+    .orb-3 { top: 48vh; right: 52%; transform: translateX(50%); animation-delay: -14s; background: radial-gradient(circle, rgba(244,114,182,0.28) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift {
+      0%, 100% { transform: translate3d(0,0,0) scale(1); }
+      45% { transform: translate3d(32px, -28px, 0) scale(1.06); }
+      75% { transform: translate3d(-28px, 24px, 0) scale(0.95); }
+    }
+
+    .stellar-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(4, 7, 17, 0.7);
+      backdrop-filter: saturate(180%) blur(18px);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .stellar-container {
+      width: min(1200px, 92vw);
+      margin: 0 auto;
+      padding: 1.2rem 0 1.6rem;
+    }
+
+    .stellar-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .stellar-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 2.75rem;
+      height: 2.75rem;
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25));
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      color: var(--accent-strong);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28);
+    }
+
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .nav-toggle {
+      display: none;
+      width: 2.8rem;
+      height: 2.8rem;
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(15, 19, 32, 0.68);
+      color: var(--text-primary);
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.35s var(--transition), background 0.35s var(--transition);
+    }
+
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+
+    .nav-toggle span,
+    .nav-toggle span::before,
+    .nav-toggle span::after {
+      display: block;
+      width: 18px;
+      height: 2px;
+      background: currentColor;
+      border-radius: 999px;
+      position: relative;
+      transition: transform 0.35s ease, opacity 0.3s ease;
+    }
+
+    .nav-toggle span::before,
+    .nav-toggle span::after {
+      content: '';
+      position: absolute;
+      left: 0;
+    }
+
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 1.4rem;
+      border-radius: var(--radius-lg);
+      padding: 0.35rem;
+      background: rgba(8, 12, 24, 0.55);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06);
+    }
+
+    .stellar-nav a {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.65rem 1.05rem;
+      border-radius: 14px;
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition);
+    }
+
+    .stellar-nav a::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14));
+      opacity: 0;
+      transition: opacity 0.35s var(--transition);
+      z-index: -1;
+    }
+
+    .stellar-nav a:hover { color: var(--text-primary); transform: translateY(-2px); }
+    .stellar-nav a:hover::after { opacity: 1; }
+    .stellar-nav a.active { color: var(--text-primary); }
+    .stellar-nav a.active::after { opacity: 1; box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18); }
+
+    .stellar-main {
+      flex: 1;
+      width: min(1200px, 92vw);
+      margin: 0 auto;
+      padding: 4rem 0 5.6rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2.8rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .glass-card {
+      background: var(--glass);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-strong);
+      padding: clamp(2rem, 3vw, 3rem);
+      backdrop-filter: blur(26px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .glass-card::before {
+      content: '';
+      position: absolute;
+      inset: 1px;
+      border-radius: calc(var(--radius-xl) - 2px);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      pointer-events: none;
+    }
+
+    .hero-intro h1 {
+      margin: 0 0 1rem;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(2.2rem, 4vw, 2.9rem);
+      letter-spacing: -0.01em;
+    }
+
+    .hero-intro p {
+      margin: 0;
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+
+    label { font-weight: 500; font-size: 0.95rem; color: var(--text-primary); display: block; margin-bottom: 0.35rem; }
+    select, input, textarea, button {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      padding: 0.75rem 0.95rem;
+      background: rgba(10, 15, 28, 0.85);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 0.95rem;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+    }
+
+    select:focus, input:focus, textarea:focus, button:focus {
+      outline: none;
+      border-color: rgba(71, 245, 192, 0.6);
+      box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.22);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.4rem;
+      margin-top: 1.6rem;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 2rem;
+    }
+
+    .stellar-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      padding: 0.85rem 1.6rem;
+      border-radius: 999px;
+      background: linear-gradient(135deg, rgba(71,245,192,0.9), rgba(124,247,255,0.85));
+      color: #020617;
+      font-weight: 600;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 14px 35px rgba(71, 245, 192, 0.3);
+      transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition);
+    }
+
+    .stellar-button:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 18px 42px rgba(71, 245, 192, 0.38); }
+
+    .panel {
+      border-radius: var(--radius-lg);
+      padding: 1.8rem;
+      background: rgba(8, 12, 24, 0.72);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+      box-shadow: 0 18px 40px rgba(3, 7, 18, 0.55);
+      position: relative;
+    }
+
+    .panel h2 {
+      margin: 0;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.4rem;
+    }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      background: rgba(71, 245, 192, 0.12);
+      border: 1px solid rgba(71, 245, 192, 0.32);
+      color: var(--accent-strong);
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .results-grid {
+      display: grid;
+      gap: 1.4rem;
+    }
+
+    .lab-card {
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      padding: 1.4rem;
+      background: rgba(10, 16, 28, 0.82);
+      box-shadow: 0 16px 32px rgba(5, 11, 23, 0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+    }
+
+    .lab-card h3 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    pre {
+      margin: 0;
+      padding: 1rem;
+      background: rgba(3, 7, 18, 0.72);
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      font-size: 0.85rem;
+      overflow-x: auto;
+    }
+
+    .muted { color: var(--text-muted); font-size: 0.9rem; }
+
+    #loadingOverlay {
+      position:fixed;
+      top:0;
+      left:0;
+      width:100%;
+      height:100%;
+      background:rgba(4,7,17,0.72);
+      backdrop-filter: blur(10px);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:50;
+    }
+
+    #loadingOverlay.show { display:flex; }
+
+    .loader {
+      border:6px solid rgba(148,163,184,0.2);
+      border-top:6px solid rgba(71,245,192,0.8);
+      border-radius:50%;
+      width:70px;
+      height:70px;
+      animation:spin 1s linear infinite;
+    }
+
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    [data-animate] { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    [data-animate].is-visible { opacity: 1; transform: translateY(0); }
+
+    ul.domain-list {
+      margin: 0;
+      padding-left: 1.2rem;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    ul.domain-list li { margin-bottom: 0.4rem; }
+
+    footer { color: rgba(226, 232, 240, 0.55); text-align: center; padding: 2.4rem 0 3rem; font-size: 0.85rem; }
+
+    @media (max-width: 960px) {
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 1.2rem; }
+      .stellar-nav { flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+  <div class="stellar-orb orb-3"></div>
+
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <span class="brand-mark">EX</span>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Console d'orchestration pédagogique</span>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
+        </button>
+      </div>
+      <nav class="stellar-nav" id="stellarNav">
+        <a href="{{ url_for('home') }}" data-route="{{ url_for('home') }}">Home</a>
+        <a href="{{ url_for('populate_index') }}" data-route="{{ url_for('populate_index') }}">Populate(AI)</a>
+        <a href="{{ url_for('dom.index') }}" data-route="{{ url_for('dom.index') }}">Domains</a>
+        <a href="{{ url_for('move.index') }}" data-route="{{ url_for('move.index') }}">Move Q</a>
+        <a href="{{ url_for('reloc.index') }}" data-route="{{ url_for('reloc.index') }}">Relocate(AI)</a>
+        <a href="{{ url_for('pdf.index') }}" data-route="{{ url_for('pdf.index') }}">PDF Import</a>
+        <a href="{{ url_for('pdf.generate_index') }}" data-route="{{ url_for('pdf.generate_index') }}">Generate via PDF</a>
+        <a href="{{ url_for('quest.index') }}" data-route="{{ url_for('quest.index') }}">JSON Import</a>
+        <a href="{{ url_for('hol.player') }}" data-route="{{ url_for('hol.player') }}">Hands-on Labs</a>
+        <a href="{{ url_for('hol.labs_generator') }}" data-route="{{ url_for('hol.labs_generator') }}" class="active">Labs Generator</a>
+        <a href="{{ url_for('fix_index') }}" data-route="{{ url_for('fix_index') }}">Fix Q(AI)</a>
+        <a href="{{ url_for('reports') }}" data-route="{{ url_for('reports') }}">Reports</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="stellar-main">
+    <section class="glass-card hero-intro" data-animate>
+      <h1>Générez des labs interactifs prêts pour Lab Player</h1>
+      <p>Analysez la certification ciblée, sélectionnez la difficulté et laissez l’IA composer des scénarios pratiques structurés pour votre Lab_Player.</p>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <form id="labsForm" class="form-grid">
+        <div>
+          <label>Provider</label>
+          <select id="providerSelect" name="provider_id" required>
+            <option value="">Sélectionner…</option>
+            {% for provider in providers %}
+            <option value="{{ provider[0] }}">{{ provider[1] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Certification</label>
+          <select id="certSelect" name="cert_id" required>
+            <option value="">Sélectionner…</option>
+          </select>
+        </div>
+        <div>
+          <label>Difficulté</label>
+          <select id="difficultySelect" name="difficulty">
+            <option value="easy">Easy</option>
+            <option value="medium" selected>Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </div>
+        <div>
+          <label>Nombre de labs</label>
+          <input type="number" id="labCount" name="lab_count" min="1" max="8" value="4">
+        </div>
+        <div>
+          <label>Nombre minimum de steps</label>
+          <input type="number" id="minSteps" name="min_steps" min="3" max="20" value="5">
+        </div>
+        <div>
+          <label>Domaines détectés</label>
+          <div id="domainsPanel" class="panel" style="min-height: 120px;">
+            <span class="muted">Sélectionnez une certification pour afficher les domaines disponibles.</span>
+            <ul class="domain-list" id="domainList"></ul>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="stellar-button" type="submit">Lancer la génération</button>
+          <span class="muted" id="statusMessage"></span>
+        </div>
+      </form>
+    </section>
+
+    <section class="glass-card" data-animate id="analysisSection" style="display:none;">
+      <div class="panel">
+        <div class="status-chip" id="analysisStatus">Analyse prête</div>
+        <h2>Analyse de la certification</h2>
+        <div id="analysisContent" class="muted"></div>
+        <h2>Step types activés</h2>
+        <div id="stepTypesContent" class="muted"></div>
+      </div>
+    </section>
+
+    <section class="glass-card" data-animate id="resultsSection" style="display:none;">
+      <div class="panel">
+        <div class="status-chip" id="resultsStatus">Labs générés</div>
+        <h2>Résultats</h2>
+        <div id="errorsContainer" class="muted"></div>
+        <div class="results-grid" id="labsContainer"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="loadingOverlay">
+    <div class="loader"></div>
+  </div>
+
+  <footer>
+    © {{ current_year|default(2024) }} · ExBoot Laboratory
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/searchable-select.js') }}"></script>
+  <script>
+    function animateOnScroll() {
+      const elements = document.querySelectorAll('[data-animate]');
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.15 });
+      elements.forEach(el => observer.observe(el));
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      animateOnScroll();
+
+      const navToggle = document.getElementById('navToggle');
+      const nav = document.getElementById('stellarNav');
+      navToggle.addEventListener('click', () => {
+        const expanded = navToggle.getAttribute('aria-expanded') === 'true';
+        navToggle.setAttribute('aria-expanded', String(!expanded));
+        navToggle.classList.toggle('is-open');
+        document.body.classList.toggle('nav-open');
+      });
+
+      const providerSelect = document.getElementById('providerSelect');
+      const certSelect = document.getElementById('certSelect');
+      const domainList = document.getElementById('domainList');
+      const domainsPanel = document.getElementById('domainsPanel');
+      const statusMessage = document.getElementById('statusMessage');
+      const analysisSection = document.getElementById('analysisSection');
+      const analysisContent = document.getElementById('analysisContent');
+      const stepTypesContent = document.getElementById('stepTypesContent');
+      const resultsSection = document.getElementById('resultsSection');
+      const labsContainer = document.getElementById('labsContainer');
+      const errorsContainer = document.getElementById('errorsContainer');
+      const loadingOverlay = document.getElementById('loadingOverlay');
+      const base = ({{ url_for('hol.labs_generator') | tojson }}).replace(/\/$/, '') + '/';
+
+      const providerSearch = window.makeSelectSearchable ? window.makeSelectSearchable(providerSelect, { placeholder: 'Rechercher un provider…' }) : null;
+      const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certSelect, { placeholder: 'Rechercher une certification…' }) : null;
+
+      function resetDomains() {
+        domainList.innerHTML = '';
+        const placeholder = document.createElement('span');
+        placeholder.className = 'muted';
+        placeholder.textContent = 'Sélectionnez une certification pour afficher les domaines disponibles.';
+        domainsPanel.innerHTML = '';
+        domainsPanel.appendChild(placeholder);
+        domainsPanel.appendChild(domainList);
+      }
+
+      resetDomains();
+
+      function populateProviders(list) {
+        if (providerSearch) {
+          const options = [{ value: '', label: 'Sélectionner…' }].concat(
+            list.map(p => ({ value: String(p.id), label: p.name }))
+          );
+          providerSearch.setOptions(options, { keepSearch: false, selectedValue: '' });
+        } else {
+          providerSelect.innerHTML = '<option value="">Sélectionner…</option>';
+          list.forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item.id;
+            opt.textContent = item.name;
+            providerSelect.appendChild(opt);
+          });
+        }
+        providerSelect.value = '';
+        providerSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+
+      function populateCertifications(list) {
+        if (certSearch) {
+          const options = [{ value: '', label: 'Sélectionner…' }].concat(
+            list.map(c => ({ value: String(c.id), label: c.name }))
+          );
+          certSearch.setOptions(options, { keepSearch: false, selectedValue: '' });
+        } else {
+          certSelect.innerHTML = '<option value="">Sélectionner…</option>';
+          list.forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item.id;
+            opt.textContent = item.name;
+            certSelect.appendChild(opt);
+          });
+        }
+        certSelect.value = '';
+        certSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+
+      async function fetchJSON(url) {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error('Requête échouée');
+        }
+        return response.json();
+      }
+
+      async function refreshProviders() {
+        try {
+          const data = await fetchJSON(base + 'api/providers');
+          populateProviders(data);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      async function refreshCertifications(providerId) {
+        if (!providerId) {
+          populateCertifications([]);
+          resetDomains();
+          return;
+        }
+        try {
+          const data = await fetchJSON(base + 'api/certifications/' + providerId);
+          populateCertifications(data);
+          if (data.length === 0) {
+            resetDomains();
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      async function refreshDomains(certId) {
+        resetDomains();
+        if (!certId) {
+          return;
+        }
+        try {
+          const data = await fetchJSON(base + 'api/domains/' + certId);
+          domainsPanel.innerHTML = '';
+          domainsPanel.appendChild(domainList);
+          domainList.innerHTML = '';
+          if (!data.length) {
+            const msg = document.createElement('span');
+            msg.className = 'muted';
+            msg.textContent = 'Aucun domaine enregistré pour cette certification.';
+            domainsPanel.insertBefore(msg, domainList);
+            return;
+          }
+          const title = document.createElement('span');
+          title.className = 'muted';
+          title.textContent = 'Domaines disponibles :';
+          domainsPanel.insertBefore(title, domainList);
+          data.forEach(domain => {
+            const li = document.createElement('li');
+            li.textContent = domain.name;
+            domainList.appendChild(li);
+          });
+        } catch (err) {
+          console.error(err);
+          const errorMsg = document.createElement('span');
+          errorMsg.className = 'muted';
+          errorMsg.textContent = 'Impossible de récupérer les domaines pour cette certification.';
+          domainsPanel.innerHTML = '';
+          domainsPanel.appendChild(errorMsg);
+          domainsPanel.appendChild(domainList);
+        }
+      }
+
+      providerSelect.addEventListener('change', () => {
+        const providerId = providerSelect.value;
+        refreshCertifications(providerId);
+      });
+
+      certSelect.addEventListener('change', () => {
+        const certId = certSelect.value;
+        refreshDomains(certId);
+      });
+
+      if (!providerSearch) {
+        refreshProviders();
+      }
+
+      const labsForm = document.getElementById('labsForm');
+      labsForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const providerId = providerSelect.value;
+        const certId = certSelect.value;
+        if (!providerId || !certId) {
+          statusMessage.textContent = 'Veuillez sélectionner un provider et une certification.';
+          return;
+        }
+        statusMessage.textContent = '';
+        loadingOverlay.classList.add('show');
+        analysisSection.style.display = 'none';
+        resultsSection.style.display = 'none';
+        labsContainer.innerHTML = '';
+        errorsContainer.innerHTML = '';
+
+        const payload = {
+          provider_id: providerId,
+          cert_id: certId,
+          difficulty: document.getElementById('difficultySelect').value,
+          lab_count: document.getElementById('labCount').value,
+          min_steps: document.getElementById('minSteps').value
+        };
+
+        try {
+          const response = await fetch(base + 'api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await response.json();
+          if (!response.ok || data.status === 'error') {
+            statusMessage.textContent = data.message || 'Erreur lors de la génération.';
+            return;
+          }
+
+          const entries = Object.entries(data.analysis || {});
+          analysisContent.innerHTML = entries.length
+            ? '<ul>' + entries.map(([key, value]) => `<li><strong>${key}</strong>: ${value}</li>`).join('') + '</ul>'
+            : '<span class="muted">Aucune donnée analysée.</span>';
+
+          stepTypesContent.innerHTML = data.step_matrix && data.step_matrix.length
+            ? '<ul>' + data.step_matrix.map(obj => {
+                const [type, flag] = Object.entries(obj)[0];
+                return `<li>${type} : <strong>${flag === '1' ? 'activé' : 'désactivé'}</strong></li>`;
+              }).join('') + '</ul>'
+            : '<span class="muted">Aucun type de step détecté.</span>';
+          analysisSection.style.display = 'block';
+
+          const hasErrors = Array.isArray(data.errors) && data.errors.length > 0;
+          const hasLabs = Array.isArray(data.labs) && data.labs.length > 0;
+
+          errorsContainer.innerHTML = '';
+          labsContainer.innerHTML = '';
+
+          if (hasErrors) {
+            errorsContainer.innerHTML = '<strong>Erreurs détectées :</strong><br>' + data.errors
+              .sort((a, b) => a.index - b.index)
+              .map(err => `Cycle ${err.index + 1}: ${err.message}`)
+              .join('<br>');
+          }
+
+          if (hasLabs) {
+            data.labs
+              .sort((a, b) => a.index - b.index)
+              .forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'lab-card';
+                const title = document.createElement('h3');
+                title.textContent = `Lab ${item.index + 1}`;
+                const info = document.createElement('div');
+                info.className = 'muted';
+                const primary = item.domains && item.domains.primary ? item.domains.primary.name : '—';
+                const secondary = item.domains && item.domains.secondary ? item.domains.secondary.name : '—';
+                info.textContent = `Domaine principal : ${primary} · Domaine secondaire : ${secondary}`;
+                const pre = document.createElement('pre');
+                pre.textContent = JSON.stringify(item.lab, null, 2);
+                card.appendChild(title);
+                card.appendChild(info);
+                card.appendChild(pre);
+                labsContainer.appendChild(card);
+              });
+            resultsSection.style.display = 'block';
+          } else if (hasErrors) {
+            const placeholder = document.createElement('p');
+            placeholder.className = 'muted';
+            placeholder.textContent = 'Aucun lab n\'a pu être généré.';
+            labsContainer.appendChild(placeholder);
+            resultsSection.style.display = 'block';
+            statusMessage.textContent = 'La génération a rencontré des erreurs.';
+          } else {
+            statusMessage.textContent = 'Aucun lab généré.';
+            resultsSection.style.display = 'none';
+          }
+        } catch (error) {
+          console.error(error);
+          statusMessage.textContent = 'Erreur réseau ou serveur.';
+        } finally {
+          loadingOverlay.classList.remove('show');
+        }
+      });
+    });
+  </script>
+</body>
+</html>
