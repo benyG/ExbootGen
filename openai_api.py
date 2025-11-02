@@ -12,6 +12,7 @@ from config import (
     OPENAI_MODEL,
     OPENAI_API_URL,
     OPENAI_MAX_RETRIES,
+    OPENAI_TIMEOUT_SECONDS,
 )
 
 DOMAIN_PROMPT_TEMPLATE = (
@@ -390,7 +391,7 @@ def _post_with_retry(payload: dict) -> requests.Response:
                 OPENAI_API_URL,
                 headers=headers,
                 json=payload,
-                timeout=60,
+                timeout=OPENAI_TIMEOUT_SECONDS,
             )
 
             # Treat 429 and 5xx responses as retryable
@@ -405,11 +406,13 @@ def _post_with_retry(payload: dict) -> requests.Response:
 
         except requests.HTTPError as e:
             attempt += 1
-            if attempt > OPENAI_MAX_RETRIES:
+            if attempt >= OPENAI_MAX_RETRIES:
                 error_detail = ""
                 if getattr(e, "response", None) is not None:
                     error_detail = e.response.text
-                message = f"API Request Error: {e}"
+                message = (
+                    f"API Request Error after {attempt} attempts: {e}"
+                )
                 if error_detail:
                     message += f" | Details: {error_detail}"
                 raise Exception(message) from e
@@ -435,8 +438,10 @@ def _post_with_retry(payload: dict) -> requests.Response:
 
         except requests.RequestException as e:
             attempt += 1
-            if attempt > OPENAI_MAX_RETRIES:
-                raise Exception(f"API Request Error: {e}") from e
+            if attempt >= OPENAI_MAX_RETRIES:
+                raise Exception(
+                    f"API Request Error after {attempt} attempts: {e}"
+                ) from e
 
             delay = min(60, (2 ** (attempt - 1))) + random.uniform(0, 1)
             logging.warning(
@@ -833,7 +838,6 @@ Retrieve the official course content for the domains "{domains_label}" and gener
 - Main domain description: {domain_descr}
 - Lab Difficulty: {difficulty}
 - Expected step types (JSON): {step_types_json}
-
 Each lab must be valid JSON only, following all rules below.
 The next section details its key structure.
 
@@ -847,7 +851,7 @@ title, subtitle: main and short titles.
 scenario_md: 2–3 Markdown paragraphs describing lab scenario context, mission, and objectives related to {provider}/{certification}.
 variables (optional): reusable definitions (type: "choice"|"string"|"number", with possible choices, min, max, etc.). Use via {{variable}}.
 scoring: {"max_points": <sum of step points>}.
-timer: {"mode": "countdown", "seconds": {duration_minutes} * 60} — Must be estimated during generation.
+timer: {"mode": "countdown", "seconds": x} — Duration must be estimated during generation.
 assets: array of downloadable or inline resources (id, kind, filename, mime, and either inline:true + content_b64 or url).
 steps: ordered list of detailed steps (≥ {min_steps}), following type-specific rules.
 # Reference JSON template:

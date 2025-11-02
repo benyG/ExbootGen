@@ -31,6 +31,7 @@ OPENAI_API_URL = os.environ.get(
     "OPENAI_API_URL", "https://api.openai.com/v1/chat/completions"
 )
 OPENAI_MAX_RETRIES = int(os.environ.get("OPENAI_MAX_RETRIES", "5"))
+OPENAI_TIMEOUT_SECONDS = float(os.environ.get("OPENAI_TIMEOUT_SECONDS", "120"))
 
 # Delay (in seconds) between two consecutive calls to the OpenAI API during the
 # populate process.  This value can be tuned via the ``API_REQUEST_DELAY``
