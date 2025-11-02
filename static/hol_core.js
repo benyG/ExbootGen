@@ -799,10 +799,19 @@ function renderArchitectureFreeform(step, cfg, mount){
   });
   configField.appendChild(configSpan);
   configField.appendChild(configTerminal.root);
+  const inspectorActions = document.createElement('div');
+  inspectorActions.className = 'arch-inspector-actions';
+  const clearCmdBtn = document.createElement('button');
+  clearCmdBtn.type = 'button';
+  clearCmdBtn.className = 'button secondary';
+  clearCmdBtn.textContent = cfg.clear_commands_label || 'Effacer les commandes';
+  clearCmdBtn.disabled = true;
+  inspectorActions.appendChild(clearCmdBtn);
   inspector.appendChild(inspectorTitle);
   inspector.appendChild(inspectorSubtitle);
   inspector.appendChild(labelField);
   inspector.appendChild(configField);
+  inspector.appendChild(inspectorActions);
   canvasWrap.appendChild(inspector);
 
   layout.appendChild(paletteCol);
@@ -897,6 +906,7 @@ function renderArchitectureFreeform(step, cfg, mount){
       inspectorSubtitle.textContent = 'Double-clique sur un élément de la topologie pour saisir ses commandes standard.';
       labelInput.disabled = true;
       configTerminal.setEnabled(false);
+      clearCmdBtn.disabled = true;
       return;
     }
     const node = getNodeById(inspectorNodeId);
@@ -916,6 +926,7 @@ function renderArchitectureFreeform(step, cfg, mount){
     }
     labelInput.disabled = false;
     configTerminal.setEnabled(true);
+    clearCmdBtn.disabled = false;
   }
 
   function closeInspector(){
@@ -950,6 +961,12 @@ function renderArchitectureFreeform(step, cfg, mount){
     const node = getNodeById(inspectorNodeId);
     if(!node) return;
     node.configText = value;
+  });
+
+  clearCmdBtn.addEventListener('click', ()=>{
+    if(!inspectorVisible) return;
+    configTerminal.clear();
+    configTerminal.focus();
   });
 
   updateInspector();
