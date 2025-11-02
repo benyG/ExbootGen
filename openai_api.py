@@ -815,186 +815,185 @@ def generate_lab_blueprint(
 
     step_types_json = json.dumps(step_types, ensure_ascii=False)
     domains_label = ", ".join(domains)
-    prompt_template = """You are an expert specializing in generating interactive labs intended to be executed in a custom tool called Lab_Player.
-The interactive labs are based on practical scenarios for preparing for specific areas of the certification exam identified below.
-
-### TASK:
-Retrieve the official course content for the "{domains_label}" domains of the "{certification}" certification exam and generate a practical lab exercise with a minimum of {min_steps} steps.
-Main domain description: {domain_descr}
-Desired lab difficulty: {difficulty}
-List of expected step types (JSON array): {step_types_json}
-Certification Vendor: {provider}
-Each lab created is a strictly valid JSON respecting all the rules described below, without any text outside the JSON.
-Below is the key-by-key breakdown.
+    prompt_template = """You are an expert in creating interactive labs for the Lab_Player tool.
+These labs simulate practical scenarios tied to specific certification exam domains.
+TASK:
+Retrieve the official course content for the "{domains_label}" domains of the "{certification}" exam and generate a practical lab with at least {min_steps} steps.
+- Main domain: {domain_descr}
+- Difficulty: {difficulty}
+- Expected step types (JSON): {step_types_json}
+Vendor: {provider}
+Each lab must be a strictly valid JSON, containing no text outside the JSON, following all rules detailed below.
+The next section outlines the required structure key by key.
 
 ### Expected JSON Structure
 ## Root Object
-schema_version (string): always "0.2.0".
-lab (object): contains everything else in the scenario.
+schema_version: always "0.2.0".
+lab: contains all scenario data.
 ## Lab Object
-- id (string, unique kebab-case): stable identifier for the lab.
-- title (string): displayed title.
-- subtitle (string): short complement.
-- scenario_md (Markdown string): exactly 2 or 3 paragraphs describing the professional context, the mission, and the objectives related to {provider}/{certification}.
-- variables (optional object): definitions of reusable variables. Each entry follows {{ "type": "choice"|"string"|"number", ... }} and may include choices, min, max, precision, etc. Reference them via {{variable}} in the JSON.
-- scoring (object): {{ "max_points": <sum of points from the steps> }}.
-- timer (object): {{ "mode": "countdown", "seconds": {duration_minutes} * 60 }}. The value indicated is an estimate adapted to this lab.
-- assets (array): list of downloadable or inline resources. Each asset is an object with id, kind, filename, mime, and either inline: true + content_b64 (Base64 encoded data), or url.
-- steps (array): sequence of detailed steps (minimum {min_steps} elements) respecting the type-specific specifications.
+id (unique kebab-case): stable lab identifier.
+title, subtitle: main and short titles.
+scenario_md: 2–3 Markdown paragraphs describing lab scenario context, mission, and objectives related to {provider}/{certification}.
+variables (optional): reusable definitions (type: "choice"|"string"|"number", with possible choices, min, max, etc.). Use via {{variable}}.
+scoring: {"max_points": <sum of step points>}.
+timer: {"mode": "countdown", "seconds": {duration_minutes} * 60} — Must be estimated during generation.
+assets: array of downloadable or inline resources (id, kind, filename, mime, and either inline:true + content_b64 or url).
+steps: ordered list of detailed steps (≥ {min_steps}), following type-specific rules.
 # Reference JSON template:
-{{
-"schema_version": "0.2.0",
-"lab": {{
-"id": "scenario-name",
-"title": "...",
-"subtitle": "...",
-"scenario_md": "Paragraph 1...\n\nParagraph 2...",
-"variables": {{
-"example_var": {{
-"type": "choice",
-"choices": ["option A", "option B"]
-}}
-}},
-"scoring": {{ "max_points": 100 }},
-"timer": {{ "mode": "countdown", "seconds": 3600 }},
-"assets": [
-{{
-"id": "file-id",
-"kind": "file",
-"filename": "policy.json",
-"mime": "application/json",
-"inline": true,
-"content_b64": "BASE64..."
-}}
-],
-"steps": []
-}}
-}}
+{
+  "schema_version": "0.2.0",
+  "lab": {
+    "id": "scenario-name",
+    "title": "...",
+    "subtitle": "...",
+    "scenario_md": "Paragraphs ...",
+    "variables": {
+      "example_var": {
+        "type": "choice",
+        "choices": ["option A", "option B"]
+      }
+    },
+    "scoring": { "max_points": x },
+    "timer": { "mode": "countdown", "seconds": x },
+    "assets": [
+      {
+        "id": "file-id",
+        "kind": "file",
+        "filename": "policy.json",
+        "mime": "application/json",
+        "inline": true,
+        "content_b64": "BASE64..."
+      }
+    ],
+    "steps": []
+  }
+}
 
-## Common structure of each step (lab.steps[i])
-{{
-"id": "unique-step-id",
-"type": "terminal | console_form | inspect_file | architecture | quiz | anticipation",
-"title": "...",
-"instructions_md": "...",
-"points": 10,
-"hints": ["Hint 1", "Hint 2"],
-"transitions": {{
-"on_success": "next-step-id-or-#end",
-"on_failure": {{ "action": "#stay" }}
-}},
-"validators": [ /* depending on type */ ],
-"world_patch": [ /* optional, JSON patch operations applied immediately */ ],
-"<type-specific block>": {{ ... }}
-}}
-- id: unique within the lab.
-- instructions_md: Rich, contextualized Markdown, recalling the objective and available artifacts. When a component requires a command, instruct users here on what they should do for each component. Be careful not to provide them with the answer.
-- points: ≥ 1. The sum of points must equal lab.scoring.max_points.
-- hints: at least one hint, from the most subtle to the most explicit. It is possible to add a cost per hint ({{"text":"...","cost":1}}).
-- transitions.on_success: references another step or "#end". on_failure can keep the user on the same step (#stay) or point to a remediation step.
-- validators: define strict validation rules. Each validator can include a message for clear feedback.
-- world_patch: operations applied before validation. Use objects {{ "op": "set"|"unset"|"push"|"remove", "path": "...", "value": ... }}. Paths use dot notation (systems.firewall.enabled).
+## Common Step Structure (lab.steps[i])
+{
+ "id": "unique-step-id",
+ "type": "terminal | console_form | inspect_file | architecture | quiz | anticipation",
+ "title": "...",
+ "instructions_md": "...",
+ "points": 10,
+ "hints": ["Hint 1", "Hint 2"],
+ "transitions": {
+   "on_success": "next-step-id-or-#end",
+   "on_failure": { "action": "#stay" }
+ },
+ "validators": [ /* depending on type */ ],
+ "world_patch": [ /* optional, JSON patch operations applied immediately */ ],
+ "<type-specific block>": {... }
+}
+id: unique per lab.
+instructions_md: instructions for the step. When a component needs a command, guide users on what is expected for each one without revealing the actual answer. 
+points: ≥1; total equals lab.scoring.max_points.
+hints: ≥1, from subtle to explicit; can include cost ({"text":"...","cost":1}).
+transitions: define next step (on_success) or retry/remediation (on_failure).
+validators: define strict validation rules with optional feedback messages.
+world_patch: pre-validation JSON ops (set|unset|push|remove) using dot paths (e.g., systems.firewall.enabled).
 
 ## JSON structure by step type:
-#1. terminal
+ #1. terminal
 Specific block: terminal property.
-
-"terminal": {{
-"prompt": "PS C:\\> | $ | ...",
-"environment": "bash | powershell | cloudcli | ...",
-"history": ["command already run"],
-"validators": [
-{{
-"kind": "command",
-"match": {{
-"program": "aws",
-"subcommand": ["ec2", "describe-security-groups"],
-"flags": {{
-"required": ["--group-ids"],
-"aliases": {{ "-g": "--group-ids" }}
-}},
-"args": [
-{{ "flag": "--group-ids", "expect": "sg-{{expected_group}}" }}
-]
-}},
-"response": {{
-"stdout_template": "...",
-"stderr_template": "",
-"world_patch": [{{ "op": "set", "path": "systems.network.audit", "value": true }}
-]
-}}
-}}
-]
-}}
-- prompt: string representing the terminal prompt. Double all backslashes (\\) when dealing with Windows environments.
-- environment: identifies the target shell.
-- history (optional): commands already executed and visible.
-- Each kind: "command" validator describes the exact command expected (program, subcommands, flags, arguments, options).
-- The response section specifies the effect: simulated outputs (stdout_template, stderr_template) and world patches.
-Create as many validators as needed to cover all required commands (include accepted variants if the scenario requires it).
-#2. console_form
+"terminal": {
+  "prompt": "PS C:\\> | $ | ...",
+  "environment": "bash | powershell | cloudcli | ...",
+  "history": ["command already run"],
+  "validators": [
+    {
+      "kind": "command",
+      "match": {
+        "program": "aws",
+        "subcommand": ["ec2", "describe-security-groups"],
+        "flags": {
+          "required": ["--group-ids"],
+          "aliases": { "-g": "--group-ids" }
+        },
+        "args": [
+          { "flag": "--group-ids", "expect": "sg-{{expected_group}}" }
+        ]
+      },
+      "response": {
+        "stdout_template": "...",
+        "stderr_template": "",
+        "world_patch": [
+          { "op": "set", "path": "systems.network.audit", "value": true }
+        ]
+      }
+    }
+  ]
+}
+prompt: terminal prompt string; double backslashes (\\) for Windows env.
+environment: target shell.
+history (optional): previously run, visible commands.
+Each "command" validator defines the exact expected command (program, subcommands, flags, args).
+The response defines effects: simulated output (stdout_template, stderr_template) and world patches.
+Add as many validators as needed to cover required or accepted command variants.
+ #2. console_form
 Specific block: form property (simulated UI structure). Validations are located in validators.
-example:
-"form": {{
-"model_path": "services.webapp.config",
-"schema": {{
-"layout": "vertical | horizontal",
-"fields": [
-{{
-"key": "mode",
-"label": "Mode",
-"widget": "toggle",
-"options": ["Off", "On"],
-"required": true
-}},
-{{
-"key": "endpoint",
-"label": "URL",
-"widget": "input",
-"placeholder": "https://api.example.com",
-"helptext": "Enter the secure URL"
-}}
-]
-}}
-}},
+"form": {
+  "model_path": "services.webapp.config",
+  "schema": {
+    "layout": "vertical | horizontal",
+    "fields": [
+      {
+        "key": "mode",
+        "label": "Mode",
+        "widget": "toggle",
+        "options": ["Off", "On"],
+        "required": true
+      },
+      {
+        "key": "endpoint",
+        "label": "URL",
+        "widget": "input",
+        "placeholder": "https://api.example.com",
+        "helptext": ""Enter the secure URL"
+      }
+    ]
+  }
+},
 "validators": [
-{{ "kind": "payload", "path": "mode", "equals": "On" }},
-{{ "kind": "world", "expect": {{ "path": "services.webapp.config.endpoint", "pattern": "^https://" }} }}
+  { "kind": "payload", "path": "mode", "equals": "On" },
+  { "kind": "world", "expect": { "path": "services.webapp.config.endpoint", "pattern": "^https://" } }
 ]
-- model_path: location in the world state to store the submitted values.
-- schema.layout: "vertical" or "horizontal".
-- schema.fields[]: define each field (widget = input, textarea, select, toggle, radio, etc.), with optional options, default, helptext, validation. - Payload validators directly inspect the submitted data, while world validators check the world state after saving.
-- Add messages and, if needed, multiple combined checks to ensure that only the correct configuration passes.
-#3. inspect_file
+model_path: stores submitted values in world state.
+schema.layout: "vertical" or "horizontal".
+schema.fields[]: defines fields  (widget = input, textarea, select, toggle, radio, etc.) with optional options, default, helptext, validation. 
+Payload validators check the submitted data; world validators verify the saved world state.
+Validators: "payload" checks submitted data; "world" checks saved state.
+Add messages or combined checks to ensure only the correct configurations passes.
+ #3. inspect_file
 Specific block: file_ref and input keys.
-Example:
 "file_ref": "file-id",
 "input": {
-"mode": "answer | editor",
-"prompt": "Indicate the misconfigured resource",
-"placeholder": "Ex: sg-0abc123",
-"language": "text | json | yaml | powershell | ..."
+  "mode": "answer | editor",
+  "prompt": "Indicate the misconfigured resource",
+  "placeholder": "Ex: sg-0abc123",
+  "language": "text | json | yaml | powershell | ..."
 },
 "validators": [
 { "kind": "jsonpath_match", "path": "$.payload", "expected": "sg-0abc123" },
 { "kind": "expression", "expr": "(get('payload')||'').includes('sg-0abc123')", "message": "Expected answer: sg-0abc123" }
 ]
-- file_ref: identifier of an existing asset.
-- input.mode: "answer" (free text area) or "editor" (editable content). Always specify the language for the editor (e.g., json, yaml, bash).
-- Validators can combine jsonschema, jsonpath_match, jsonpath_absent, payload, expression, world, etc.
-- Ensure that only one valid answer passes and that the feedback guides the learner.
+file_ref: ID of an existing asset.
+input.mode: "answer" (text) or "editor" (editable); always specify language (e.g., JSON, YAML, Bash).
+validators: may combine jsonschema, jsonpath_match, payload, expression, world, etc.
+Allow only one valid answer.
+
 #4. architecture
-Specific block: architecture property + strict validators. Example:
+Specific block: architecture property + strict validators.
 "architecture": {
 "mode": "freeform | slots",
 "palette_title": "Available Components",
 "palette_caption": "Drag only the relevant components.",
 "palette": [
-{ "id": "gw", "label": "Gateway", "icon": "🛡️", "tags": ["network"], "meta": {"vendor": "generic"} },
-{ "id": "app", "label": "App Server", "icon": "🖥️", "tags": ["compute"] },
-{ "id": "db", "label": "Database", "icon": "🗄️", "tags": ["storage"] },
-{ "id": "decoy", "label": "Legacy Fax", "icon": "📠", "tags": ["legacy"], "is_decoy": true },
-...
+	{ "id": "gw", "label": "Gateway", "icon": "🛡️", "tags": ["network"], "meta": {"vendor": "generic"} },
+	{ "id": "app", "label": "App Server", "icon": "🖥️", "tags": ["compute"] },
+	{ "id": "db", "label": "Database", "icon": "🗄️", "tags": ["storage"] },
+	{ "id": "decoy", "label": "Legacy Fax", "icon": "📠", "tags": ["legacy"], "is_decoy": true },
+	...
 ],
 "initial_nodes": [  ],
 "world_path": "architectures.segment",
@@ -1002,13 +1001,13 @@ Specific block: architecture property + strict validators. Example:
 "expected_world": {
 "allow_extra_nodes": false,
 "nodes": [
-{
-"count": 1,
-"match": {
-"palette_id": "gw",
-"label": "Gateway-1",
-"config_contains": ["interface eth0", "policy"]
-}
+	{
+	"count": 1,
+	"match": {
+	"palette_id": "gw",
+	"label": "Gateway-1",
+	"config_contains": ["interface eth0", "policy"]
+	}
 },
 {
 "count": 1,
@@ -1019,53 +1018,51 @@ Specific block: architecture property + strict validators. Example:
 }
 ],
 "links": [
-{ "from": { "label": "Gateway-1" }, "to": { "palette_id": "app" }, "count": 1, "bidirectional": true }
-]
+	{ "from": { "label": "Gateway-1" }, "to": { "palette_id": "app" }, "count": 1, "bidirectional": true }
+	]
 }
 },
 "validators": [
-{ "kind": "payload", "path": "nodes.length", "equals": 2 },
-{ "kind": "expression", "expr": "!(get('payload.nodes')||[]).some(n => n.palette_id === 'decoy')", "message": "The decoy component must not be placed." } }},
-{{ "kind": "expression", "expr": "(get('payload.links')||[]).length === 1", "message": "Only one link is expected." }}
+	{ "kind": "payload", "path": "nodes.length", "equals": 2 },
+	{ "kind": "expression", "expr": "!(get('payload.nodes')||[]).some(n => n.palette_id === 'decoy')", "message": "The decoy component must not be placed." },
+	{ "kind": "expression", "expr": "(get('payload.links')||[]).length === 1", "message": "Only one link is expected." }
 ]
-- mode: "freeform" (interactive mini Packet Tracer) or "slots".
-- palette: Lists the components to use and adds one superfluous one with 'is_decoy: true', but designated by its normal name. 'icon' can be an emoji, text, or absolute URL.
-- initial_nodes (optional): empty because it will be up to the user to add them. user to build the architecture.
-- The user double-clicks on a component to open the inspector and enter commands. The lab_player stores commands (array of lines) and/or config (text block). Validators can check commands, config_contains, config_regex, tags, etc.
-- expected_world must make an alternative configuration impossible: use allow_extra_nodes, nodes (with count, match), links (define direction, number, constraints).
-- Add additional validators to control the number of nodes, the absence of the decoy, the presence of commands, or any business rule.
+mode: "freeform" (interactive) or "slots".
+palette: lists all components plus one decoy (is_decoy:true) shown under its normal name; icon may be emoji, text, or URL.
+initial_nodes (optional): empty. user builds the architecture.
+Users double-click a component to open the inspector and enter commands or config; Validators can check commands, config_contains, config_regex, tags, etc.
+expected_world: prevent alternate setups using allow_extra_nodes, nodes (count, match), and links (direction, number, constraints).
+Add validators to enforce node count, exclude decoy, require commands, or apply business rules.
+
 #5. quiz / anticipation
 Specific block: keys question_md, choices, correct, explanations (optional).
-example:
-"question_md": "What controls should be implemented to secure the environment?",
+"question_md": "...",
 "choices": [
-{{ "id": "a", "text": "Enable multi-factor authentication" }},
-{{ "id": "b", "text": "Leave all ports open" }},
-{{ "id": "c", "text": "Segment critical workloads" }}
-{{ "id": "d", "text": "Delete critical workloads" }}
+	{{ "id": "a", "text": "answer1" }},
+	{{ "id": "b", "text": "answer2" }},
+	{{ "id": "c", "text": "answer3" }}
+	{{ "id": "d", "text": "answer4" }}
 ],
 "correct": ["a", "c"],
 "explanations": {{
-"a": "Strengthens access control.",
-"c": "Reduces lateral movement."
+"a": "...",
+"c": "..."
 }}
-- choices: array of objects (id, text).
-- correct: array listing the correct identifiers (one or more).
-- explanations: optional, provides targeted feedback per choice.
-- Validators can include {{ "kind": "quiz", "expect": ["a", "c"] }} if needed.
+choices: array of {id, text} objects.
+correct: list of one or more correct IDs.
+explanations (optional): feedback per choice.
+validators: may include {"kind":"quiz","expect":["a","c"]}.
 #6. anticipation
-If you use a distinct anticipation type, use the same structure as quiz but orient the questions towards projection or prospective analysis.
-
+keep the quiz structure but focus questions on projection or prospective analysis.
 ### Additional rules and compatibility
-All steps must remain consistent with the scenario_md narrative and the educational objective related to the selected domains of the indicated certification. Each step must logically influence or verify the world state (world_patch, form.model_path, architecture.world_path, etc.).
-The clues must be progressive and contextualized.
-Respect the provided {step_types_json}: at least one occurrence of each requested type.
-Any string containing a backslash (\) must be escaped in JSON (\\). The same rule applies to newline characters (\n) embedded in strings.
-No JSON comments or trailing commas. Verify that all references (file_ref, transitions, palette_id, etc.) exist and that the sum of points = scoring.max_points.
-Validate dependencies between steps: if a step relies on a previous world patch, ensure that the path used is identical.
+All steps must follow the scenario_md narrative and the learning goal for the chosen certification domains. Each step must update or check the world state (world_patch, form.model_path, architecture.world_path, etc.).
+Hints must be progressive and in context.
+Honor {step_types_json}: include each requested step type at least once.
+Escape backslashes (\\) and newlines (\\n) in JSON strings.
+No comments or trailing commas. Ensure all references (file_ref, transitions, palette_id, etc.) exist and total points = scoring.max_points.
+Keep step dependencies consistent: later steps must use the exact same paths set earlier.
 ### Output Format
-Return only the final JSON (formatted or minified), without explanation or comments.
-The JSON must be immediately loadable by the Lab_Player.
+Return only the final JSON (formatted or minified), with no extra text.
 """
 
     prompt = (
