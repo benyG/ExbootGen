@@ -26,7 +26,7 @@ DB_CONFIG = {
 # OpenAI configuration
 # ---------------------------------------------------------------------------
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-OPENAI_MODEL = "o4-mini"
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "")
 OPENAI_API_URL = os.environ.get(
     "OPENAI_API_URL", "https://api.openai.com/v1/chat/completions"
 )
