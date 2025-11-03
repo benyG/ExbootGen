@@ -39,9 +39,10 @@ If direct browsing is not available, rely on your most up-to-date knowledge of t
 RULES:
 - Format your response in Markdown.
 - Titles should be short.
+- Title and content must be SEO optimized.
 - respect scrupulously the given Article structure only
 - Formulates complete, non-robotic sentences
-- Target length: 1,500–2,200 words.
+- Target length: 1,000–1700 words.
 - Tone: motivating, factual, without unexplained jargon.
 - Zero fluff: each section must deliver useful and actionable information.
 STRUCTURE:
@@ -62,9 +63,9 @@ Format with headings, bullet points, and a motivational tone.
 Explicitly include the link to start a free ExamBoot test: {exam_url}.
 RULES:
 - Format your response in Markdown.
-- Titles should be SEO optimized.
+- Title and content must be SEO optimized.
 - Formulates complete, non-robotic sentences
-- Target length: 1,500–2,200 words.
+- Target length: 1,000–1500 words.
 """,
     "experience_testimony": """
 Write a SEO optimized, clear, actionable and up-to-date third-person or storytelling-style blog post testimony on how to pass the certification exam: {certification} from {vendor}.
@@ -74,9 +75,9 @@ Include realistic study milestones, use of ExamBoot.net, and takeaways for other
 End with a call to action containing the link to start a free test: {exam_url}.
 RULES:
 - Format your response in Markdown.
-- Titles should be SEO optimized.
+- Title and content must be SEO optimized.
 - Formulates complete, non-robotic sentences
-- Target length: 1,500–2,200 words.
+- Target length: 1,000–1500 words.
 """,
     "career_impact": """
 Write a data-driven blog post on how the certification exam: {certification} from {vendor} can Boost Your career Opportunities.
@@ -84,9 +85,9 @@ Include statistics (average salaries, job titles, demand trends), examples of co
 Conclude with a call to action featuring the link to start a free ExamBoot test: {exam_url}.
 RULES:
 - Format your response in Markdown.
-- Titles should be SEO optimized.
+- Title and content must be SEO optimized.
 - Formulates complete, non-robotic sentences
-- Target length: 1,500–2,200 words.
+- Target length: 1,000–1500 words.
 """,
     "engagement_community": """
 Write an interactive blog post titled “Can You Pass This Mini {certification} from {vendor} Quiz?”
@@ -95,9 +96,9 @@ Add a section inviting readers to try the full simulation on ExamBoot.net and sh
 Insert a call to action with the link to start a free ExamBoot test: {exam_url}.
 RULES:
 - Format your response in Markdown.
-- Titles should be SEO optimized.
+- Title and content must be SEO optimized.
 - Formulates complete, non-robotic sentences
-- Target length: 1,500–2,200 words.
+- Target length: 1,000–1500 words.
 """,
 }
 
@@ -107,13 +108,13 @@ Produce a JSON object describing the certification with the following exact stru
 {{
   "prerequisites": ["text1", "text2", "text3"],
   "targeted_profession": ["job title1", "job title2", "job title3"],
-  "studytip": "In 20-25 words tell here how ExamBoot.net can help to prepare for the certification"
+  "studytip": "In 30-50 words tell here how ExamBoot.net can help to prepare for the certification"
 }}
 Guidelines:
 - Return exactly three concise bullet-style strings in both arrays, each 6-12 words.
 - Mention specific skills, knowledge, or credentials relevant to {certification} in the prerequisites.
 - Mention realistic job titles aligned with the certification outcome in the targeted_profession list.
-- The studytip MUST be a single sentence of 20-25 words, highlight ExamBoot.net, and stay actionable.
+- The studytip MUST be 1 or 2 sentences of 30-50 words, highlight ExamBoot.net, and stay actionable.
 - Respond with valid JSON only, no explanations or Markdown.
 """
 
@@ -122,6 +123,7 @@ TWEET_PROMPT_TEMPLATES = {
 Compose a short, punchy tweet introducing the certification: {certification} from {vendor}.
 Highlight 1 key benefit, 1 career outcome, and mention ExamBoot.net as the platform to prepare.
 Include 3 relevant hashtags and a link to the free practice test: {exam_url}.
+Use emojis but with moderation.
 Return only the tweet text without additional commentary.
 max 280 characters.
 """,
@@ -129,26 +131,31 @@ max 280 characters.
 Tweet actionable exam prep tips for certification exam: {certification} from {vendor}.
 Follow with 3 quick bullet points, then “💡Train smarter with ExamBoot free test: {exam_url}”.
 Include 3 relevant hashtags and no additional commentary.
+Use emojis but with moderation.
 max 280 characters.
 """,
     "experience_testimony": """
-Post a motivational cote on how to pass the certification exam: {certification} from {vendor} after specified weeks of focused prep.
+Tweet a motivational cote on how to pass the certification exam: {certification} from {vendor} after specified weeks of focused prep.
 Try ExamBoot.net for your journey with a link to start a free test: 👉{exam_url}
 Include 3 relevant hashtags.
+Use emojis but with moderation.
 Return only the tweet body.
 max 280 characters.
 """,
     "career_impact": """
 Tweet key value insight from certification exam: {certification} from {vendor}.
 Include 3 relevant hashtags and a link to the free practice test: {exam_url}.
+Use emojis but with moderation.
 Return only the tweet content.
 max 280 characters.
 """,
     "engagement_community": """
-“Can you pass this mini {certification} from {vendor} quiz? 🤔”
+Tweet an engaging challenge post inviting readers to take a quick quiz related to the certification exam: {certification} from {vendor} 
 Try the free practice test now on ExamBoot.net and share your score!
 👉 {exam_url}
 Include 3 relevant hashtags and no additional commentary.
+Use emojis but with moderation.
+Return only the tweet content.
 max 280 characters.
 """,
 }
@@ -159,18 +166,21 @@ Create an engaging LinkedIn post announcing a guide about the certification: {ce
 Explain why professionals should consider it, what career paths it opens, and how they can start preparing using ExamBoot.net.
 End with a call to action to “Start your free practice test today: {exam_url}.”
 Include 3 relevant hashtags.
+Use emojis but with moderation.
 Return only the LinkedIn post body without extra commentary.
 """,
     "preparation_methodology": """
 Write a LinkedIn post giving practical study tips for passing the certification exam: {certification} from {vendor}.
 Start with a question like “Getting ready for {certification} from @{vendor}? Here’s how to study smarter.”,
 give 3 concise preparation tips, and end with a link to try a free ExamBoot simulation: {exam_url}.
+Use emojis but with moderation.
 Include 3 relevant hashtags and no additional commentary.
 """,
     "experience_testimony": """
 Create a personal and authentic LinkedIn post narrating how someone succeeded in the certification exam: {certification} from {vendor}.
 Use a storytelling tone, mention ExamBoot.net as part of the preparation journey, and end with encouragement for others to start.
 A call to action with a link to start a free test: {exam_url}.
+Use emojis but with moderation.
 Include 3 relevant hashtags and return only the post text.
 """,
     "career_impact": """
@@ -178,12 +188,14 @@ Draft a professional LinkedIn post highlighting the career benefits of the certi
 Mention salary increases, job roles, and industry demand.
 Use clear bullet points and finish with “Start your certification journey with ExamBoot.net.”
 Include 3 relevant hashtags.
+Use emojis but with moderation.
 Return only the LinkedIn post body.
 """,
     "engagement_community": """
 Create an engaging LinkedIn post inviting readers to take a quick {certification} from {vendor} quiz.
 Example intro: “Think you know [field topic]? Test yourself with our 5-question {certification} from {vendor} quiz!”
 Add a link {exam_url} to the shareable test and encourage users to share their results.
+Use emojis but with moderation.
 Include 3 relevant hashtags and no additional commentary.
 """,
 }
@@ -796,7 +808,6 @@ def generate_lab_blueprint(
     difficulty: str,
     min_steps: int,
     step_types: list[str],
-    duration_minutes: int,
 ) -> dict:
     """Generate a hands-on lab scenario compatible with the Lab Player.
 
@@ -816,8 +827,6 @@ def generate_lab_blueprint(
         Minimum amount of steps the lab must contain.
     step_types : list[str]
         Allowed step types for the lab generation prompt.
-    duration_minutes : int
-        Estimated duration in minutes for the generated lab timer.
     """
 
     if not OPENAI_API_KEY:
@@ -852,7 +861,7 @@ scenario_md: 2–3 Markdown paragraphs describing lab scenario context, mission,
 variables (optional): reusable definitions (type: "choice"|"string"|"number", with possible choices, min, max, etc.). Use via {{variable}}.
 scoring: {"max_points": <sum of step points>}.
 timer: {"mode": "countdown", "seconds": x} — Duration must be estimated during generation.
-assets: array of downloadable or inline resources (id, kind, filename, mime, and either inline:true + content_b64 or url).
+assets: array of downloadable or inline resources (id, kind, filename, mime, inline:true, content_b64). Resources must always be realistic.
 steps: ordered list of detailed steps (≥ {min_steps}), following type-specific rules.
 # Reference JSON template:
 {
@@ -891,7 +900,7 @@ steps: ordered list of detailed steps (≥ {min_steps}), following type-specific
  "title": "...",
  "instructions_md": "...",
  "points": 10,
- "hints": [...],
+ "hints": ["Hint1", "Hint2",...],
  "transitions": {
    "on_success": "next-step-id-or-#end",
    "on_failure": { "action": "#stay" }
@@ -901,9 +910,9 @@ steps: ordered list of detailed steps (≥ {min_steps}), following type-specific
  "<step-type-specific block>": {... }
 }
 id: unique per lab.
-instructions_md: instructions for the step. When a component needs a command, guide users on what is expected for each one without revealing the actual answer. 
+instructions_md: Provide clear instructions for every step. When a component needs a command, explain what’s expected for each without revealing answers or decoy components. 
 points: ≥1; total equals lab.scoring.max_points.
-hints: ≥1, from subtle to explicit; can include cost ({"text":"...","cost":1}).
+hints: ≥1, from subtle to explicit.
 transitions: define next step (on_success) or retry/remediation (on_failure).
 validators: define strict validation rules with optional feedback messages.
 world_patch: pre-validation JSON operations (set|unset|push|remove) using dot paths (e.g., systems.firewall.enabled).
@@ -1088,7 +1097,6 @@ Return only the final JSON (formatted or minified), with no extra text.
         .replace("{difficulty}", difficulty)
         .replace("{step_types_json}", step_types_json)
         .replace("{provider}", provider)
-        .replace("{duration_minutes}", str(duration_minutes))
     )
     prompt = prompt.replace("{{", "{").replace("}}", "}")
 
