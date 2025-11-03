@@ -219,6 +219,12 @@
       box-shadow: 0 12px 30px rgba(4, 12, 24, 0.4);
     }
 
+    .generate-exam-btn {
+      align-self: flex-start;
+      margin-top: 0.2rem;
+      padding-inline: 1.3rem;
+    }
+
     button:hover:not(:disabled) {
       transform: translateY(-2px);
     }
@@ -433,6 +439,7 @@
         <div class="field-group">
           <label for="examUrl">Lien du test partagé Examboot</label>
           <input type="url" id="examUrl" placeholder="http://examboot.net" value="http://examboot.net" autocomplete="off">
+          <button type="button" class="secondary generate-exam-btn" id="generateExamBtn">Générer un test Examboot</button>
         </div>
       </div>
       <div class="actions">
@@ -444,7 +451,7 @@
         <div class="secondary-actions">
           <button class="playbook" id="runPlaybookBtn" disabled>Run playbook</button>
           <label class="image-toggle">
-            <input type="checkbox" id="addImageCheckbox">
+            <input type="checkbox" id="addImageCheckbox" checked>
             <span>Ajouter une image</span>
           </label>
         </div>
@@ -522,6 +529,7 @@
     const generateTweetBtn = document.getElementById('generateTweetBtn');
     const generateLinkedinBtn = document.getElementById('generateLinkedinBtn');
     const runPlaybookBtn = document.getElementById('runPlaybookBtn');
+    const generateExamBtn = document.getElementById('generateExamBtn');
     const publishArticleBtn = document.getElementById('publishArticleBtn');
     const publishTweetBtn = document.getElementById('publishTweetBtn');
     const publishLinkedinBtn = document.getElementById('publishLinkedinBtn');
@@ -552,7 +560,7 @@
     let loadingButton = null;
 
     const PLAYBOOK_PROGRESS_STEPS = [
-      { label: 'Préparation du playbook…', target: 15 },
+      { label: 'Création du test Examboot…', target: 15 },
       { label: 'Génération de l’article…', target: 40 },
       { label: 'Création des annonces sociales…', target: 65 },
       { label: 'Publication et sauvegarde…', target: 85 },
@@ -688,15 +696,31 @@
       };
     }
 
+    function getSelectionIdentifiers() {
+      const providerId = providerSelect.value;
+      const certificationId = certSelect.value;
+
+      if (!providerId || !certificationId) {
+        return null;
+      }
+
+      return {
+        provider_id: providerId,
+        certification_id: certificationId
+      };
+    }
+
     function updateActionAvailability() {
       if (isLoading) {
         return;
       }
       const hasSelection = Boolean(getSelectionPayload());
+      const hasCertificationSelection = Boolean(getSelectionIdentifiers());
       generateArticleBtn.disabled = !hasSelection;
       generateTweetBtn.disabled = !hasSelection;
       generateLinkedinBtn.disabled = !hasSelection;
       runPlaybookBtn.disabled = !hasSelection;
+      generateExamBtn.disabled = !hasCertificationSelection;
       publishArticleBtn.disabled = !hasSelection || !currentArticle || Boolean(currentBlogId);
       const isCourseArtTopic = hasSelection && topicTypeSelect.value === COURSE_ART_TOPIC;
       generateCourseArtBtn.disabled = !isCourseArtTopic;
@@ -802,6 +826,41 @@
       resetGeneratedContent();
       updateCourseArtSection();
       updateActionAvailability();
+    });
+
+    generateExamBtn.addEventListener('click', async () => {
+      const identifiers = getSelectionIdentifiers();
+      if (!identifiers) {
+        setStatus('Veuillez sélectionner un provider et une certification avant de générer un test.', true);
+        return;
+      }
+
+      try {
+        toggleLoading(true, generateExamBtn);
+        setStatus('Génération du test Examboot en cours…');
+        const response = await fetch('/articles/generate-exam-test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(identifiers)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la génération du test Examboot');
+        }
+        if (!payload.url) {
+          throw new Error('URL du test Examboot introuvable.');
+        }
+
+        examUrlInput.value = payload.url;
+        examUrlInput.dispatchEvent(new Event('change'));
+        setStatus('Test Examboot généré avec succès.');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(message, true);
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
     });
 
     generateArticleBtn.addEventListener('click', async () => {
@@ -1125,6 +1184,10 @@
           payload.linkedin_image
         );
 
+        if (payload.exam_url) {
+          examUrlInput.value = payload.exam_url;
+        }
+
         currentCourseArt = payload.course_art || null;
         if (currentCourseArt) {
           courseArtOutput.textContent = JSON.stringify(currentCourseArt, null, 2);
@@ -1134,7 +1197,7 @@
           courseArtOutput.textContent = DEFAULT_COURSE_ART_TEXT;
         }
 
-        const statuses = [];
+        const statuses = ['Test Examboot généré'];
         if (payload.blog_id) {
           statuses.push(`Article enregistré (#${payload.blog_id})`);
         } else if (currentArticle) {
@@ -1267,6 +1330,7 @@
       generateArticleBtn,
       generateTweetBtn,
       generateLinkedinBtn,
+      generateExamBtn,
       runPlaybookBtn,
       publishArticleBtn,
       generateCourseArtBtn,
