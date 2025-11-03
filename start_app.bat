@@ -20,6 +20,10 @@ set "OPENAI_MAX_RETRIES=5"
 set "API_REQUEST_DELAY=1"
 set "OPENAI_MODEL=gpt-5-mini"
 
+REM === API Examboot ===
+set "API_KEY=votre-api-key-examboot"
+set "EXAMBOOT_CREATE_TEST_URL=https://examboot.net/create-test"
+
 REM === Parametres X (Twitter) ===
 REM  Pour publier un tweet, fournissez les identifiants OAuth 1.0a ci-dessous
 REM  (user context). Ils sont obligatoires pour l'authentification.

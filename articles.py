@@ -22,6 +22,8 @@ from flask import Blueprint, jsonify, render_template, request
 
 from config import (
     DB_CONFIG,
+    EXAMBOOT_API_KEY,
+    EXAMBOOT_CREATE_TEST_URL,
     LINKEDIN_ACCESS_TOKEN,
     LINKEDIN_ACCESS_TOKEN_URL,
     LINKEDIN_ASSET_REGISTER_URL,
@@ -113,6 +115,10 @@ class SocialPublishError(RuntimeError):
     def __init__(self, message: str, status_code: int = 500) -> None:
         super().__init__(message)
         self.status_code = status_code
+
+
+class ExambootTestGenerationError(RuntimeError):
+    """Raised when the Examboot test creation API fails."""
 
 
 def _fetch_selection(provider_id: int, certification_id: int) -> Selection:
@@ -731,6 +737,74 @@ def _extract_selection_payload(data: dict) -> Tuple[int, int, str, str]:
     return provider_id, certification_id, exam_url, topic_type
 
 
+def _extract_provider_certification(data: dict) -> Tuple[int, int]:
+    """Validate the provider and certification identifiers from the payload."""
+
+    provider_id = data.get("provider_id")
+    certification_id = data.get("certification_id")
+
+    if not provider_id or not certification_id:
+        raise ValueError("provider_id et certification_id sont requis.")
+
+    try:
+        provider_id = int(provider_id)
+        certification_id = int(certification_id)
+    except (TypeError, ValueError) as exc:  # pragma: no cover - validation only
+        raise ValueError("Identifiants invalides.") from exc
+
+    return provider_id, certification_id
+
+
+def _create_shareable_examboot_test(certification_id: int) -> str:
+    """Create a shareable Examboot test and return the resulting URL."""
+
+    if not EXAMBOOT_API_KEY:
+        raise ExambootTestGenerationError(
+            "La clé API Examboot est manquante. Configurez la variable d'environnement API_KEY."
+        )
+
+    payload = {
+        "type": "shareable",
+        "quest": 10,
+        "certi": certification_id,
+        "timer": 20,
+    }
+    headers = {
+        "Authorization": f"Bearer {EXAMBOOT_API_KEY}",
+        "x-api-key": EXAMBOOT_API_KEY,
+    }
+
+    try:
+        response = requests.post(
+            EXAMBOOT_CREATE_TEST_URL,
+            json=payload,
+            headers=headers,
+            timeout=30,
+        )
+    except requests.RequestException as exc:  # pragma: no cover - network errors
+        raise ExambootTestGenerationError("Impossible de contacter l'API Examboot.") from exc
+
+    if response.status_code >= 400:
+        raise ExambootTestGenerationError(
+            f"Erreur lors de la génération du test Examboot ({response.status_code})."
+        )
+
+    try:
+        data = response.json()
+    except ValueError as exc:  # pragma: no cover - invalid JSON
+        raise ExambootTestGenerationError(
+            "Réponse invalide reçue depuis l'API Examboot."
+        ) from exc
+
+    url = data.get("url") if isinstance(data, dict) else None
+    if not url:
+        raise ExambootTestGenerationError(
+            "La réponse de l'API Examboot ne contient pas d'URL de test."
+        )
+
+    return url
+
+
 @articles_bp.route("/generate", methods=["POST"])
 def generate_article():
     """Generate the certification article using the OpenAI API."""
@@ -863,6 +937,30 @@ def publish_article():
     )
 
 
+@articles_bp.route("/generate-exam-test", methods=["POST"])
+def generate_exam_test():
+    """Generate a shareable Examboot test for the selected certification."""
+
+    data = request.get_json() or {}
+
+    try:
+        provider_id, certification_id = _extract_provider_certification(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    try:
+        _fetch_selection(provider_id, certification_id)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    try:
+        url = _create_shareable_examboot_test(certification_id)
+    except ExambootTestGenerationError as exc:
+        return jsonify({"error": str(exc)}), 502
+
+    return jsonify({"url": url})
+
+
 @articles_bp.route("/run-playbook", methods=["POST"])
 def run_playbook():
     """Run the social playbook: generate content and publish announcements."""
@@ -896,6 +994,11 @@ def run_playbook():
             )
 
     attach_image = bool(data.get("add_image"))
+
+    try:
+        exam_url = _create_shareable_examboot_test(certification_id)
+    except ExambootTestGenerationError as exc:
+        return jsonify({"error": str(exc)}), 502
 
     try:
         with ThreadPoolExecutor(max_workers=4) as executor:
@@ -947,6 +1050,7 @@ def run_playbook():
         "summary": article_payload["summary"],
         "provider_name": selection.provider_name,
         "certification_name": selection.certification_name,
+        "exam_url": exam_url,
         "tweet": tweet_text,
         "tweet_response": tweet_result.response,
         "tweet_published": tweet_result.published,

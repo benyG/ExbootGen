@@ -39,6 +39,14 @@ OPENAI_TIMEOUT_SECONDS = float(os.environ.get("OPENAI_TIMEOUT_SECONDS", "120"))
 API_REQUEST_DELAY = float(os.environ.get("API_REQUEST_DELAY", "1"))
 
 # ---------------------------------------------------------------------------
+# Examboot test generation
+# ---------------------------------------------------------------------------
+EXAMBOOT_API_KEY = os.environ.get("API_KEY", "")
+EXAMBOOT_CREATE_TEST_URL = os.environ.get(
+    "EXAMBOOT_CREATE_TEST_URL", "https://examboot.net/create-test"
+)
+
+# ---------------------------------------------------------------------------
 # X (Twitter) integration
 # ---------------------------------------------------------------------------
 # The X API now requires user-context credentials to publish tweets.  The
