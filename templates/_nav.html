@@ -2,6 +2,7 @@
   <a href="{{ url_for('home') }}" data-route="{{ url_for('home') }}"{% if active_page|default('') == 'home' %} class="active"{% endif %}>Home</a>
   <a href="{{ url_for('populate_index') }}" data-route="{{ url_for('populate_index') }}"{% if active_page|default('') == 'populate' %} class="active"{% endif %}>Populate(AI)</a>
   <a href="{{ url_for('dom.index') }}" data-route="{{ url_for('dom.index') }}"{% if active_page|default('') == 'domains' %} class="active"{% endif %}>Domains(AI)</a>
+  <a href="{{ url_for('module_blueprints.index') }}" data-route="{{ url_for('module_blueprints.index') }}"{% if active_page|default('') == 'blueprints' %} class="active"{% endif %}>Blueprints(AI)</a>
   <a href="{{ url_for('move.index') }}" data-route="{{ url_for('move.index') }}"{% if active_page|default('') == 'move' %} class="active"{% endif %}>Move Question</a>
   <a href="{{ url_for('reloc.index') }}" data-route="{{ url_for('reloc.index') }}"{% if active_page|default('') == 'relocate' %} class="active"{% endif %}>Relocate(AI)</a>
   <a href="{{ url_for('pdf.index') }}" data-route="{{ url_for('pdf.index') }}"{% if active_page|default('') == 'pdf_import' %} class="active"{% endif %}>PDF Import</a>

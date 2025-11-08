@@ -426,18 +426,34 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
 def get_domains_description_by_certif(cert_id):
     """
     Renvoie la liste des domaines (modules) pour la certification donnée,
-    avec leur id, nom et description textuelle.
+    en préférant le contenu du blueprint lorsqu'il est disponible.
     """
+
     conn = get_connection()
     cursor = conn.cursor()
-    # On suppose que la table `modules` a une colonne `descr` qui contient la description
-    query = "SELECT id, name, descr FROM modules WHERE course = %s"
+    query = "SELECT id, name, descr, blueprint FROM modules WHERE course = %s"
     cursor.execute(query, (cert_id,))
-    domains = cursor.fetchall()  # liste de tuples (id, name, descr)
+    domains = cursor.fetchall()
     cursor.close()
     conn.close()
-    # On renvoie sous forme de liste de dicts pour plus de clarté
-    return [{"id": d[0], "name": d[1], "descr": d[2]} for d in domains]
+
+    results = []
+    for domain_id, name, descr, blueprint in domains:
+        blueprint_text = (blueprint or "").strip() if isinstance(blueprint, str) else blueprint
+        if isinstance(blueprint_text, str) and not blueprint_text:
+            blueprint_text = None
+        descr_text = (descr or "").strip() if isinstance(descr, str) else descr
+        preferred = blueprint_text if blueprint_text else (descr_text or "")
+        results.append(
+            {
+                "id": domain_id,
+                "name": name,
+                "descr": preferred,
+                "blueprint": blueprint_text,
+                "fallback_descr": descr_text,
+            }
+        )
+    return results
 
 
 def get_questions_without_correct_answer(cert_id):

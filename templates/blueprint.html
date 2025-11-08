@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blueprint Domains · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 20% 20%, rgba(76,201,240,0.15), transparent 55%),
+                     radial-gradient(circle at 80% 30%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.22), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --glass-soft: rgba(15, 19, 32, 0.82);
+      --border: rgba(148, 163, 184, 0.22);
+      --border-strong: rgba(148, 163, 184, 0.35);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --text-error: #f87171;
+      --text-success: #4ade80;
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb {
+      position: fixed;
+      width: 32rem;
+      height: 32rem;
+      border-radius: 50%;
+      opacity: 0.45;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      background: radial-gradient(circle, rgba(71,245,192,0.32) 0%, rgba(4,7,17,0) 70%);
+      animation: drift 22s ease-in-out infinite;
+      z-index: 0;
+    }
+
+    .orb-1 { top: -12rem; left: -6rem; }
+    .orb-2 { bottom: -10rem; right: -4rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.25) 0%, rgba(4,7,17,0) 70%); }
+    .orb-3 { top: 45vh; right: 50%; transform: translateX(50%); animation-delay: -14s; background: radial-gradient(circle, rgba(244,114,182,0.28) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift {
+      0%, 100% { transform: translate3d(0,0,0) scale(1); }
+      45% { transform: translate3d(40px, -30px, 0) scale(1.05); }
+      75% { transform: translate3d(-30px, 25px, 0) scale(0.95); }
+    }
+
+    .stellar-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(4, 7, 17, 0.72);
+      backdrop-filter: saturate(180%) blur(18px);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .stellar-container {
+      width: min(1200px, 92vw);
+      margin: 0 auto;
+      padding: 1.2rem 0 1.6rem;
+    }
+
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 2.75rem;
+      height: 2.75rem;
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25));
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      color: var(--accent-strong);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28);
+    }
+
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .stellar-main {
+      flex: 1;
+      width: min(1200px, 92vw);
+      margin: 0 auto;
+      padding: 4.2rem 0 5.6rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2.6rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .glass-card {
+      background: var(--glass);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-strong);
+      padding: clamp(2rem, 3vw, 3rem);
+      backdrop-filter: blur(26px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .glass-card::before {
+      content: '';
+      position: absolute;
+      inset: 1px;
+      border-radius: calc(var(--radius-xl) - 2px);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      pointer-events: none;
+    }
+
+    h1, h2, h3 {
+      font-family: 'Space Grotesk', sans-serif;
+      letter-spacing: 0.01em;
+      margin: 0;
+    }
+
+    .hero-intro h1 { font-size: clamp(2.1rem, 4vw, 2.8rem); margin-bottom: 1rem; }
+    .hero-intro p { margin: 0; color: var(--text-muted); line-height: 1.7; }
+
+    label { font-weight: 500; font-size: 0.95rem; display: block; margin-bottom: 0.35rem; }
+
+    select, textarea, button {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      padding: 0.75rem 0.95rem;
+      background: rgba(10, 15, 28, 0.85);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 0.95rem;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+    }
+
+    select:focus, textarea:focus, button:focus { outline: none; border-color: rgba(71, 245, 192, 0.6); box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.22); }
+    textarea { min-height: 220px; resize: vertical; line-height: 1.65; font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+
+    button.primary {
+      background: linear-gradient(135deg, rgba(71,245,192,0.9), rgba(124,247,255,0.85));
+      color: #020617;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition);
+      box-shadow: 0 14px 35px rgba(71, 245, 192, 0.28);
+    }
+
+    button.primary:hover { transform: translateY(-3px); box-shadow: 0 18px 42px rgba(71,245,192,0.38); }
+
+    button.ghost {
+      background: rgba(10, 15, 28, 0.68);
+      border: 1px solid rgba(148,163,184,0.24);
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    button.ghost:hover { color: var(--text-primary); border-color: rgba(148,163,184,0.45); }
+
+    .panel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.6rem;
+      margin-top: 1.5rem;
+    }
+
+    .selection-panel p { margin: 0; color: var(--text-muted); }
+    .selection-summary { margin-top: 1rem; color: var(--text-muted); font-size: 0.9rem; }
+    .selection-summary strong { color: var(--text-primary); }
+
+    .actions-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.9rem;
+      align-items: center;
+      margin-top: 1.6rem;
+    }
+
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .toggle input[type="checkbox"] {
+      appearance: none;
+      width: 2.4rem;
+      height: 1.35rem;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.7);
+      position: relative;
+      border: 1px solid rgba(148,163,184,0.35);
+      transition: background 0.3s ease, border-color 0.3s ease;
+    }
+
+    .toggle input[type="checkbox"]::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 0.95rem;
+      height: 0.95rem;
+      border-radius: 50%;
+      background: #e2e8f0;
+      transition: transform 0.3s ease;
+    }
+
+    .toggle input[type="checkbox"]:checked {
+      background: rgba(71, 245, 192, 0.35);
+      border-color: rgba(71, 245, 192, 0.75);
+    }
+
+    .toggle input[type="checkbox"]:checked::after { transform: translateX(1rem); }
+
+    .status-line {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      min-height: 1.2rem;
+    }
+
+    .status-line.error { color: var(--text-error); }
+    .status-line.success { color: var(--text-success); }
+
+    .generation-log {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: rgba(8, 12, 24, 0.7);
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      max-height: 220px;
+      overflow: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+    }
+
+    .modules-panel h2 { margin-bottom: 0.6rem; }
+    .modules-panel p.description { margin: 0; color: var(--text-muted); }
+
+    .modules-toolbar {
+      margin-top: 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .modules-toolbar button { width: auto; flex-shrink: 0; }
+    .modules-toolbar p { margin: 0; color: var(--text-muted); font-size: 0.9rem; flex: 1; min-width: 220px; }
+
+    .inline-button { width: auto; }
+
+    .modules-container { margin-top: 2rem; display: flex; flex-direction: column; gap: 1.8rem; }
+
+    .module-card {
+      background: var(--glass-soft);
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(148,163,184,0.18);
+      padding: 1.6rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      box-shadow: 0 18px 40px rgba(3, 7, 18, 0.5);
+    }
+
+    .module-header { display: flex; flex-direction: column; gap: 0.4rem; }
+    .module-header h3 { font-size: 1.1rem; }
+    .module-header span { color: var(--text-muted); font-size: 0.85rem; }
+
+    .module-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+    .module-actions button { flex: 0 0 auto; width: auto; padding: 0.55rem 1rem; font-size: 0.85rem; }
+
+    .module-status {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      min-height: 1rem;
+    }
+
+    .module-status.success { color: var(--text-success); }
+    .module-status.error { color: var(--text-error); }
+
+    .module-info-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: rgba(226, 232, 240, 0.55);
+    }
+
+    .module-counter { font-size: 0.8rem; color: rgba(226, 232, 240, 0.55); }
+
+    .empty-state {
+      text-align: center;
+      padding: 1.6rem;
+      border-radius: 16px;
+      background: rgba(8, 12, 24, 0.65);
+      border: 1px dashed rgba(148,163,184,0.2);
+      color: var(--text-muted);
+    }
+
+    @media (max-width: 768px) {
+      .stellar-top { flex-direction: column; align-items: flex-start; }
+      .actions-row { flex-direction: column; align-items: stretch; }
+      .module-actions { justify-content: stretch; }
+      .module-actions button { width: 100%; }
+      .modules-toolbar { flex-direction: column; align-items: stretch; }
+      .modules-toolbar button.inline-button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+  <div class="stellar-orb orb-3"></div>
+
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <div class="brand-mark">EX</div>
+          <div class="brand-text">
+            <strong>ExamBoot · Blueprint Engine</strong>
+            <span>Synchronisez les domaines avec des synthèses prêtes à publier</span>
+          </div>
+        </div>
+      </div>
+      {% set active_page = 'blueprints' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+  <main class="stellar-main">
+    <section class="glass-card hero-intro">
+      <h1>Générez des blueprints clairs et cohérents</h1>
+      <p>
+        Sélectionnez une certification, laissez l’IA rédiger des blueprints détaillés pour chaque domaine
+        et ajustez-les avant publication. Les réponses sont textuelles et respectent les sections officielles de l’examen.
+      </p>
+    </section>
+
+    <section class="glass-card selection-panel">
+      <h2>1. Choisir la certification</h2>
+      <p>Commencez par sélectionner un provider puis la certification cible.</p>
+      <div class="panel-grid">
+        <div>
+          <label for="prov">Provider</label>
+          <select id="prov"></select>
+        </div>
+        <div>
+          <label for="cert">Certification</label>
+          <select id="cert"></select>
+        </div>
+      </div>
+      <p class="selection-summary">Sélection actuelle : <strong id="selectionLabel">—</strong></p>
+      <div class="actions-row">
+        <button id="generateBlueprintsBtn" class="primary" type="button">Générer les blueprints (IA)</button>
+        <label class="toggle">
+          <input type="checkbox" id="forceAllToggle">
+          <span>Régénérer tous les domaines</span>
+        </label>
+      </div>
+      <p class="selection-summary">Dernière actualisation : <strong id="lastRefresh">—</strong></p>
+    </section>
+
+    <section class="glass-card modules-panel">
+      <h2>2. Relecture et publication</h2>
+      <p class="description">
+        Chaque domaine dispose d’un espace d’édition. Sauvegardez vos ajustements ou regénérez les sections manquantes.
+        Les blueprints sont envoyés en parallèle (≥4 domaines) pour accélérer le travail.
+      </p>
+      <div class="modules-toolbar">
+        <button id="saveAllBlueprintsBtn" class="primary inline-button" type="button">Sauvegarder tous les blueprints</button>
+        <p>Les modifications marquées ci-dessous seront enregistrées simultanément.</p>
+      </div>
+      <div id="saveStatus" class="status-line"></div>
+      <div id="generationStatus" class="status-line"></div>
+      <pre id="generationLog" class="generation-log"></pre>
+      <div id="modulesEmpty" class="empty-state">Sélectionnez une certification pour afficher ses domaines.</div>
+      <div id="modulesContainer" class="modules-container"></div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/searchable-select.js') }}"></script>
+  <script>
+    const base = '{{ url_for('module_blueprints.index') }}';
+
+    const modulesContainer = document.getElementById('modulesContainer');
+    const modulesEmpty = document.getElementById('modulesEmpty');
+    const saveStatus = document.getElementById('saveStatus');
+    const saveAllBtn = document.getElementById('saveAllBlueprintsBtn');
+    const selectionLabel = document.getElementById('selectionLabel');
+    const lastRefresh = document.getElementById('lastRefresh');
+    const generateBtn = document.getElementById('generateBlueprintsBtn');
+    const forceAllToggle = document.getElementById('forceAllToggle');
+    const generationStatus = document.getElementById('generationStatus');
+    const generationLog = document.getElementById('generationLog');
+    generationLog.style.display = 'none';
+
+    function setGenerationStatus(message, tone = 'muted') {
+      generationStatus.textContent = message || '';
+      generationStatus.classList.remove('error', 'success');
+      if (tone === 'error') {
+        generationStatus.classList.add('error');
+      } else if (tone === 'success') {
+        generationStatus.classList.add('success');
+      }
+    }
+
+    function setSaveStatus(message, tone = 'muted') {
+      if (!saveStatus) return;
+      saveStatus.textContent = message || '';
+      saveStatus.classList.remove('error', 'success');
+      if (tone === 'error') {
+        saveStatus.classList.add('error');
+      } else if (tone === 'success') {
+        saveStatus.classList.add('success');
+      }
+    }
+
+    function setModuleStatus(moduleId, message, tone = 'muted') {
+      const status = modulesContainer.querySelector(`[data-status-for="${moduleId}"]`);
+      if (!status) return;
+      status.textContent = message || '';
+      status.classList.remove('success', 'error');
+      if (tone === 'success') {
+        status.classList.add('success');
+      } else if (tone === 'error') {
+        status.classList.add('error');
+      }
+    }
+
+    function updateCounter(textarea) {
+      const counter = textarea.closest('.module-card')?.querySelector('.module-counter');
+      if (counter) {
+        const length = textarea.value.length;
+        counter.textContent = `${length} caractère${length > 1 ? 's' : ''}`;
+      }
+    }
+
+    async function loadJSON(url, options = {}) {
+      const res = await fetch(url, options);
+      const data = await res.json();
+      if (!res.ok) {
+        const message = data && data.error ? data.error : `HTTP ${res.status}`;
+        throw new Error(message);
+      }
+      return data;
+    }
+
+    function fillSelect(select, items) {
+      const helper = select && select.__searchableSelect;
+      if (helper) {
+        helper.setOptions((items || []).map(item => ({ value: item.id, label: item.name })), { keepSearch: false });
+      } else {
+        select.innerHTML = '';
+        (items || []).forEach(item => {
+          const option = document.createElement('option');
+          option.value = item.id;
+          option.textContent = item.name;
+          select.appendChild(option);
+        });
+      }
+    }
+
+    function renderModules(modules) {
+      modulesContainer.innerHTML = '';
+      setSaveStatus('');
+      if (!Array.isArray(modules) || modules.length === 0) {
+        modulesEmpty.style.display = 'block';
+        modulesEmpty.textContent = 'Aucun domaine enregistré pour cette certification.';
+        return;
+      }
+
+      modulesEmpty.style.display = 'none';
+      modules.forEach((module, index) => {
+        const card = document.createElement('article');
+        card.className = 'module-card';
+        card.dataset.moduleId = module.id;
+
+        const header = document.createElement('div');
+        header.className = 'module-header';
+        const title = document.createElement('h3');
+        title.textContent = module.name || `Domaine ${index + 1}`;
+        header.appendChild(title);
+        if (module.descr) {
+          const descr = document.createElement('span');
+          descr.textContent = module.descr;
+          header.appendChild(descr);
+        }
+        card.appendChild(header);
+
+        const textarea = document.createElement('textarea');
+        textarea.dataset.moduleId = module.id;
+        textarea.value = module.blueprint || '';
+        card.appendChild(textarea);
+
+        const infoRow = document.createElement('div');
+        infoRow.className = 'module-info-row';
+        const orderTag = document.createElement('span');
+        orderTag.textContent = `Domaine ${index + 1}`;
+        infoRow.appendChild(orderTag);
+        const counter = document.createElement('span');
+        counter.className = 'module-counter';
+        infoRow.appendChild(counter);
+        card.appendChild(infoRow);
+        updateCounter(textarea);
+
+        const actions = document.createElement('div');
+        actions.className = 'module-actions';
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'ghost';
+        copyBtn.dataset.action = 'copy';
+        copyBtn.dataset.moduleId = module.id;
+        copyBtn.textContent = 'Copier';
+        actions.appendChild(copyBtn);
+
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'ghost';
+        clearBtn.dataset.action = 'clear';
+        clearBtn.dataset.moduleId = module.id;
+        clearBtn.textContent = 'Effacer';
+        actions.appendChild(clearBtn);
+
+        card.appendChild(actions);
+
+        const status = document.createElement('div');
+        status.className = 'module-status';
+        status.dataset.statusFor = module.id;
+        status.textContent = module.blueprint ? 'Blueprint chargé.' : 'Aucun blueprint enregistré.';
+        card.appendChild(status);
+
+        modulesContainer.appendChild(card);
+      });
+
+      lastRefresh.textContent = new Date().toLocaleTimeString('fr-FR');
+    }
+
+    async function refreshModules(certId) {
+      if (!certId) {
+        modulesContainer.innerHTML = '';
+        modulesEmpty.style.display = 'block';
+        modulesEmpty.textContent = 'Sélectionnez une certification pour afficher ses domaines.';
+        setSaveStatus('');
+        return;
+      }
+
+      modulesContainer.innerHTML = '';
+      modulesEmpty.style.display = 'block';
+      modulesEmpty.textContent = 'Chargement des domaines…';
+      setSaveStatus('');
+      try {
+        const modules = await loadJSON(`${base}api/certifications/${certId}/modules`);
+        renderModules(modules);
+      } catch (err) {
+        modulesContainer.innerHTML = '';
+        modulesEmpty.style.display = 'block';
+        modulesEmpty.textContent = err.message || 'Impossible de récupérer les domaines.';
+        setSaveStatus(err.message || 'Impossible de récupérer les domaines.', 'error');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const provSel = document.getElementById('prov');
+      const certSel = document.getElementById('cert');
+
+      const provSearch = window.makeSelectSearchable ? window.makeSelectSearchable(provSel, { placeholder: 'Rechercher un provider…' }) : null;
+      const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certSel, { placeholder: 'Rechercher une certification…' }) : null;
+
+      function updateSelectionLabel() {
+        const providerName = provSel.options[provSel.selectedIndex]?.text || '—';
+        const certName = certSel.options[certSel.selectedIndex]?.text || '—';
+        selectionLabel.textContent = `${providerName} → ${certName}`;
+      }
+
+      async function refreshProviderCertifications() {
+        const provId = provSel.value;
+        if (!provId) {
+          fillSelect(certSel, []);
+          updateSelectionLabel();
+          refreshModules(null);
+          return;
+        }
+
+        try {
+          const certifications = await loadJSON(`${base}api/certifications/${provId}`);
+          fillSelect(certSel, certifications);
+          certSearch && certSearch.setSearchTerm('');
+          if (certifications.length) {
+            certSel.value = certifications[0].id;
+            updateSelectionLabel();
+            refreshModules(certSel.value);
+          } else {
+            updateSelectionLabel();
+            refreshModules(null);
+          }
+        } catch (err) {
+          fillSelect(certSel, []);
+          updateSelectionLabel();
+          modulesContainer.innerHTML = '';
+          modulesEmpty.style.display = 'block';
+          modulesEmpty.textContent = err.message || 'Impossible de charger les certifications.';
+        }
+      }
+
+      try {
+        const providers = await loadJSON(`${base}api/providers`);
+        fillSelect(provSel, providers);
+        provSearch && provSearch.setSearchTerm('');
+        if (providers.length) {
+          provSel.value = providers[0].id;
+          await refreshProviderCertifications();
+        } else {
+          updateSelectionLabel();
+        }
+      } catch (err) {
+        selectionLabel.textContent = '—';
+        modulesEmpty.style.display = 'block';
+        modulesEmpty.textContent = err.message || 'Impossible de charger les providers.';
+      }
+
+      provSel.addEventListener('change', refreshProviderCertifications);
+      certSel.addEventListener('change', () => {
+        updateSelectionLabel();
+        refreshModules(certSel.value);
+      });
+
+      modulesContainer.addEventListener('input', (event) => {
+        const textarea = event.target.closest('textarea[data-module-id]');
+        if (textarea) {
+          updateCounter(textarea);
+          setModuleStatus(textarea.dataset.moduleId, 'Modification non sauvegardée — utilisez « Sauvegarder tous les blueprints ».');
+        }
+      });
+
+      modulesContainer.addEventListener('click', async (event) => {
+        const target = event.target.closest('button[data-action]');
+        if (!target) return;
+        const moduleId = target.dataset.moduleId;
+        const textarea = modulesContainer.querySelector(`textarea[data-module-id="${moduleId}"]`);
+        if (!textarea) return;
+
+        if (target.dataset.action === 'copy') {
+          try {
+            await navigator.clipboard.writeText(textarea.value);
+            setModuleStatus(moduleId, 'Contenu copié dans le presse-papiers.', 'success');
+          } catch (err) {
+            setModuleStatus(moduleId, 'Impossible de copier le contenu.', 'error');
+          }
+          return;
+        }
+
+        if (target.dataset.action === 'clear') {
+          textarea.value = '';
+          updateCounter(textarea);
+          setModuleStatus(moduleId, 'Contenu effacé — cliquez sur « Sauvegarder tous les blueprints » pour appliquer.', 'error');
+          return;
+        }
+
+      });
+
+      if (saveAllBtn) {
+        const originalSaveLabel = saveAllBtn.textContent;
+        saveAllBtn.addEventListener('click', async () => {
+          const certSelect = document.getElementById('cert');
+          const certId = certSelect && certSelect.value;
+          if (!certId) {
+            setSaveStatus('Choisissez une certification avant de sauvegarder.', 'error');
+            return;
+          }
+
+          const textareas = Array.from(modulesContainer.querySelectorAll('textarea[data-module-id]'));
+          if (!textareas.length) {
+            setSaveStatus('Aucun domaine à sauvegarder pour cette certification.', 'muted');
+            return;
+          }
+
+          const modulesPayload = textareas
+            .map((textarea) => {
+              const parsedId = Number.parseInt(textarea.dataset.moduleId, 10);
+              return Number.isNaN(parsedId)
+                ? null
+                : { id: parsedId, blueprint: textarea.value };
+            })
+            .filter(Boolean);
+
+          if (!modulesPayload.length) {
+            setSaveStatus('Aucun module valide à sauvegarder.', 'error');
+            return;
+          }
+
+          saveAllBtn.disabled = true;
+          saveAllBtn.textContent = 'Sauvegarde…';
+          setSaveStatus('Sauvegarde en cours…');
+
+          try {
+            const response = await loadJSON(`${base}api/certifications/${certId}/modules`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ modules: modulesPayload })
+            });
+
+            const { results, updated, unchanged, not_found: notFound } = response || {};
+            const resultMap = new Map();
+            if (Array.isArray(results)) {
+              results.forEach((item) => {
+                if (item && typeof item.module_id !== 'undefined') {
+                  resultMap.set(String(item.module_id), item);
+                }
+              });
+            }
+
+            textareas.forEach((textarea) => {
+              const moduleKey = textarea.dataset.moduleId;
+              const moduleResult = resultMap.get(moduleKey);
+              if (!moduleResult) {
+                setModuleStatus(moduleKey, 'Aucune réponse de sauvegarde reçue.', 'error');
+                return;
+              }
+
+              if (moduleResult.status === 'updated') {
+                setModuleStatus(moduleKey, 'Blueprint sauvegardé.', 'success');
+              } else if (moduleResult.status === 'unchanged') {
+                setModuleStatus(moduleKey, 'Aucun changement détecté — blueprint inchangé.', 'success');
+              } else if (moduleResult.status === 'not_found') {
+                setModuleStatus(moduleKey, moduleResult.message || 'Module introuvable pour cette certification.', 'error');
+              } else {
+                setModuleStatus(moduleKey, moduleResult.message || 'Statut de sauvegarde inconnu.', 'error');
+              }
+              updateCounter(textarea);
+            });
+
+            const parts = [];
+            if (typeof updated === 'number') {
+              parts.push(`${updated} mis à jour`);
+            }
+            if (typeof unchanged === 'number') {
+              parts.push(`${unchanged} inchangés`);
+            }
+            if (typeof notFound === 'number' && notFound) {
+              parts.push(`${notFound} introuvables`);
+            }
+            const summary = parts.length ? `Sauvegarde terminée : ${parts.join(', ')}.` : 'Sauvegarde terminée.';
+            setSaveStatus(summary, notFound ? 'error' : 'success');
+          } catch (err) {
+            setSaveStatus(err.message || 'Erreur lors de la sauvegarde.', 'error');
+          } finally {
+            saveAllBtn.disabled = false;
+            saveAllBtn.textContent = originalSaveLabel;
+          }
+        });
+      }
+
+      if (generateBtn) {
+        const originalLabel = generateBtn.textContent;
+        generateBtn.addEventListener('click', async () => {
+          const certId = document.getElementById('cert').value;
+          if (!certId) {
+            setGenerationStatus('Choisissez une certification avant de générer.', 'error');
+            return;
+          }
+
+          setGenerationStatus('Génération des blueprints en cours…');
+          generationLog.textContent = '';
+          generationLog.style.display = 'none';
+          generateBtn.disabled = true;
+          generateBtn.textContent = 'Génération…';
+          let latestResults = [];
+
+          try {
+            const payload = {
+              mode: forceAllToggle.checked ? 'all' : 'missing'
+            };
+            const response = await loadJSON(`${base}api/certifications/${certId}/generate-blueprints`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+
+            const { results, processed, updated, certification } = response;
+            if (Array.isArray(results) && results.length) {
+              latestResults = results;
+              generationLog.style.display = 'block';
+              results.forEach(result => {
+                const textarea = modulesContainer.querySelector(`textarea[data-module-id="${result.module_id}"]`);
+                if (result.status === 'success') {
+                  if (textarea) {
+                    textarea.value = result.blueprint || '';
+                    updateCounter(textarea);
+                  }
+                  setModuleStatus(result.module_id, 'Blueprint généré automatiquement.', 'success');
+                  generationLog.textContent += `✅ ${result.module_name}\n`;
+                } else {
+                  setModuleStatus(result.module_id, result.error || 'Erreur lors de la génération.', 'error');
+                  generationLog.textContent += `⛔ ${result.module_name}: ${result.error}\n`;
+                }
+              });
+            }
+
+            setGenerationStatus(`Traitement terminé pour ${processed} domaine(s) — ${updated} mis à jour (${certification}).`, 'success');
+          } catch (err) {
+            setGenerationStatus(err.message || 'Erreur lors de la génération.', 'error');
+          } finally {
+            generateBtn.disabled = false;
+            generateBtn.textContent = originalLabel;
+            await refreshModules(certSel.value);
+            if (Array.isArray(latestResults) && latestResults.length) {
+              latestResults.forEach(result => {
+                if (result.status === 'success') {
+                  setModuleStatus(result.module_id, 'Blueprint généré automatiquement.', 'success');
+                } else if (result.status === 'error') {
+                  setModuleStatus(result.module_id, result.error || 'Erreur lors de la génération.', 'error');
+                }
+              });
+            }
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>
