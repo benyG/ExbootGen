@@ -358,6 +358,35 @@ def generate_module_blueprint_excerpt(
     return _run_completion(prompt)
 
 
+def generate_module_blueprint_excerpt(
+    certification_name: str, domain_name: str
+) -> str:
+    """Generate a textual blueprint excerpt for a certification domain."""
+
+    if not OPENAI_API_KEY:
+        raise Exception(
+            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un blueprint."
+        )
+
+    certification = (certification_name or "").strip()
+    domain = (domain_name or "").strip()
+    if not certification or not domain:
+        raise ValueError(
+            "Les noms de certification et de domaine sont requis pour générer un blueprint."
+        )
+
+    prompt = (
+        f"Generate a blueprint excerpt for the domain {domain} from the certification {certification}.\n"
+        "RULES:\n"
+        "- 300–700 words\n"
+        "- Focus only on what’s listed in the official exam blueprint.\n"
+        "STRICT RESPONSE STRUCTURE:\n"
+        "- Key focus areas from the official exam guide."
+    )
+
+    return _run_completion(prompt)
+
+
 def _build_course_art_prompt(certification: str, vendor: str) -> str:
     """Return the course art prompt even if the template constant is missing."""
 
@@ -1129,8 +1158,7 @@ def generate_lab_blueprint(
     """
 
     prompt = (
-        prompt_template
-        .replace("{domains_label}", domains_label)
+        prompt_template.replace("{domains_label}", domains_label)
         .replace("{certification}", certification)
         .replace("{min_steps}", str(min_steps))
         .replace("{domain_descr}", domain_descr)

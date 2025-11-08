@@ -264,6 +264,19 @@
     .modules-panel h2 { margin-bottom: 0.6rem; }
     .modules-panel p.description { margin: 0; color: var(--text-muted); }
 
+    .modules-toolbar {
+      margin-top: 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .modules-toolbar button { width: auto; flex-shrink: 0; }
+    .modules-toolbar p { margin: 0; color: var(--text-muted); font-size: 0.9rem; flex: 1; min-width: 220px; }
+
+    .inline-button { width: auto; }
+
     .modules-container { margin-top: 2rem; display: flex; flex-direction: column; gap: 1.8rem; }
 
     .module-card {
@@ -317,6 +330,8 @@
       .actions-row { flex-direction: column; align-items: stretch; }
       .module-actions { justify-content: stretch; }
       .module-actions button { width: 100%; }
+      .modules-toolbar { flex-direction: column; align-items: stretch; }
+      .modules-toolbar button.inline-button { width: 100%; }
     }
   </style>
 </head>
@@ -380,6 +395,11 @@
         Chaque domaine dispose d’un espace d’édition. Sauvegardez vos ajustements ou regénérez les sections manquantes.
         Les blueprints sont envoyés en parallèle (≥4 domaines) pour accélérer le travail.
       </p>
+      <div class="modules-toolbar">
+        <button id="saveAllBlueprintsBtn" class="primary inline-button" type="button">Sauvegarder tous les blueprints</button>
+        <p>Les modifications marquées ci-dessous seront enregistrées simultanément.</p>
+      </div>
+      <div id="saveStatus" class="status-line"></div>
       <div id="generationStatus" class="status-line"></div>
       <pre id="generationLog" class="generation-log"></pre>
       <div id="modulesEmpty" class="empty-state">Sélectionnez une certification pour afficher ses domaines.</div>
@@ -393,6 +413,8 @@
 
     const modulesContainer = document.getElementById('modulesContainer');
     const modulesEmpty = document.getElementById('modulesEmpty');
+    const saveStatus = document.getElementById('saveStatus');
+    const saveAllBtn = document.getElementById('saveAllBlueprintsBtn');
     const selectionLabel = document.getElementById('selectionLabel');
     const lastRefresh = document.getElementById('lastRefresh');
     const generateBtn = document.getElementById('generateBlueprintsBtn');
@@ -408,6 +430,17 @@
         generationStatus.classList.add('error');
       } else if (tone === 'success') {
         generationStatus.classList.add('success');
+      }
+    }
+
+    function setSaveStatus(message, tone = 'muted') {
+      if (!saveStatus) return;
+      saveStatus.textContent = message || '';
+      saveStatus.classList.remove('error', 'success');
+      if (tone === 'error') {
+        saveStatus.classList.add('error');
+      } else if (tone === 'success') {
+        saveStatus.classList.add('success');
       }
     }
 
@@ -458,6 +491,7 @@
 
     function renderModules(modules) {
       modulesContainer.innerHTML = '';
+      setSaveStatus('');
       if (!Array.isArray(modules) || modules.length === 0) {
         modulesEmpty.style.display = 'block';
         modulesEmpty.textContent = 'Aucun domaine enregistré pour cette certification.';
@@ -500,14 +534,6 @@
 
         const actions = document.createElement('div');
         actions.className = 'module-actions';
-        const saveBtn = document.createElement('button');
-        saveBtn.type = 'button';
-        saveBtn.className = 'primary';
-        saveBtn.dataset.action = 'save';
-        saveBtn.dataset.moduleId = module.id;
-        saveBtn.textContent = 'Sauvegarder';
-        actions.appendChild(saveBtn);
-
         const copyBtn = document.createElement('button');
         copyBtn.type = 'button';
         copyBtn.className = 'ghost';
@@ -543,12 +569,14 @@
         modulesContainer.innerHTML = '';
         modulesEmpty.style.display = 'block';
         modulesEmpty.textContent = 'Sélectionnez une certification pour afficher ses domaines.';
+        setSaveStatus('');
         return;
       }
 
       modulesContainer.innerHTML = '';
       modulesEmpty.style.display = 'block';
       modulesEmpty.textContent = 'Chargement des domaines…';
+      setSaveStatus('');
       try {
         const modules = await loadJSON(`${base}api/certifications/${certId}/modules`);
         renderModules(modules);
@@ -556,6 +584,7 @@
         modulesContainer.innerHTML = '';
         modulesEmpty.style.display = 'block';
         modulesEmpty.textContent = err.message || 'Impossible de récupérer les domaines.';
+        setSaveStatus(err.message || 'Impossible de récupérer les domaines.', 'error');
       }
     }
 
@@ -628,7 +657,7 @@
         const textarea = event.target.closest('textarea[data-module-id]');
         if (textarea) {
           updateCounter(textarea);
-          setModuleStatus(textarea.dataset.moduleId, 'Modification non sauvegardée.');
+          setModuleStatus(textarea.dataset.moduleId, 'Modification non sauvegardée — utilisez « Sauvegarder tous les blueprints ».');
         }
       });
 
@@ -652,29 +681,103 @@
         if (target.dataset.action === 'clear') {
           textarea.value = '';
           updateCounter(textarea);
-          setModuleStatus(moduleId, 'Contenu effacé — sauvegardez pour appliquer.', 'error');
+          setModuleStatus(moduleId, 'Contenu effacé — cliquez sur « Sauvegarder tous les blueprints » pour appliquer.', 'error');
           return;
         }
 
-        if (target.dataset.action === 'save') {
-          target.disabled = true;
-          target.textContent = 'Sauvegarde…';
+      });
+
+      if (saveAllBtn) {
+        const originalSaveLabel = saveAllBtn.textContent;
+        saveAllBtn.addEventListener('click', async () => {
+          const certSelect = document.getElementById('cert');
+          const certId = certSelect && certSelect.value;
+          if (!certId) {
+            setSaveStatus('Choisissez une certification avant de sauvegarder.', 'error');
+            return;
+          }
+
+          const textareas = Array.from(modulesContainer.querySelectorAll('textarea[data-module-id]'));
+          if (!textareas.length) {
+            setSaveStatus('Aucun domaine à sauvegarder pour cette certification.', 'muted');
+            return;
+          }
+
+          const modulesPayload = textareas
+            .map((textarea) => {
+              const parsedId = Number.parseInt(textarea.dataset.moduleId, 10);
+              return Number.isNaN(parsedId)
+                ? null
+                : { id: parsedId, blueprint: textarea.value };
+            })
+            .filter(Boolean);
+
+          if (!modulesPayload.length) {
+            setSaveStatus('Aucun module valide à sauvegarder.', 'error');
+            return;
+          }
+
+          saveAllBtn.disabled = true;
+          saveAllBtn.textContent = 'Sauvegarde…';
+          setSaveStatus('Sauvegarde en cours…');
+
           try {
-            await loadJSON(`${base}api/modules/${moduleId}`, {
+            const response = await loadJSON(`${base}api/certifications/${certId}/modules`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ blueprint: textarea.value })
+              body: JSON.stringify({ modules: modulesPayload })
             });
-            setModuleStatus(moduleId, 'Blueprint sauvegardé.', 'success');
+
+            const { results, updated, unchanged, not_found: notFound } = response || {};
+            const resultMap = new Map();
+            if (Array.isArray(results)) {
+              results.forEach((item) => {
+                if (item && typeof item.module_id !== 'undefined') {
+                  resultMap.set(String(item.module_id), item);
+                }
+              });
+            }
+
+            textareas.forEach((textarea) => {
+              const moduleKey = textarea.dataset.moduleId;
+              const moduleResult = resultMap.get(moduleKey);
+              if (!moduleResult) {
+                setModuleStatus(moduleKey, 'Aucune réponse de sauvegarde reçue.', 'error');
+                return;
+              }
+
+              if (moduleResult.status === 'updated') {
+                setModuleStatus(moduleKey, 'Blueprint sauvegardé.', 'success');
+              } else if (moduleResult.status === 'unchanged') {
+                setModuleStatus(moduleKey, 'Aucun changement détecté — blueprint inchangé.', 'success');
+              } else if (moduleResult.status === 'not_found') {
+                setModuleStatus(moduleKey, moduleResult.message || 'Module introuvable pour cette certification.', 'error');
+              } else {
+                setModuleStatus(moduleKey, moduleResult.message || 'Statut de sauvegarde inconnu.', 'error');
+              }
+              updateCounter(textarea);
+            });
+
+            const parts = [];
+            if (typeof updated === 'number') {
+              parts.push(`${updated} mis à jour`);
+            }
+            if (typeof unchanged === 'number') {
+              parts.push(`${unchanged} inchangés`);
+            }
+            if (typeof notFound === 'number' && notFound) {
+              parts.push(`${notFound} introuvables`);
+            }
+            const summary = parts.length ? `Sauvegarde terminée : ${parts.join(', ')}.` : 'Sauvegarde terminée.';
+            setSaveStatus(summary, notFound ? 'error' : 'success');
           } catch (err) {
-            setModuleStatus(moduleId, err.message || 'Erreur lors de la sauvegarde.', 'error');
+            setSaveStatus(err.message || 'Erreur lors de la sauvegarde.', 'error');
           } finally {
-            target.disabled = false;
-            target.textContent = 'Sauvegarder';
-            updateCounter(textarea);
+            saveAllBtn.disabled = false;
+            saveAllBtn.textContent = originalSaveLabel;
           }
-        }
-      });
+        });
+      }
 
       if (generateBtn) {
         const originalLabel = generateBtn.textContent;

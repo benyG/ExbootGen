@@ -61,17 +61,22 @@ def api_modules(cert_id: int):
     return jsonify(rows)
 
 
+def _normalise_blueprint(value) -> str | None:
+    """Return a trimmed blueprint string or None."""
+
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+    else:
+        text = str(value).strip()
+    return text or None
+
+
 @module_blueprints_bp.route("/api/modules/<int:module_id>", methods=["PATCH"])
 def api_update_module(module_id: int):
     payload = request.get_json(silent=True) or {}
-    blueprint_text = payload.get("blueprint")
-
-    if blueprint_text is None:
-        value = None
-    else:
-        value = blueprint_text.strip() if isinstance(blueprint_text, str) else str(blueprint_text)
-        if not value:
-            value = None
+    value = _normalise_blueprint(payload.get("blueprint"))
 
     conn = mysql.connector.connect(**DB_CONFIG)
     try:
@@ -82,8 +87,13 @@ def api_update_module(module_id: int):
                 (value, module_id),
             )
             if cur.rowcount == 0:
-                conn.rollback()
-                return jsonify({"error": "Module introuvable."}), 404
+                cur.execute("SELECT 1 FROM modules WHERE id = %s", (module_id,))
+                exists = cur.fetchone()
+                if not exists:
+                    conn.rollback()
+                    return jsonify({"error": "Module introuvable."}), 404
+                conn.commit()
+                return jsonify({"status": "unchanged", "module_id": module_id})
             conn.commit()
         except mysql.connector.Error as exc:
             conn.rollback()
@@ -94,6 +104,119 @@ def api_update_module(module_id: int):
         conn.close()
 
     return jsonify({"status": "updated", "module_id": module_id})
+
+
+@module_blueprints_bp.route(
+    "/api/certifications/<int:cert_id>/modules", methods=["PATCH"]
+)
+def api_bulk_update_modules(cert_id: int):
+    payload = request.get_json(silent=True) or {}
+    modules = payload.get("modules")
+
+    if not isinstance(modules, list):
+        return jsonify({"error": "Le corps de la requête doit contenir une liste 'modules'."}), 400
+
+    to_update: dict[int, str | None] = {}
+    for item in modules:
+        if not isinstance(item, dict):
+            continue
+        module_id = item.get("id")
+        try:
+            module_id = int(module_id)
+        except (TypeError, ValueError):
+            continue
+        to_update[module_id] = _normalise_blueprint(item.get("blueprint"))
+
+    if not to_update:
+        return jsonify({"error": "Aucun module valide à mettre à jour."}), 400
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    try:
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute("SELECT 1 FROM courses WHERE id = %s", (cert_id,))
+            if not cur.fetchone():
+                return jsonify({"error": "Certification introuvable."}), 404
+
+            placeholders = ",".join(["%s"] * len(to_update))
+            query = (
+                "SELECT id, name, blueprint FROM modules "
+                "WHERE course = %s AND id IN (" + placeholders + ")"
+            )
+            params = (cert_id, *to_update.keys())
+            cur.execute(query, params)
+            rows = cur.fetchall()
+        finally:
+            cur.close()
+
+        existing = {row["id"]: row for row in rows}
+        results: list[dict] = []
+        updates: list[tuple[str | None, int]] = []
+
+        for module_id, value in to_update.items():
+            module = existing.get(module_id)
+            if not module:
+                results.append(
+                    {
+                        "module_id": module_id,
+                        "module_name": None,
+                        "status": "not_found",
+                        "message": "Module introuvable pour cette certification.",
+                    }
+                )
+                continue
+
+            current = _normalise_blueprint(module.get("blueprint"))
+            if current == value:
+                results.append(
+                    {
+                        "module_id": module_id,
+                        "module_name": module.get("name"),
+                        "status": "unchanged",
+                    }
+                )
+                continue
+
+            updates.append((value, module_id))
+            results.append(
+                {
+                    "module_id": module_id,
+                    "module_name": module.get("name"),
+                    "status": "updated",
+                }
+            )
+
+        if updates:
+            cur = conn.cursor()
+            try:
+                cur.executemany(
+                    "UPDATE modules SET blueprint = %s WHERE id = %s",
+                    updates,
+                )
+                conn.commit()
+            except mysql.connector.Error as exc:
+                conn.rollback()
+                return jsonify({"error": str(exc)}), 500
+            finally:
+                cur.close()
+
+        updated_count = sum(1 for item in results if item.get("status") == "updated")
+        unchanged_count = sum(1 for item in results if item.get("status") == "unchanged")
+        not_found_count = sum(1 for item in results if item.get("status") == "not_found")
+    finally:
+        conn.close()
+
+    return jsonify(
+        {
+            "certification_id": cert_id,
+            "requested": len(modules),
+            "processed": len(results),
+            "updated": updated_count,
+            "unchanged": unchanged_count,
+            "not_found": not_found_count,
+            "results": results,
+        }
+    )
 
 
 @module_blueprints_bp.route(
