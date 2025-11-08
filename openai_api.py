@@ -238,7 +238,6 @@ def clean_and_decode_json(content: str) -> dict:
     setattr(err, "raw_content", cleaned)
     raise err
 
-
 def _run_completion(prompt: str) -> str:
     payload = {
         "model": OPENAI_MODEL,
@@ -261,7 +260,6 @@ def _run_completion(prompt: str) -> str:
 
     return message["content"].strip()
 
-
 def _render_prompt(template_map: dict, topic_type: str, certification: str, vendor: str, exam_url: str) -> str:
     try:
         template = template_map[topic_type]
@@ -274,10 +272,9 @@ def _render_prompt(template_map: dict, topic_type: str, certification: str, vend
         exam_url=exam_url,
     )
 
-
 def generate_certification_article(
     certification: str, vendor: str, exam_url: str, topic_type: str
-) -> str:
+    ) -> str:
     """Generate the long-form certification article following the required structure."""
 
     if not OPENAI_API_KEY:
@@ -294,10 +291,9 @@ def generate_certification_article(
     )
     return _run_completion(prompt)
 
-
 def generate_certification_tweet(
     certification: str, vendor: str, exam_url: str, topic_type: str
-) -> str:
+    ) -> str:
     """Generate the announcement tweet for the certification launch."""
 
     if not OPENAI_API_KEY:
@@ -314,10 +310,9 @@ def generate_certification_tweet(
     )
     return _run_completion(prompt)
 
-
 def generate_certification_linkedin_post(
     certification: str, vendor: str, exam_url: str, topic_type: str
-) -> str:
+    ) -> str:
     """Generate the LinkedIn announcement post for the certification launch."""
 
     if not OPENAI_API_KEY:
@@ -333,7 +328,6 @@ def generate_certification_linkedin_post(
         exam_url,
     )
     return _run_completion(prompt)
-
 
 def generate_module_blueprint_excerpt(
     certification_name: str, domain_name: str
@@ -399,7 +393,6 @@ def generate_certification_course_art(certification: str, vendor: str) -> dict:
     raw_content = _run_completion(prompt)
     return clean_and_decode_json(raw_content)
 
-
 def _model_temperature_override(model: str) -> Optional[float]:
     """Return the temperature override to use for the supplied model.
 
@@ -413,7 +406,6 @@ def _model_temperature_override(model: str) -> Optional[float]:
         return None
 
     return 0.2
-
 
 def _post_with_retry(payload: dict) -> requests.Response:
     """Send a POST request to the OpenAI API with retry and backoff.
@@ -491,7 +483,6 @@ def _post_with_retry(payload: dict) -> requests.Response:
             )
             time.sleep(delay)
 
-
 def generate_domains_outline(certification: str) -> dict:
     """Retrieve official domains for a certification via the OpenAI API."""
 
@@ -523,7 +514,6 @@ def generate_domains_outline(certification: str) -> dict:
 
     content = message["content"]
     return clean_and_decode_json(content)
-
 
 def generate_questions(
     provider_name: str,
@@ -784,24 +774,39 @@ RULES:
 """
         else:
             content_prompt = f"""
-TASK: Retrieve the official course content of the domain {domain} of {certification} certification exam and generate {current} questions for that specific domain.
-Main domain description: {domain_descr}
-Questions: {question_type_text}
-Difficulty level: {level}: {level_explained}
-Practical: {practical}
+You are an expert exam item writer specialized in professional certification exams.
+
+GOAL:
+Generate {current} high-quality exam questions for the specific domain titled {domain} of the following certification exam 
+
+- Certification: {certification}
+- Vendor: {provider_name}
+- Exam domain: {domain}
+- Domain description and official objectives (blueprint excerpt):
+{domain_descr}
+
+- Questions type: {question_type_text}
+- Difficulty level: {level}: {level_explained}
+- Practical: {practical}
 {scenario_illustration_type}
-Reference: Use the certification provider's official website and free exam dumps PDFs from websites like allfreedumps.com, itexams.com, exam-labs.com, pass4sure.com, etc., to find or build real exam questions.
 
 {specific_question_quality}
+For each question, verify it matches real domain's objective.
 
 Format your response as a decodable single-line JSON object.
 RESPONSE FORMAT (JSON only, no additional text):
 {response_format}
 
+STRICT SCOPE:
+1. Only use the information that can be logically derived from the official domain objectives and description.
+2. Do NOT introduce topics, services, products, features or commands that are not clearly part of this domain for this certification.
+3. If you are unsure whether a topic is in scope, consider it OUT of scope and do not create a question on it.
+4. If you cannot map the question to at least one explicit objective of the domain, DO NOT include that question.
+5. If the certification is identified as a technology vendor-neutral provider, the question should take this into account.
+
 RULES:
 1. If you want to present a line of code in your response, surround that portion with '[code]...[/code]'. This will help in formatting it.
 2. If you want to present a console command or result in your response, surround that portion with '[console]...[/console]'. This will help in formatting it.
-3. Strictly align questions to the content of the syllabus of the domain selected for the indicated certification.
 """
 
         data = {
@@ -837,285 +842,291 @@ def generate_lab_blueprint(
     difficulty: str,
     min_steps: int,
     step_types: list[str],
-) -> dict:
-    """Generate a hands-on lab scenario compatible with the Lab Player.
+    ) -> dict:
+        """Generate a hands-on lab scenario compatible with the Lab Player.
 
-    Parameters
-    ----------
-    provider : str
-        Name of the certification vendor.
-    certification : str
-        Certification title.
-    domains : list[str]
-        Ordered list containing the primary and secondary domains used for the lab.
-    domain_descr : str
-        Narrative description combining the selected domains.
-    difficulty : str
-        Requested difficulty level (easy, medium, hard).
-    min_steps : int
-        Minimum amount of steps the lab must contain.
-    step_types : list[str]
-        Allowed step types for the lab generation prompt.
-    """
+        Parameters
+        ----------
+        provider : str
+            Name of the certification vendor.
+        certification : str
+            Certification title.
+        domains : list[str]
+            Ordered list containing the primary and secondary domains used for the lab.
+        domain_descr : str
+            Narrative description combining the selected domains.
+        difficulty : str
+            Requested difficulty level (easy, medium, hard).
+        min_steps : int
+            Minimum amount of steps the lab must contain.
+        step_types : list[str]
+            Allowed step types for the lab generation prompt.
+        """
 
-    if not OPENAI_API_KEY:
-        raise Exception(
-            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un lab."
-        )
+        if not OPENAI_API_KEY:
+            raise Exception(
+                "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un lab."
+            )
 
-    if not domains:
-        raise ValueError("Au moins un domaine est requis pour générer un lab.")
+        if not domains:
+            raise ValueError("Au moins un domaine est requis pour générer un lab.")
 
-    step_types_json = json.dumps(step_types, ensure_ascii=False)
-    domains_label = ", ".join(domains)
-    prompt_template = """You are an expert in creating interactive labs in JSON for a tool.
-These labs simulate practical scenarios tied to specific certification exam domains.
-TASK:
-For certification exam: {certification} from vendor {vendor}.
-Retrieve the official course content for the domains "{domains_label}" and generate a practical lab with at least {min_steps} steps.
-- Main domain description: {domain_descr}
-- Lab Difficulty: {difficulty}
-- Expected step types (JSON): {step_types_json}
-Each lab must be valid JSON only, following all rules below.
-The next section details its key structure.
+        step_types_json = json.dumps(step_types, ensure_ascii=False)
+        domains_label = ", ".join(domains)
+        prompt_template = """You are an expert in creating interactive labs in JSON for a tool.
+    These labs simulate practical scenarios tied to specific certification exam domains.
+    TASK:
+    For certification exam: {certification} from vendor {vendor}.
+    Retrieve the official course content for the domains "{domains_label}" and generate a practical lab with at least {min_steps} steps.
+    - Main domain description: {domain_descr}
+    - Lab Difficulty: {difficulty}
+    - Expected step types (JSON): {step_types_json}
+    STRICT SCOPE:
+    1. Only use the information that can be logically derived from the official domain objectives and description.
+    2. Do NOT introduce topics, services, products, features or commands that are not clearly part of this domain for this certification.
+    3. If you are unsure whether a topic is in scope, consider it OUT of scope and do not create a question on it.
+    4. If you cannot map the question to at least one explicit objective of the domain, DO NOT include that question.
+    5. If the certification is identified as a technology vendor-neutral provider, the question should take this into account.
+    Each lab must be valid JSON only, following all rules below.
+    The next section details its key structure.
 
-### Expected JSON Structure
-## Root Object
-schema_version: always "0.2.0".
-lab: contains all scenario data.
-## Lab Object
-id (unique kebab-case): stable lab identifier.
-title, subtitle: main and short titles.
-scenario_md: 2–3 Markdown paragraphs describing lab scenario context, mission, and objectives related to {provider}/{certification}.
-variables (optional): reusable definitions (type: "choice"|"string"|"number", with possible choices, min, max, etc.). Use via {{variable}}.
-scoring: {"max_points": <sum of step points>}.
-timer: {"mode": "countdown", "seconds": x} — Duration must be estimated during generation.
-assets: array of downloadable or inline resources (id, kind, filename, mime, inline:true, content_b64). Resources must always be realistic.
-steps: ordered list of detailed steps (≥ {min_steps}), following type-specific rules.
-# Reference JSON template:
-{
-  "schema_version": "0.2.0",
-  "lab": {
-    "id": "scenario-name",
-    "title": "...",
-    "subtitle": "...",
-    "scenario_md": "Paragraphs ...",
-    "variables": {
-      "example_var": {
-        "type": "choice",
-        "choices": ["option A", "option B"]
-      }
-    },
-    "scoring": { "max_points": x },
-    "timer": { "mode": "countdown", "seconds": x },
-    "assets": [
-      {
-        "id": "file-id",
-        "kind": "file",
-        "filename": "policy.json",
-        "mime": "application/json",
-        "inline": true,
-        "content_b64": "BASE64..."
-      }
-    ],
-    "steps": []
-  }
-}
-
-## Common Step Structure (lab.steps[i])
-{
- "id": "unique-step-id",
- "type": "terminal | console_form | inspect_file | architecture | quiz | anticipation",
- "title": "...",
- "instructions_md": "...",
- "points": 10,
- "hints": ["Hint1", "Hint2",...],
- "transitions": {
-   "on_success": "next-step-id-or-#end",
-   "on_failure": { "action": "#stay" }
- },
- "validators": [ ],
- "world_patch": [ ],
- "<step-type-specific block>": {... }
-}
-id: unique per lab.
-instructions_md: Provide clear instructions for every step. When a component needs a command, explain what’s expected for each without revealing answers or decoy components. 
-points: ≥1; total equals lab.scoring.max_points.
-hints: ≥1, from subtle to explicit.
-transitions: define next step (on_success) or retry/remediation (on_failure).
-validators: define strict validation rules with optional feedback messages.
-world_patch: pre-validation JSON operations (set|unset|push|remove) using dot paths (e.g., systems.firewall.enabled).
-
-## JSON structure by step type:
- #1. terminal
-Specific block: terminal property.
-"terminal": {
-  "prompt": "PS C:\\> | $ | ...",
-  "environment": "bash | powershell | cloudcli | ...",
-  "history": [],
-  "validators": [
+    ### Expected JSON Structure
+    ## Root Object
+    schema_version: always "0.2.0".
+    lab: contains all scenario data.
+    ## Lab Object
+    id (unique kebab-case): stable lab identifier.
+    title, subtitle: main and short titles.
+    scenario_md: 2–3 Markdown paragraphs describing lab scenario context, mission, and objectives related to {provider}/{certification}.
+    variables (optional): reusable definitions (type: "choice"|"string"|"number", with possible choices, min, max, etc.). Use via {{variable}}.
+    scoring: {"max_points": <sum of step points>}.
+    timer: {"mode": "countdown", "seconds": x} — Duration must be estimated during generation.
+    assets: array of downloadable or inline resources (id, kind, filename, mime, inline:true, content_b64). Resources must always be realistic.
+    steps: ordered list of detailed steps (≥ {min_steps}), following type-specific rules.
+    # Reference JSON template:
     {
-      "kind": "command",
-      "match": {
-        "program": "aws",
-        "subcommand": ["ec2", ...],
-        "flags": {
-          "required": ["--group-ids"],
-          "aliases": { "-g": "--group-ids" }
+      "schema_version": "0.2.0",
+      "lab": {
+        "id": "scenario-name",
+        "title": "...",
+        "subtitle": "...",
+        "scenario_md": "Paragraphs ...",
+        "variables": {
+          "example_var": {
+            "type": "choice",
+            "choices": ["option A", "option B"]
+          }
         },
-        "args": [
-          { "flag": "--group-ids", "expect": "sg-{{expected_group}}" }
-        ]
-      },
-      "response": {
-        "stdout_template": "...",
-        "stderr_template": "",
-        "world_patch": [
-          { "op": "set", "path": "systems.network.audit", "value": true }
-        ]
+        "scoring": { "max_points": x },
+        "timer": { "mode": "countdown", "seconds": x },
+        "assets": [
+          {
+            "id": "file-id",
+            "kind": "file",
+            "filename": "policy.json",
+            "mime": "application/json",
+            "inline": true,
+            "content_b64": "BASE64..."
+          }
+        ],
+        "steps": []
       }
     }
-  ]
-}
-prompt: terminal prompt string; double backslashes (\\) for Windows env.
-environment: target shell.
-history (optional): previously run, visible commands.
-Each "command" validator defines the exact expected commands (program, subcommands, flags, args).
-The response sets effects (stdout_template, stderr_template, world patches).
-Add validators to cover all required or allowed command variants.
- #2. console_form
-Specific block: form (simulated UI). Validation goes in validators.
-"form": {
-  "model_path": "services.webapp.config",
-  "schema": {
-    "layout": "vertical | horizontal",
-    "fields": [
-      {
-        "key": "mode",
-        "label": "Mode",
-        "widget": "toggle",
-        "options": ["Off", "On"],
-        "required": true
-      },
-      {
-        "key": "endpoint",
-        "label": "URL",
-        "widget": "input",
-        "placeholder": "https://api.example.com",
-        "helptext": ""Enter the secure URL"
-      }
-    ]
-  }
-},
-"validators": [
-  { "kind": "payload", "path": "mode", "equals": "On" },
-  { "kind": "world", "expect": { "path": "services.webapp.config.endpoint", "pattern": "^https://" } }
-]
-model_path: stores submitted values in world state.
-schema.layout: "vertical" or "horizontal".
-schema.fields[]: defines fields  (widget = input, textarea, select, toggle, radio, etc.) with optional options, default, helptext, validation. Default value must not be the correct expected answer.
-Payload validators check the submitted data; world validators verify the saved world state.
-Validators: "payload" checks submitted data; "world" checks saved state.
-Add messages or combined checks to ensure only the correct configurations passes.
- #3. inspect_file
-Specific block: file_ref and input keys.
-"file_ref": "file-id",
-"input": {
-  "mode": "answer | editor",
-  "prompt": "Indicate the misconfigured resource",
-  "placeholder": "Ex: sg-00",
-  "language": "text | json | yaml | powershell | ..."
-},
-"validators": [
-{ "kind": "jsonpath_match", "path": "$.payload", "expected": "sg-0abc123" },
-{ "kind": "expression", "expr": "(get('payload')||'').includes('sg-0abc123')", "message": "Expected answer: sg-0abc123" }
-]
-file_ref: ID of an existing asset.
-input.mode: "answer" (text) or "editor" (editable); always set a language (e.g. JSON, YAML, Bash). The default must not match the expected answer.
-validators: may combine jsonschema, jsonpath_match, payload, expression, world, etc.
-Allow only one valid answer.
 
-#4. architecture
-Specific block: architecture property + strict validators.
-"architecture": {
-"mode": "freeform | slots",
-"palette_title": "Available Components",
-"palette_caption": "Drag components.",
-"palette": [
-	{ "id": "gw", "label": "Gateway", "icon": "🛡️", "tags": ["network"], "meta": {"vendor": "generic"} },
-	{ "id": "app", "label": "App Server", "icon": "🖥️", "tags": ["compute"] },
-	{ "id": "decoy", "label": "Legacy Fax", "icon": "📠", "tags": ["legacy"], "is_decoy": true },
-	...
-    ],
-"initial_nodes": [  ],
-"world_path": "architectures.segment",
-"help": "Double-click a component to enter its commands.",
-"expected_world": {
-"allow_extra_nodes": false,
-"nodes": [
-	{
-	"count": 1,
-	"match": {
-	"palette_id": "gw",
-	"label": "Gateway-1",
-	"config_contains": ["interface eth0", "policy"]
-        }
-    },
+    ## Common Step Structure (lab.steps[i])
     {
-    "count": 1,
-    "match": {
-    "palette_id": "app",
-    "commands": ["set app-tier", "set subnet"]
-        }
+     "id": "unique-step-id",
+     "type": "terminal | console_form | inspect_file | architecture | quiz | anticipation",
+     "title": "...",
+     "instructions_md": "...",
+     "points": 10,
+     "hints": ["Hint1", "Hint2",...],
+     "transitions": {
+       "on_success": "next-step-id-or-#end",
+       "on_failure": { "action": "#stay" }
+     },
+     "validators": [ ],
+     "world_patch": [ ],
+     "<step-type-specific block>": {... }
     }
-    ],
-"links": [
-	{ "from": { "label": "Gateway-1" }, "to": { "palette_id": "app" }, "count": 1, "bidirectional": true }
-	]
-}
-},
-"validators": [
-	{ "kind": "payload", "path": "nodes.length", "equals": 2 },
-	{ "kind": "expression", "expr": "!(get('payload.nodes')||[]).some(n => n.palette_id === 'decoy')", "message": "Component not needed." },
-	{ "kind": "expression", "expr": "(get('payload.links')||[]).length === 1", "message": "Only one link expected." }
-]
-mode: "freeform" (interactive) or "slots".
-palette: lists all components plus one decoy (is_decoy:true) shown under its normal name; icon may be emoji, text, or URL.
-initial_nodes (optional): empty. user builds the architecture.
-Users double-click a component to enter commands or config; Validators can check commands, config_contains, config_regex, tags, etc.
-expected_world: prevent alternate setups using allow_extra_nodes, nodes (count, match), and links (direction, number, constraints).
-Add validators to enforce node count, exclude decoy, require commands, or apply business rules.
+    id: unique per lab.
+    instructions_md: Provide clear instructions for every step. When a component needs a command, explain what’s expected for each without revealing answers or decoy components. 
+    points: ≥1; total equals lab.scoring.max_points.
+    hints: ≥1, from subtle to explicit.
+    transitions: define next step (on_success) or retry/remediation (on_failure).
+    validators: define strict validation rules with optional feedback messages.
+    world_patch: pre-validation JSON operations (set|unset|push|remove) using dot paths (e.g., systems.firewall.enabled).
 
-#5. quiz / anticipation
-Specific block: keys question_md, choices, correct, explanations (optional).
-"question_md": "...",
-"choices": [
-	{{ "id": "a", "text": "answer1" }},
-	{{ "id": "b", "text": "answer2" }},
-	{{ "id": "c", "text": "answer3" }}
-	{{ "id": "d", "text": "answer4" }}
-],
-"correct": ["a", "c"],
-"explanations": {{
-"a": "...",
-"c": "..."
-}}
-choices: array of {id, text} objects.
-correct: list of one or more correct IDs.
-explanations (optional): feedback per choice.
-validators: may include {"kind":"quiz","expect":["a","c"]}.
-#6. anticipation
-keep the quiz structure but focus questions on projection or prospective analysis.
-### Additional rules and compatibility
-All steps must follow the scenario_md narrative and the learning goal for the chosen certification domains. Each step must update or check the world state (world_patch, form.model_path, architecture.world_path, etc.).
-Hints must be progressive and in context.
-Honor {step_types_json}: include each requested step type at least once.
-Escape backslashes (\\) and newlines (\\n) in JSON strings.
-No comments or trailing commas. Ensure all references (file_ref, transitions, palette_id, etc.) exist and total points = scoring.max_points.
-Keep step dependencies consistent: later steps must use the exact same paths set earlier.
-### Output Format
-Return only the final JSON (formatted or minified), with no extra text.
-"""
+    ## JSON structure by step type:
+     #1. terminal
+    Specific block: terminal property.
+    "terminal": {
+      "prompt": "PS C:\\> | $ | ...",
+      "environment": "bash | powershell | cloudcli | ...",
+      "history": [],
+      "validators": [
+        {
+          "kind": "command",
+          "match": {
+            "program": "aws",
+            "subcommand": ["ec2", ...],
+            "flags": {
+              "required": ["--group-ids"],
+              "aliases": { "-g": "--group-ids" }
+            },
+            "args": [
+              { "flag": "--group-ids", "expect": "sg-{{expected_group}}" }
+            ]
+          },
+          "response": {
+            "stdout_template": "...",
+            "stderr_template": "",
+            "world_patch": [
+              { "op": "set", "path": "systems.network.audit", "value": true }
+            ]
+          }
+        }
+      ]
+    }
+    prompt: terminal prompt string; double backslashes (\\) for Windows env.
+    environment: target shell.
+    history (optional): previously run, visible commands.
+    Each "command" validator defines the exact expected commands (program, subcommands, flags, args).
+    The response sets effects (stdout_template, stderr_template, world patches).
+    Add validators to cover all required or allowed command variants.
+     #2. console_form
+    Specific block: form (simulated UI). Validation goes in validators.
+    "form": {
+      "model_path": "services.webapp.config",
+      "schema": {
+        "layout": "vertical | horizontal",
+        "fields": [
+          {
+            "key": "mode",
+            "label": "Mode",
+            "widget": "toggle",
+            "options": ["Off", "On"],
+            "required": true
+          },
+          {
+            "key": "endpoint",
+            "label": "URL",
+            "widget": "input",
+            "placeholder": "https://api.example.com",
+            "helptext": ""Enter the secure URL"
+          }
+        ]
+      }
+    },
+    "validators": [
+      { "kind": "payload", "path": "mode", "equals": "On" },
+      { "kind": "world", "expect": { "path": "services.webapp.config.endpoint", "pattern": "^https://" } }
+    ]
+    model_path: stores submitted values in world state.
+    schema.layout: "vertical" or "horizontal".
+    schema.fields[]: defines fields  (widget = input, textarea, select, toggle, radio, etc.) with optional options, default, helptext, validation. Default value must not be the correct expected answer.
+    Payload validators check the submitted data; world validators verify the saved world state.
+    Validators: "payload" checks submitted data; "world" checks saved state.
+    Add messages or combined checks to ensure only the correct configurations passes.
+     #3. inspect_file
+    Specific block: file_ref and input keys.
+    "file_ref": "file-id",
+    "input": {
+      "mode": "answer | editor",
+      "prompt": "Indicate the misconfigured resource",
+      "placeholder": "Ex: sg-00",
+      "language": "text | json | yaml | powershell | ..."
+    },
+    "validators": [
+    { "kind": "jsonpath_match", "path": "$.payload", "expected": "sg-0abc123" },
+    { "kind": "expression", "expr": "(get('payload')||'').includes('sg-0abc123')", "message": "Expected answer: sg-0abc123" }
+    ]
+    file_ref: ID of an existing asset.
+    input.mode: "answer" (text) or "editor" (editable); always set a language (e.g. JSON, YAML, Bash). The default must not match the expected answer.
+    validators: may combine jsonschema, jsonpath_match, payload, expression, world, etc.
+    Allow only one valid answer.
+
+    #4. architecture
+    Specific block: architecture property + strict validators.
+    "architecture": {
+    "mode": "freeform | slots",
+    "palette_title": "Available Components",
+    "palette_caption": "Drag components.",
+    "palette": [
+        { "id": "gw", "label": "Gateway", "icon": "🛡️", "tags": ["network"], "meta": {"vendor": "generic"} },
+        { "id": "app", "label": "App Server", "icon": "🖥️", "tags": ["compute"] },
+        { "id": "decoy", "label": "Legacy Fax", "icon": "📠", "tags": ["legacy"], "is_decoy": true },
+        ...
+        ],
+    "initial_nodes": [  ],
+    "world_path": "architectures.segment",
+    "help": "Double-click a component to enter its commands.",
+    "expected_world": {
+    "allow_extra_nodes": false,
+    "nodes": [
+        {
+        "count": 1,
+        "match": {
+        "palette_id": "gw",
+        "label": "Gateway-1",
+        "config_contains": ["interface eth0", "policy"]
+            }
+        },
+        {
+        "count": 1,
+        "match": {
+        "palette_id": "app",
+        "commands": ["set app-tier", "set subnet"]
+            }
+        }
+        ],
+    "links": [
+        { "from": { "label": "Gateway-1" }, "to": { "palette_id": "app" }, "count": 1, "bidirectional": true }
+        ]
+    }
+    },
+    "validators": [
+        { "kind": "payload", "path": "nodes.length", "equals": 2 },
+        { "kind": "expression", "expr": "!(get('payload.nodes')||[]).some(n => n.palette_id === 'decoy')", "message": "Component not needed." },
+        { "kind": "expression", "expr": "(get('payload.links')||[]).length === 1", "message": "Only one link expected." }
+    ]
+    mode: "freeform" (interactive) or "slots".
+    palette: lists all components plus one decoy (is_decoy:true) shown under its normal name; icon may be emoji, text, or URL.
+    initial_nodes (optional): empty. user builds the architecture.
+    Users double-click a component to enter commands or config; Validators can check commands, config_contains, config_regex, tags, etc.
+    expected_world: prevent alternate setups using allow_extra_nodes, nodes (count, match), and links (direction, number, constraints).
+    Add validators to enforce node count, exclude decoy, require commands, or apply business rules.
+
+    #5. quiz / anticipation
+    Specific block: keys question_md, choices, correct, explanations (optional).
+    "question_md": "...",
+    "choices": [
+        {{ "id": "a", "text": "answer1" }},
+        {{ "id": "b", "text": "answer2" }},
+        {{ "id": "c", "text": "answer3" }}
+        {{ "id": "d", "text": "answer4" }}
+    ],
+    "correct": ["a", "c"],
+    "explanations": {{
+    "a": "...",
+    "c": "..."
+    }}
+    choices: array of {id, text} objects.
+    correct: list of one or more correct IDs.
+    explanations (optional): feedback per choice.
+    validators: may include {"kind":"quiz","expect":["a","c"]}.
+    #6. anticipation
+    keep the quiz structure but focus questions on projection or prospective analysis.
+    ### Additional rules and compatibility
+    All steps must follow the scenario_md narrative and the learning goal for the chosen certification domains. Each step must update or check the world state (world_patch, form.model_path, architecture.world_path, etc.).
+    Hints must be progressive and in context.
+    Honor {step_types_json}: include each requested step type at least once.
+    Escape backslashes (\\) and newlines (\\n) in JSON strings.
+    No comments or trailing commas. Ensure all references (file_ref, transitions, palette_id, etc.) exist and total points = scoring.max_points.
+    Keep step dependencies consistent: later steps must use the exact same paths set earlier.
+    ### Output Format
+    Return only the final JSON (formatted or minified), with no extra text.
+    """
 
     prompt = (
         prompt_template
@@ -1146,7 +1157,6 @@ Return only the final JSON (formatted or minified), with no extra text.
         raise Exception(f"Unexpected API Response structure in generate_lab_blueprint: {resp_json}")
     content = message["content"]
     return clean_and_decode_json(content)
-
 
 def analyze_certif(provider_name: str, certification: str) -> list:
     """Analyse a certification using the OpenAI API.
@@ -1197,7 +1207,6 @@ Certification: {certification}
     content = resp_json['choices'][0]['message']['content']
     decoded = clean_and_decode_json(content)
     return decoded
-
 
 def correct_questions(provider_name: str, cert_name: str, questions: list, mode: str) -> list:
     """Use OpenAI to correct or complete questions.
