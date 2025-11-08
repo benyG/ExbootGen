@@ -80,6 +80,7 @@ from jobs import (
 from openai_api import analyze_certif, correct_questions, generate_questions
 
 from dom import dom_bp
+from module_blueprints import module_blueprints_bp
 from move import move_bp
 from reloc import reloc_bp
 from pdf_importer import pdf_bp
@@ -236,6 +237,7 @@ QUEUE_EXCEPTIONS = (CeleryError, OperationalError, ConnectionError, OSError)
 
 # Enregistrement des blueprints
 app.register_blueprint(dom_bp, url_prefix="/modules")
+app.register_blueprint(module_blueprints_bp, url_prefix="/blueprints")
 app.register_blueprint(move_bp, url_prefix="/move")
 app.register_blueprint(reloc_bp, url_prefix="/reloc")
 app.register_blueprint(pdf_bp, url_prefix="/pdf")
