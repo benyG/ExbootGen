@@ -6,11 +6,13 @@ import re
 import json
 import time
 import random
+from typing import Optional
 from config import (
     OPENAI_API_KEY,
     OPENAI_MODEL,
     OPENAI_API_URL,
     OPENAI_MAX_RETRIES,
+    OPENAI_TIMEOUT_SECONDS,
 )
 
 DOMAIN_PROMPT_TEMPLATE = (
@@ -37,9 +39,10 @@ If direct browsing is not available, rely on your most up-to-date knowledge of t
 RULES:
 - Format your response in Markdown.
 - Titles should be short.
+- Title and content must be SEO optimized.
 - respect scrupulously the given Article structure only
 - Formulates complete, non-robotic sentences
-- Target length: 1,500–2,200 words.
+- Target length: 1,000–1700 words.
 - Tone: motivating, factual, without unexplained jargon.
 - Zero fluff: each section must deliver useful and actionable information.
 STRUCTURE:
@@ -60,9 +63,9 @@ Format with headings, bullet points, and a motivational tone.
 Explicitly include the link to start a free ExamBoot test: {exam_url}.
 RULES:
 - Format your response in Markdown.
-- Titles should be SEO optimized.
+- Title and content must be SEO optimized.
 - Formulates complete, non-robotic sentences
-- Target length: 1,500–2,200 words.
+- Target length: 1,000–1500 words.
 """,
     "experience_testimony": """
 Write a SEO optimized, clear, actionable and up-to-date third-person or storytelling-style blog post testimony on how to pass the certification exam: {certification} from {vendor}.
@@ -72,9 +75,9 @@ Include realistic study milestones, use of ExamBoot.net, and takeaways for other
 End with a call to action containing the link to start a free test: {exam_url}.
 RULES:
 - Format your response in Markdown.
-- Titles should be SEO optimized.
+- Title and content must be SEO optimized.
 - Formulates complete, non-robotic sentences
-- Target length: 1,500–2,200 words.
+- Target length: 1,000–1500 words.
 """,
     "career_impact": """
 Write a data-driven blog post on how the certification exam: {certification} from {vendor} can Boost Your career Opportunities.
@@ -82,9 +85,9 @@ Include statistics (average salaries, job titles, demand trends), examples of co
 Conclude with a call to action featuring the link to start a free ExamBoot test: {exam_url}.
 RULES:
 - Format your response in Markdown.
-- Titles should be SEO optimized.
+- Title and content must be SEO optimized.
 - Formulates complete, non-robotic sentences
-- Target length: 1,500–2,200 words.
+- Target length: 1,000–1500 words.
 """,
     "engagement_community": """
 Write an interactive blog post titled “Can You Pass This Mini {certification} from {vendor} Quiz?”
@@ -93,9 +96,9 @@ Add a section inviting readers to try the full simulation on ExamBoot.net and sh
 Insert a call to action with the link to start a free ExamBoot test: {exam_url}.
 RULES:
 - Format your response in Markdown.
-- Titles should be SEO optimized.
+- Title and content must be SEO optimized.
 - Formulates complete, non-robotic sentences
-- Target length: 1,500–2,200 words.
+- Target length: 1,000–1500 words.
 """,
 }
 
@@ -105,13 +108,13 @@ Produce a JSON object describing the certification with the following exact stru
 {{
   "prerequisites": ["text1", "text2", "text3"],
   "targeted_profession": ["job title1", "job title2", "job title3"],
-  "studytip": "In 20-25 words tell here how ExamBoot.net can help to prepare for the certification"
+  "studytip": "In 30-50 words tell here how ExamBoot.net can help to prepare for the certification"
 }}
 Guidelines:
 - Return exactly three concise bullet-style strings in both arrays, each 6-12 words.
 - Mention specific skills, knowledge, or credentials relevant to {certification} in the prerequisites.
 - Mention realistic job titles aligned with the certification outcome in the targeted_profession list.
-- The studytip MUST be a single sentence of 20-25 words, highlight ExamBoot.net, and stay actionable.
+- The studytip MUST be 1 or 2 sentences of 30-50 words, highlight ExamBoot.net, and stay actionable.
 - Respond with valid JSON only, no explanations or Markdown.
 """
 
@@ -120,6 +123,7 @@ TWEET_PROMPT_TEMPLATES = {
 Compose a short, punchy tweet introducing the certification: {certification} from {vendor}.
 Highlight 1 key benefit, 1 career outcome, and mention ExamBoot.net as the platform to prepare.
 Include 3 relevant hashtags and a link to the free practice test: {exam_url}.
+Use emojis but with moderation.
 Return only the tweet text without additional commentary.
 max 280 characters.
 """,
@@ -127,26 +131,31 @@ max 280 characters.
 Tweet actionable exam prep tips for certification exam: {certification} from {vendor}.
 Follow with 3 quick bullet points, then “💡Train smarter with ExamBoot free test: {exam_url}”.
 Include 3 relevant hashtags and no additional commentary.
+Use emojis but with moderation.
 max 280 characters.
 """,
     "experience_testimony": """
-Post a motivational cote on how to pass the certification exam: {certification} from {vendor} after specified weeks of focused prep.
+Tweet a motivational cote on how to pass the certification exam: {certification} from {vendor} after specified weeks of focused prep.
 Try ExamBoot.net for your journey with a link to start a free test: 👉{exam_url}
 Include 3 relevant hashtags.
+Use emojis but with moderation.
 Return only the tweet body.
 max 280 characters.
 """,
     "career_impact": """
 Tweet key value insight from certification exam: {certification} from {vendor}.
 Include 3 relevant hashtags and a link to the free practice test: {exam_url}.
+Use emojis but with moderation.
 Return only the tweet content.
 max 280 characters.
 """,
     "engagement_community": """
-“Can you pass this mini {certification} from {vendor} quiz? 🤔”
+Tweet an engaging challenge post inviting readers to take a quick quiz related to the certification exam: {certification} from {vendor} 
 Try the free practice test now on ExamBoot.net and share your score!
 👉 {exam_url}
 Include 3 relevant hashtags and no additional commentary.
+Use emojis but with moderation.
+Return only the tweet content.
 max 280 characters.
 """,
 }
@@ -157,18 +166,21 @@ Create an engaging LinkedIn post announcing a guide about the certification: {ce
 Explain why professionals should consider it, what career paths it opens, and how they can start preparing using ExamBoot.net.
 End with a call to action to “Start your free practice test today: {exam_url}.”
 Include 3 relevant hashtags.
+Use emojis but with moderation.
 Return only the LinkedIn post body without extra commentary.
 """,
     "preparation_methodology": """
 Write a LinkedIn post giving practical study tips for passing the certification exam: {certification} from {vendor}.
 Start with a question like “Getting ready for {certification} from @{vendor}? Here’s how to study smarter.”,
 give 3 concise preparation tips, and end with a link to try a free ExamBoot simulation: {exam_url}.
+Use emojis but with moderation.
 Include 3 relevant hashtags and no additional commentary.
 """,
     "experience_testimony": """
 Create a personal and authentic LinkedIn post narrating how someone succeeded in the certification exam: {certification} from {vendor}.
 Use a storytelling tone, mention ExamBoot.net as part of the preparation journey, and end with encouragement for others to start.
 A call to action with a link to start a free test: {exam_url}.
+Use emojis but with moderation.
 Include 3 relevant hashtags and return only the post text.
 """,
     "career_impact": """
@@ -176,12 +188,14 @@ Draft a professional LinkedIn post highlighting the career benefits of the certi
 Mention salary increases, job roles, and industry demand.
 Use clear bullet points and finish with “Start your certification journey with ExamBoot.net.”
 Include 3 relevant hashtags.
+Use emojis but with moderation.
 Return only the LinkedIn post body.
 """,
     "engagement_community": """
 Create an engaging LinkedIn post inviting readers to take a quick {certification} from {vendor} quiz.
 Example intro: “Think you know [field topic]? Test yourself with our 5-question {certification} from {vendor} quiz!”
 Add a link {exam_url} to the shareable test and encourage users to share their results.
+Use emojis but with moderation.
 Include 3 relevant hashtags and no additional commentary.
 """,
 }
@@ -224,7 +238,6 @@ def clean_and_decode_json(content: str) -> dict:
     setattr(err, "raw_content", cleaned)
     raise err
 
-
 def _run_completion(prompt: str) -> str:
     payload = {
         "model": OPENAI_MODEL,
@@ -247,7 +260,6 @@ def _run_completion(prompt: str) -> str:
 
     return message["content"].strip()
 
-
 def _render_prompt(template_map: dict, topic_type: str, certification: str, vendor: str, exam_url: str) -> str:
     try:
         template = template_map[topic_type]
@@ -260,10 +272,9 @@ def _render_prompt(template_map: dict, topic_type: str, certification: str, vend
         exam_url=exam_url,
     )
 
-
 def generate_certification_article(
     certification: str, vendor: str, exam_url: str, topic_type: str
-) -> str:
+    ) -> str:
     """Generate the long-form certification article following the required structure."""
 
     if not OPENAI_API_KEY:
@@ -280,10 +291,9 @@ def generate_certification_article(
     )
     return _run_completion(prompt)
 
-
 def generate_certification_tweet(
     certification: str, vendor: str, exam_url: str, topic_type: str
-) -> str:
+    ) -> str:
     """Generate the announcement tweet for the certification launch."""
 
     if not OPENAI_API_KEY:
@@ -300,10 +310,9 @@ def generate_certification_tweet(
     )
     return _run_completion(prompt)
 
-
 def generate_certification_linkedin_post(
     certification: str, vendor: str, exam_url: str, topic_type: str
-) -> str:
+    ) -> str:
     """Generate the LinkedIn announcement post for the certification launch."""
 
     if not OPENAI_API_KEY:
@@ -320,36 +329,54 @@ def generate_certification_linkedin_post(
     )
     return _run_completion(prompt)
 
+def _build_course_art_prompt(certification: str, vendor: str) -> str:
+    """Return the course art prompt even if the template constant is missing."""
 
-def generate_certification_presentation_brief(
-    certification: str, vendor: str
-) -> dict:
-    """Generate a structured JSON brief for certification presentations."""
+    try:
+        template = COURSE_ART_PROMPT_TEMPLATE
+    except NameError:  # pragma: no cover - defensive guard for partial imports
+        template = """
+Generate a concise JSON profile for the certification exam {certification} from vendor {vendor}.
+Return **only** valid JSON following exactly this structure:
+{{
+  "prerequisites": ["text1", "text2", "text3"],
+  "targeted_profession": ["job title1", "job title2", "job title3"],
+  "studytip": "20-25 words"
+}}
+Rules:
+- Provide a maximum of five distinct, specific prerequisite statements.
+- Provide a maximum of five distinct targeted job titles that match real professional roles.
+- The studytip must be up to 20-25 words that clearly states how tactically preppare for certification exam.
+- Use double quotes for every string and return valid JSON without additional commentary or code fences.
+"""
+
+    return template.format(certification=certification, vendor=vendor)
+
+def generate_certification_course_art(certification: str, vendor: str) -> dict:
+    """Generate structured JSON describing the certification course."""
 
     if not OPENAI_API_KEY:
         raise Exception(
-            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer la fiche JSON."
+            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer la fiche certification."
         )
 
-    prompt = CERTIFICATION_PRESENTATION_JSON_PROMPT.format(
-        certification=certification,
-        vendor=vendor,
-    )
+    prompt = _build_course_art_prompt(certification, vendor)
+    raw_content = _run_completion(prompt)
+    return clean_and_decode_json(raw_content)
 
-    content = _run_completion(prompt)
-    decoded = clean_and_decode_json(content)
-    if not isinstance(decoded, dict):
-        raise ValueError("La réponse du modèle n'est pas un objet JSON valide.")
+def _model_temperature_override(model: str) -> Optional[float]:
+    """Return the temperature override to use for the supplied model.
 
-    expected_keys = {"prerequisites", "targeted_profession", "studytip"}
-    missing = expected_keys.difference(decoded.keys())
-    if missing:
-        raise ValueError(
-            "Réponse JSON incomplète. Clés manquantes: " + ", ".join(sorted(missing))
-        )
+    Some provider models (notably ``gpt-5-mini``) reject custom temperature
+    values and only accept the default setting.  Returning ``None`` ensures the
+    payload omits the ``temperature`` field altogether so that the provider can
+    apply its default configuration.
+    """
 
-    return decoded
+    if model == "gpt-5-mini":
+        return None
 
+    return 0.2
 
 def _post_with_retry(payload: dict) -> requests.Response:
     """Send a POST request to the OpenAI API with retry and backoff.
@@ -368,7 +395,7 @@ def _post_with_retry(payload: dict) -> requests.Response:
                 OPENAI_API_URL,
                 headers=headers,
                 json=payload,
-                timeout=60,
+                timeout=OPENAI_TIMEOUT_SECONDS,
             )
 
             # Treat 429 and 5xx responses as retryable
@@ -383,8 +410,16 @@ def _post_with_retry(payload: dict) -> requests.Response:
 
         except requests.HTTPError as e:
             attempt += 1
-            if attempt > OPENAI_MAX_RETRIES:
-                raise Exception(f"API Request Error: {e}") from e
+            if attempt >= OPENAI_MAX_RETRIES:
+                error_detail = ""
+                if getattr(e, "response", None) is not None:
+                    error_detail = e.response.text
+                message = (
+                    f"API Request Error after {attempt} attempts: {e}"
+                )
+                if error_detail:
+                    message += f" | Details: {error_detail}"
+                raise Exception(message) from e
 
             retry_after = getattr(e.response, "headers", {}).get("Retry-After")
             if retry_after:
@@ -407,8 +442,10 @@ def _post_with_retry(payload: dict) -> requests.Response:
 
         except requests.RequestException as e:
             attempt += 1
-            if attempt > OPENAI_MAX_RETRIES:
-                raise Exception(f"API Request Error: {e}") from e
+            if attempt >= OPENAI_MAX_RETRIES:
+                raise Exception(
+                    f"API Request Error after {attempt} attempts: {e}"
+                ) from e
 
             delay = min(60, (2 ** (attempt - 1))) + random.uniform(0, 1)
             logging.warning(
@@ -416,7 +453,6 @@ def _post_with_retry(payload: dict) -> requests.Response:
                 f"Retrying in {delay:.1f}s."
             )
             time.sleep(delay)
-
 
 def generate_domains_outline(certification: str) -> dict:
     """Retrieve official domains for a certification via the OpenAI API."""
@@ -449,7 +485,6 @@ def generate_domains_outline(certification: str) -> dict:
 
     content = message["content"]
     return clean_and_decode_json(content)
-
 
 def generate_questions(
     provider_name: str,
@@ -710,24 +745,39 @@ RULES:
 """
         else:
             content_prompt = f"""
-TASK: Retrieve the official course content of the domain {domain} of {certification} certification exam and generate {current} questions for that specific domain.
-Main domain description: {domain_descr}
-Questions: {question_type_text}
-Difficulty level: {level}: {level_explained}
-Practical: {practical}
+You are an expert exam item writer specialized in professional certification exams.
+
+GOAL:
+Generate {current} high-quality exam questions for the specific domain titled {domain} of the following certification exam 
+
+- Certification: {certification}
+- Vendor: {provider_name}
+- Exam domain: {domain}
+- Domain description and official objectives (blueprint excerpt):
+{domain_descr}
+
+- Questions type: {question_type_text}
+- Difficulty level: {level}: {level_explained}
+- Practical: {practical}
 {scenario_illustration_type}
-Reference: Use the certification provider's official website and free exam dumps PDFs from websites like allfreedumps.com, itexams.com, exam-labs.com, pass4sure.com, etc., to find or build real exam questions.
 
 {specific_question_quality}
+For each question, verify it matches real domain's objective.
 
 Format your response as a decodable single-line JSON object.
 RESPONSE FORMAT (JSON only, no additional text):
 {response_format}
 
+STRICT SCOPE:
+1. Only use the information that can be logically derived from the official domain objectives and description.
+2. Do NOT introduce topics, services, products, features or commands that are not clearly part of this domain for this certification.
+3. If you are unsure whether a topic is in scope, consider it OUT of scope and do not create a question on it.
+4. If you cannot map the question to at least one explicit objective of the domain, DO NOT include that question.
+5. If the certification is identified as a technology vendor-neutral provider, the question should take this into account.
+
 RULES:
 1. If you want to present a line of code in your response, surround that portion with '[code]...[/code]'. This will help in formatting it.
 2. If you want to present a console command or result in your response, surround that portion with '[console]...[/console]'. This will help in formatting it.
-3. Strictly align questions to the content of the syllabus of the domain selected for the indicated certification.
 """
 
         data = {
@@ -740,19 +790,7 @@ RULES:
             ]
         }
 
-        try:
-            response = requests.post(
-                'https://api.openai.com/v1/chat/completions',
-                headers={
-                    'Content-Type': 'application/json',
-                    'Authorization': f'Bearer {OPENAI_API_KEY}'
-                },
-                json=data,
-                timeout=60
-            )
-            response.raise_for_status()
-        except requests.RequestException as e:
-            raise Exception(f"API Request Error: {e}") from e
+        response = _post_with_retry(data)
 
         resp_json = response.json()
         if 'choices' not in resp_json or not resp_json['choices']:
@@ -766,6 +804,330 @@ RULES:
         remaining -= current
 
     return {"questions": all_questions}
+
+def generate_lab_blueprint(
+    provider: str,
+    certification: str,
+    domains: list[str],
+    domain_descr: str,
+    difficulty: str,
+    min_steps: int,
+    step_types: list[str],
+    ) -> dict:
+        """Generate a hands-on lab scenario compatible with the Lab Player.
+
+        Parameters
+        ----------
+        provider : str
+            Name of the certification vendor.
+        certification : str
+            Certification title.
+        domains : list[str]
+            Ordered list containing the primary and secondary domains used for the lab.
+        domain_descr : str
+            Narrative description combining the selected domains.
+        difficulty : str
+            Requested difficulty level (easy, medium, hard).
+        min_steps : int
+            Minimum amount of steps the lab must contain.
+        step_types : list[str]
+            Allowed step types for the lab generation prompt.
+        """
+
+        if not OPENAI_API_KEY:
+            raise Exception(
+                "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un lab."
+            )
+
+        if not domains:
+            raise ValueError("Au moins un domaine est requis pour générer un lab.")
+
+        step_types_json = json.dumps(step_types, ensure_ascii=False)
+        domains_label = ", ".join(domains)
+        prompt_template = """You are an expert in creating interactive labs in JSON for a tool.
+    These labs simulate practical scenarios tied to specific certification exam domains.
+    TASK:
+    For certification exam: {certification} from vendor {vendor}.
+    Retrieve the official course content for the domains "{domains_label}" and generate a practical lab with at least {min_steps} steps.
+    - Main domain description: {domain_descr}
+    - Lab Difficulty: {difficulty}
+    - Expected step types (JSON): {step_types_json}
+    STRICT SCOPE:
+    1. Only use the information that can be logically derived from the official domain objectives and description.
+    2. Do NOT introduce topics, services, products, features or commands that are not clearly part of this domain for this certification.
+    3. If you are unsure whether a topic is in scope, consider it OUT of scope and do not create a question on it.
+    4. If you cannot map the question to at least one explicit objective of the domain, DO NOT include that question.
+    5. If the certification is identified as a technology vendor-neutral provider, the question should take this into account.
+    Each lab must be valid JSON only, following all rules below.
+    The next section details its key structure.
+
+    ### Expected JSON Structure
+    ## Root Object
+    schema_version: always "0.2.0".
+    lab: contains all scenario data.
+    ## Lab Object
+    id (unique kebab-case): stable lab identifier.
+    title, subtitle: main and short titles.
+    scenario_md: 2–3 Markdown paragraphs describing lab scenario context, mission, and objectives related to {provider}/{certification}.
+    variables (optional): reusable definitions (type: "choice"|"string"|"number", with possible choices, min, max, etc.). Use via {{variable}}.
+    scoring: {"max_points": <sum of step points>}.
+    timer: {"mode": "countdown", "seconds": x} — Duration must be estimated during generation.
+    assets: array of downloadable or inline resources (id, kind, filename, mime, inline:true, content_b64). Resources must always be realistic.
+    steps: ordered list of detailed steps (≥ {min_steps}), following type-specific rules.
+    # Reference JSON template:
+    {
+      "schema_version": "0.2.0",
+      "lab": {
+        "id": "scenario-name",
+        "title": "...",
+        "subtitle": "...",
+        "scenario_md": "Paragraphs ...",
+        "variables": {
+          "example_var": {
+            "type": "choice",
+            "choices": ["option A", "option B"]
+          }
+        },
+        "scoring": { "max_points": x },
+        "timer": { "mode": "countdown", "seconds": x },
+        "assets": [
+          {
+            "id": "file-id",
+            "kind": "file",
+            "filename": "policy.json",
+            "mime": "application/json",
+            "inline": true,
+            "content_b64": "BASE64..."
+          }
+        ],
+        "steps": []
+      }
+    }
+
+    ## Common Step Structure (lab.steps[i])
+    {
+     "id": "unique-step-id",
+     "type": "terminal | console_form | inspect_file | architecture | quiz | anticipation",
+     "title": "...",
+     "instructions_md": "...",
+     "points": 10,
+     "hints": ["Hint1", "Hint2",...],
+     "transitions": {
+       "on_success": "next-step-id-or-#end",
+       "on_failure": { "action": "#stay" }
+     },
+     "validators": [ ],
+     "world_patch": [ ],
+     "<step-type-specific block>": {... }
+    }
+    id: unique per lab.
+    instructions_md: Provide clear instructions for every step. When a component needs a command, explain what’s expected for each without revealing answers or decoy components. 
+    points: ≥1; total equals lab.scoring.max_points.
+    hints: ≥1, from subtle to explicit.
+    transitions: define next step (on_success) or retry/remediation (on_failure).
+    validators: define strict validation rules with optional feedback messages.
+    world_patch: pre-validation JSON operations (set|unset|push|remove) using dot paths (e.g., systems.firewall.enabled).
+
+    ## JSON structure by step type:
+     #1. terminal
+    Specific block: terminal property.
+    "terminal": {
+      "prompt": "PS C:\\> | $ | ...",
+      "environment": "bash | powershell | cloudcli | ...",
+      "history": [],
+      "validators": [
+        {
+          "kind": "command",
+          "match": {
+            "program": "aws",
+            "subcommand": ["ec2", ...],
+            "flags": {
+              "required": ["--group-ids"],
+              "aliases": { "-g": "--group-ids" }
+            },
+            "args": [
+              { "flag": "--group-ids", "expect": "sg-{{expected_group}}" }
+            ]
+          },
+          "response": {
+            "stdout_template": "...",
+            "stderr_template": "",
+            "world_patch": [
+              { "op": "set", "path": "systems.network.audit", "value": true }
+            ]
+          }
+        }
+      ]
+    }
+    prompt: terminal prompt string; double backslashes (\\) for Windows env.
+    environment: target shell.
+    history (optional): previously run, visible commands.
+    Each "command" validator defines the exact expected commands (program, subcommands, flags, args).
+    The response sets effects (stdout_template, stderr_template, world patches).
+    Add validators to cover all required or allowed command variants.
+     #2. console_form
+    Specific block: form (simulated UI). Validation goes in validators.
+    "form": {
+      "model_path": "services.webapp.config",
+      "schema": {
+        "layout": "vertical | horizontal",
+        "fields": [
+          {
+            "key": "mode",
+            "label": "Mode",
+            "widget": "toggle",
+            "options": ["Off", "On"],
+            "required": true
+          },
+          {
+            "key": "endpoint",
+            "label": "URL",
+            "widget": "input",
+            "placeholder": "https://api.example.com",
+            "helptext": ""Enter the secure URL"
+          }
+        ]
+      }
+    },
+    "validators": [
+      { "kind": "payload", "path": "mode", "equals": "On" },
+      { "kind": "world", "expect": { "path": "services.webapp.config.endpoint", "pattern": "^https://" } }
+    ]
+    model_path: stores submitted values in world state.
+    schema.layout: "vertical" or "horizontal".
+    schema.fields[]: defines fields  (widget = input, textarea, select, toggle, radio, etc.) with optional options, default, helptext, validation. Default value must not be the correct expected answer.
+    Payload validators check the submitted data; world validators verify the saved world state.
+    Validators: "payload" checks submitted data; "world" checks saved state.
+    Add messages or combined checks to ensure only the correct configurations passes.
+     #3. inspect_file
+    Specific block: file_ref and input keys.
+    "file_ref": "file-id",
+    "input": {
+      "mode": "answer | editor",
+      "prompt": "Indicate the misconfigured resource",
+      "placeholder": "Ex: sg-00",
+      "language": "text | json | yaml | powershell | ..."
+    },
+    "validators": [
+    { "kind": "jsonpath_match", "path": "$.payload", "expected": "sg-0abc123" },
+    { "kind": "expression", "expr": "(get('payload')||'').includes('sg-0abc123')", "message": "Expected answer: sg-0abc123" }
+    ]
+    file_ref: ID of an existing asset.
+    input.mode: "answer" (text) or "editor" (editable); always set a language (e.g. JSON, YAML, Bash). The default must not match the expected answer.
+    validators: may combine jsonschema, jsonpath_match, payload, expression, world, etc.
+    Allow only one valid answer.
+
+    #4. architecture
+    Specific block: architecture property + strict validators.
+    "architecture": {
+    "mode": "freeform | slots",
+    "palette_title": "Available Components",
+    "palette_caption": "Drag components.",
+    "palette": [
+        { "id": "gw", "label": "Gateway", "icon": "🛡️", "tags": ["network"], "meta": {"vendor": "generic"} },
+        { "id": "app", "label": "App Server", "icon": "🖥️", "tags": ["compute"] },
+        { "id": "decoy", "label": "Legacy Fax", "icon": "📠", "tags": ["legacy"], "is_decoy": true },
+        ...
+        ],
+    "initial_nodes": [  ],
+    "world_path": "architectures.segment",
+    "help": "Double-click a component to enter its commands.",
+    "expected_world": {
+    "allow_extra_nodes": false,
+    "nodes": [
+        {
+        "count": 1,
+        "match": {
+        "palette_id": "gw",
+        "label": "Gateway-1",
+        "config_contains": ["interface eth0", "policy"]
+            }
+        },
+        {
+        "count": 1,
+        "match": {
+        "palette_id": "app",
+        "commands": ["set app-tier", "set subnet"]
+            }
+        }
+        ],
+    "links": [
+        { "from": { "label": "Gateway-1" }, "to": { "palette_id": "app" }, "count": 1, "bidirectional": true }
+        ]
+    }
+    },
+    "validators": [
+        { "kind": "payload", "path": "nodes.length", "equals": 2 },
+        { "kind": "expression", "expr": "!(get('payload.nodes')||[]).some(n => n.palette_id === 'decoy')", "message": "Component not needed." },
+        { "kind": "expression", "expr": "(get('payload.links')||[]).length === 1", "message": "Only one link expected." }
+    ]
+    mode: "freeform" (interactive) or "slots".
+    palette: lists all components plus one decoy (is_decoy:true) shown under its normal name; icon may be emoji, text, or URL.
+    initial_nodes (optional): empty. user builds the architecture.
+    Users double-click a component to enter commands or config; Validators can check commands, config_contains, config_regex, tags, etc.
+    expected_world: prevent alternate setups using allow_extra_nodes, nodes (count, match), and links (direction, number, constraints).
+    Add validators to enforce node count, exclude decoy, require commands, or apply business rules.
+
+    #5. quiz / anticipation
+    Specific block: keys question_md, choices, correct, explanations (optional).
+    "question_md": "...",
+    "choices": [
+        {{ "id": "a", "text": "answer1" }},
+        {{ "id": "b", "text": "answer2" }},
+        {{ "id": "c", "text": "answer3" }}
+        {{ "id": "d", "text": "answer4" }}
+    ],
+    "correct": ["a", "c"],
+    "explanations": {{
+    "a": "...",
+    "c": "..."
+    }}
+    choices: array of {id, text} objects.
+    correct: list of one or more correct IDs.
+    explanations (optional): feedback per choice.
+    validators: may include {"kind":"quiz","expect":["a","c"]}.
+    #6. anticipation
+    keep the quiz structure but focus questions on projection or prospective analysis.
+    ### Additional rules and compatibility
+    All steps must follow the scenario_md narrative and the learning goal for the chosen certification domains. Each step must update or check the world state (world_patch, form.model_path, architecture.world_path, etc.).
+    Hints must be progressive and in context.
+    Honor {step_types_json}: include each requested step type at least once.
+    Escape backslashes (\\) and newlines (\\n) in JSON strings.
+    No comments or trailing commas. Ensure all references (file_ref, transitions, palette_id, etc.) exist and total points = scoring.max_points.
+    Keep step dependencies consistent: later steps must use the exact same paths set earlier.
+    ### Output Format
+    Return only the final JSON (formatted or minified), with no extra text.
+    """
+
+    prompt = (
+        prompt_template
+        .replace("{domains_label}", domains_label)
+        .replace("{certification}", certification)
+        .replace("{min_steps}", str(min_steps))
+        .replace("{domain_descr}", domain_descr)
+        .replace("{difficulty}", difficulty)
+        .replace("{step_types_json}", step_types_json)
+        .replace("{provider}", provider)
+    )
+    prompt = prompt.replace("{{", "{").replace("}}", "}")
+
+    payload = {
+        "model": OPENAI_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+
+    temperature = _model_temperature_override(OPENAI_MODEL)
+    if temperature is not None:
+        payload["temperature"] = temperature
+    response = _post_with_retry(payload)
+    resp_json = response.json()
+    if "choices" not in resp_json or not resp_json["choices"]:
+        raise Exception(f"Unexpected API Response in generate_lab_blueprint: {resp_json}")
+    message = resp_json["choices"][0].get("message", {})
+    if "content" not in message:
+        raise Exception(f"Unexpected API Response structure in generate_lab_blueprint: {resp_json}")
+    content = message["content"]
+    return clean_and_decode_json(content)
 
 def analyze_certif(provider_name: str, certification: str) -> list:
     """Analyse a certification using the OpenAI API.
@@ -816,7 +1178,6 @@ Certification: {certification}
     content = resp_json['choices'][0]['message']['content']
     decoded = clean_and_decode_json(content)
     return decoded
-
 
 def correct_questions(provider_name: str, cert_name: str, questions: list, mode: str) -> list:
     """Use OpenAI to correct or complete questions.
