@@ -871,38 +871,38 @@ def generate_lab_blueprint(
     difficulty: str,
     min_steps: int,
     step_types: list[str],
-    ) -> dict:
-        """Generate a hands-on lab scenario compatible with the Lab Player.
+) -> dict:
+    """Generate a hands-on lab scenario compatible with the Lab Player.
 
-        Parameters
-        ----------
-        provider : str
-            Name of the certification vendor.
-        certification : str
-            Certification title.
-        domains : list[str]
-            Ordered list containing the primary and secondary domains used for the lab.
-        domain_descr : str
-            Narrative description combining the selected domains.
-        difficulty : str
-            Requested difficulty level (easy, medium, hard).
-        min_steps : int
-            Minimum amount of steps the lab must contain.
-        step_types : list[str]
-            Allowed step types for the lab generation prompt.
-        """
+    Parameters
+    ----------
+    provider : str
+        Name of the certification vendor.
+    certification : str
+        Certification title.
+    domains : list[str]
+        Ordered list containing the primary and secondary domains used for the lab.
+    domain_descr : str
+        Narrative description combining the selected domains.
+    difficulty : str
+        Requested difficulty level (easy, medium, hard).
+    min_steps : int
+        Minimum amount of steps the lab must contain.
+    step_types : list[str]
+        Allowed step types for the lab generation prompt.
+    """
 
-        if not OPENAI_API_KEY:
-            raise Exception(
-                "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un lab."
-            )
+    if not OPENAI_API_KEY:
+        raise Exception(
+            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un lab."
+        )
 
-        if not domains:
-            raise ValueError("Au moins un domaine est requis pour générer un lab.")
+    if not domains:
+        raise ValueError("Au moins un domaine est requis pour générer un lab.")
 
-        step_types_json = json.dumps(step_types, ensure_ascii=False)
-        domains_label = ", ".join(domains)
-        prompt_template = """You are an expert in creating interactive labs in JSON for a tool.
+    step_types_json = json.dumps(step_types, ensure_ascii=False)
+    domains_label = ", ".join(domains)
+    prompt_template = """You are an expert in creating interactive labs in JSON for a tool.
     These labs simulate practical scenarios tied to specific certification exam domains.
     TASK:
     For certification exam: {certification} from vendor {vendor}.
