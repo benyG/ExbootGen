@@ -19,6 +19,27 @@ class FakeCursor:
                 self._result = [1]
             else:
                 self._result = []
+        elif "SELECT id, name, descr, blueprint FROM modules" in statement:
+            rows = []
+            for module_id, module in sorted(self.connection.modules.items()):
+                record = {
+                    "id": module_id,
+                    "name": module["name"],
+                    "descr": module.get("descr"),
+                    "blueprint": module.get("blueprint"),
+                }
+                if self.dictionary:
+                    rows.append(record)
+                else:
+                    rows.append(
+                        (
+                            record["id"],
+                            record["name"],
+                            record["descr"],
+                            record["blueprint"],
+                        )
+                    )
+            self._result = rows
         elif "SELECT id, name, blueprint FROM modules" in statement:
             # params -> (cert_id, id1, id2, ...)
             ids = params[1:]
@@ -133,6 +154,26 @@ class BulkBlueprintSaveApiTest(unittest.TestCase):
         self.assertIn("Certification introuvable", data["error"])
         self.assertEqual(connection.executed_updates, [])
         self.assertFalse(connection.committed)
+
+
+class ModuleListingApiTest(unittest.TestCase):
+    def setUp(self):
+        app = Flask(__name__)
+        app.register_blueprint(module_blueprints.module_blueprints_bp, url_prefix="/blueprints")
+        self.client = app.test_client()
+
+    def test_decodes_bytearray_blueprints(self):
+        connection = FakeConnection()
+        connection.modules[1]["blueprint"] = bytearray(b"Texte IA")
+        connection.modules[1]["descr"] = "Ancienne description"
+
+        with patch("module_blueprints.mysql.connector.connect", return_value=connection):
+            response = self.client.get("/blueprints/api/certifications/4/modules")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIsInstance(data, list)
+        self.assertEqual(data[0]["blueprint"], "Texte IA")
 
 
 if __name__ == "__main__":
