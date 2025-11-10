@@ -14,6 +14,22 @@ from openai_api import generate_module_blueprint_excerpt
 module_blueprints_bp = Blueprint("module_blueprints", __name__)
 
 
+def _to_text(value):
+    """Return ``value`` decoded to a ``str`` when it is binary data."""
+
+    if isinstance(value, memoryview):
+        value = value.tobytes()
+    if isinstance(value, (bytes, bytearray)):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
+def _decode_row(row: dict) -> dict:
+    """Return a copy of ``row`` with every binary field decoded to text."""
+
+    return {key: _to_text(value) for key, value in row.items()}
+
+
 def _fetchall(query: str, params: Iterable | None = None) -> list[dict]:
     """Execute a SELECT query and return rows as dictionaries."""
 
@@ -23,6 +39,8 @@ def _fetchall(query: str, params: Iterable | None = None) -> list[dict]:
         try:
             cur.execute(query, params or ())
             rows = cur.fetchall()
+            if rows and isinstance(rows[0], dict):
+                rows = [_decode_row(row) for row in rows]
         finally:
             cur.close()
     finally:
@@ -66,6 +84,7 @@ def _normalise_blueprint(value) -> str | None:
 
     if value is None:
         return None
+    value = _to_text(value)
     if isinstance(value, str):
         text = value.strip()
     else:
@@ -146,6 +165,7 @@ def api_bulk_update_modules(cert_id: int):
             params = (cert_id, *to_update.keys())
             cur.execute(query, params)
             rows = cur.fetchall()
+            rows = [_decode_row(row) for row in rows]
         finally:
             cur.close()
 
@@ -255,6 +275,7 @@ def api_generate_blueprints(cert_id: int):
                 (cert_id,),
             )
             modules = cur.fetchall()
+            modules = [_decode_row(row) for row in modules]
         finally:
             cur.close()
     finally:
