@@ -63,6 +63,12 @@ except (ModuleNotFoundError, ImportError):  # pragma: no cover - fallback when k
     class OperationalError(Exception):
         """Fallback OperationalError used when kombu is unavailable."""
 
+try:  # pragma: no cover - optional runtime dependency
+    from redis.exceptions import RedisError  # type: ignore
+except (ModuleNotFoundError, ImportError):  # pragma: no cover - fallback when redis is absent
+    class RedisError(Exception):
+        """Fallback RedisError used when the redis dependency is unavailable."""
+
 from config import API_REQUEST_DELAY, DISTRIBUTION, GUI_PASSWORD
 import db
 from eraser_api import render_diagram
@@ -215,7 +221,7 @@ def _disable_task_queue(reason: str | Exception) -> None:
     celery_app.conf.task_always_eager = True
     celery_app.conf.task_eager_propagates = True
     app.logger.warning(
-        "Task queue disabled after failure (%s). Population jobs will now run locally until the application is restarted.",
+        "Task queue disabled after failure (%s). Background jobs will now run locally until the application is restarted.",
         reason,
     )
 
@@ -233,7 +239,7 @@ def _reset_task_queue_state_for_testing() -> None:  # pragma: no cover - test he
 
 job_store = create_job_store()
 
-QUEUE_EXCEPTIONS = (CeleryError, OperationalError, ConnectionError, OSError)
+QUEUE_EXCEPTIONS = (CeleryError, OperationalError, ConnectionError, OSError, RedisError)
 
 # Enregistrement des blueprints
 app.register_blueprint(dom_bp, url_prefix="/modules")
@@ -595,6 +601,46 @@ def run_fix_job(self, provider_id: int, cert_id: int, action: str) -> None:
         context.set_status("completed")
 
 
+def _start_fix_job_inline(job_id: str, provider_id: int, cert_id: int, action: str):
+    """Launch the fix workflow in a local background thread and return a response."""
+
+    def _run_inline() -> None:
+        context = JobContext(job_store, job_id)
+        set_cached_status(job_id, "running")
+        try:
+            job_store.set_status(job_id, "running")
+        except JobStoreError:
+            initialise_job(
+                job_store,
+                job_id=job_id,
+                description="fix-certification",
+                metadata={
+                    "provider_id": provider_id,
+                    "cert_id": cert_id,
+                    "action": action,
+                },
+            )
+            job_store.set_status(job_id, "running")
+
+        try:
+            run_fix(context, provider_id, cert_id, action)
+        except Exception as inline_exc:  # pragma: no cover - surfaced via job status
+            app.logger.exception(
+                "Inline fix job failed: provider_id=%s cert_id=%s", provider_id, cert_id
+            )
+            context.set_status("failed", error=str(inline_exc))
+        else:
+            context.set_status("completed")
+
+    threading.Thread(
+        target=_run_inline,
+        name=f"fix-inline-{job_id}",
+        daemon=True,
+    ).start()
+
+    return jsonify({"status": "queued", "job_id": job_id, "mode": "inline"})
+
+
 @app.route("/fix/process", methods=["POST"])
 def fix_process():
     provider_id = request.form.get("provider_id", type=int)
@@ -611,6 +657,9 @@ def fix_process():
         metadata={"provider_id": provider_id, "cert_id": cert_id, "action": action},
     )
 
+    if _is_task_queue_disabled():
+        return _start_fix_job_inline(job_id, provider_id, cert_id, action)
+
     try:
         run_fix_job.apply_async(args=(provider_id, cert_id, action), task_id=job_id)
     except QUEUE_EXCEPTIONS as exc:  # pragma: no cover - defensive, surfaced to client
@@ -619,42 +668,8 @@ def fix_process():
             provider_id,
             cert_id,
         )
-
-        def _run_inline() -> None:
-            context = JobContext(job_store, job_id)
-            set_cached_status(job_id, "running")
-            try:
-                job_store.set_status(job_id, "running")
-            except JobStoreError:
-                initialise_job(
-                    job_store,
-                    job_id=job_id,
-                    description="fix-certification",
-                    metadata={
-                        "provider_id": provider_id,
-                        "cert_id": cert_id,
-                        "action": action,
-                    },
-                )
-                job_store.set_status(job_id, "running")
-
-            try:
-                run_fix(context, provider_id, cert_id, action)
-            except Exception as inline_exc:  # pragma: no cover - surfaced via job status
-                app.logger.exception(
-                    "Inline fix job failed: provider_id=%s cert_id=%s", provider_id, cert_id
-                )
-                context.set_status("failed", error=str(inline_exc))
-            else:
-                context.set_status("completed")
-
-        threading.Thread(
-            target=_run_inline,
-            name=f"fix-inline-{job_id}",
-            daemon=True,
-        ).start()
-
-        return jsonify({"status": "queued", "job_id": job_id, "mode": "inline"})
+        _disable_task_queue(str(exc))
+        return _start_fix_job_inline(job_id, provider_id, cert_id, action)
     except Exception as exc:
         if getattr(celery_app.conf, "task_always_eager", False):
             app.logger.exception(
