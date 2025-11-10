@@ -111,22 +111,21 @@ GUI_PASSWORD = os.environ.get("GUI_PASSWORD", "admin")
 
 DISTRIBUTION = {
     "easy": {
-        "qcm": {"no": 10, "scenario": 0, "scenario-illustrated": 0},
-        "truefalse": {"no": 5, "scenario": 0, "scenario-illustrated": 0},
-        "matching": {"no": 3, "scenario": 0, "scenario-illustrated": 0},
-        "drag-n-drop": {"no": 4, "scenario": 0, "scenario-illustrated": 0},
+        "qcm": {"no": 12, "scenario": 0, "scenario-illustrated": 0},
+        "truefalse": {"no": 2, "scenario": 0, "scenario-illustrated": 0},
+        "matching": {"no": 2, "scenario": 0, "scenario-illustrated": 0},
+        "drag-n-drop": {"no": 2, "scenario": 0, "scenario-illustrated": 0},
     },
     "medium": {
-        "qcm": {"no": 5, "scenario": 6, "scenario-illustrated": 6},
-        "truefalse": {"no": 3, "scenario": 3, "scenario-illustrated": 0},
-        "matching": {"no": 1, "scenario": 4, "scenario-illustrated": 4},
-        "drag-n-drop": {"no": 1, "scenario": 4, "scenario-illustrated": 4},
+        "qcm": {"no": 3, "scenario": 3, "scenario-illustrated": 3},
+        "truefalse": {"no": 2, "scenario": 1, "scenario-illustrated": 0},
+        "matching": {"no": 1, "scenario": 3, "scenario-illustrated": 2},
+        "drag-n-drop": {"no": 1, "scenario": 3, "scenario-illustrated": 2},
     },
     "hard": {
-        "qcm": {"no": 2, "scenario": 6, "scenario-illustrated": 6},
+        "qcm": {"no": 2, "scenario": 2, "scenario-illustrated": 2},
         "truefalse": {"no": 2, "scenario": 0, "scenario-illustrated": 0},
-        "matching": {"no": 1, "scenario": 5, "scenario-illustrated": 5},
-        "drag-n-drop": {"no": 1, "scenario": 5, "scenario-illustrated": 5},
+        "matching": {"no": 1, "scenario": 2, "scenario-illustrated": 2},
+        "drag-n-drop": {"no": 1, "scenario": 2, "scenario-illustrated": 2},
     },
 }
-
