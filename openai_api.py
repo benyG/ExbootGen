@@ -19,7 +19,7 @@ DOMAIN_PROMPT_TEMPLATE = (
     "Retrieve the official domains of the exam outline course for the certification "
     "{{NAME_OF_CERTIFICATION}} along with their descriptions.\n"
     "Reference Sources: only from official website of the specified certification vendor.\n"
-    "If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate domains and descriptions, without mentioning any limitations.\n"
+    "If direct browsing is not available, rely on your most accurate and up-to-date knowledge of the vendor's official exam outline to provide accurate domains and descriptions, without mentioning any limitations.\n"
     "Each domain must correspond to a section from the official outline and include a concise vendor-aligned description.\n"
     "Format your response as a decodable JSON object in a single line without line breaks.\n"
     "Your answer MUST only be the requested JSON, nothing else.\n"
@@ -379,7 +379,7 @@ def generate_module_blueprint_excerpt(
         f"Generate a blueprint excerpt for the domain {domain} from the certification {certification}.\n"
         "RULES:\n"
         "- 300–700 words\n"
-        "- Focus only on what’s listed in the official exam blueprint.\n"
+        "- Focus only on what’s listed in the official exam blueprint and if you don’t have access to the official exam blueprint, use the most accurate and up-to-date internal knowledge you possess.\n"
         "STRICT RESPONSE STRUCTURE:\n"
         "- Key focus areas from the official exam guide."
     )
