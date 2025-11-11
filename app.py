@@ -69,7 +69,7 @@ except (ModuleNotFoundError, ImportError):  # pragma: no cover - fallback when r
     class RedisError(Exception):
         """Fallback RedisError used when the redis dependency is unavailable."""
 
-from config import API_REQUEST_DELAY, DISTRIBUTION, GUI_PASSWORD
+from config import API_REQUEST_DELAY, DISTRIBUTION, GUI_PASSWORD, TOTAL_QUESTIONS_PER_DOMAIN
 import db
 from eraser_api import render_diagram
 from jobs import (
@@ -261,8 +261,8 @@ def x_callback() -> str:
 # Définition de l'ordre des niveaux de difficulté
 DIFFICULTY_LEVELS = ["easy", "medium", "hard"]
 
-# Objectif global de questions par domaine
-TARGET_PER_DOMAIN = 100
+# Objectif global de questions par domaine basé sur la distribution configurée
+DISTRIBUTION_TOTAL_PER_DOMAIN = TOTAL_QUESTIONS_PER_DOMAIN
 
 
 class DomainProgress:
@@ -823,15 +823,15 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
         current_total = progress.total_questions()
         context.log(f"[{domain_name}] Initial question count: {current_total}")
 
-        if current_total >= TARGET_PER_DOMAIN:
+        if current_total >= DISTRIBUTION_TOTAL_PER_DOMAIN:
             current_domains, _ = _mark_domain_completed()
             context.log(
-                f"[{domain_name}] Domain already complete (>= {TARGET_PER_DOMAIN} questions). ({current_domains}/{total_domains})"
+                f"[{domain_name}] Domain already complete (>= {DISTRIBUTION_TOTAL_PER_DOMAIN} questions). ({current_domains}/{total_domains})"
             )
             return
 
         context.log(
-            f"[{domain_name}] Needs {TARGET_PER_DOMAIN - current_total} additional questions to reach {TARGET_PER_DOMAIN}."
+            f"[{domain_name}] Needs {DISTRIBUTION_TOTAL_PER_DOMAIN - current_total} additional questions to reach {DISTRIBUTION_TOTAL_PER_DOMAIN}."
         )
 
         # Traitement EASY si le domaine est vide
@@ -859,9 +859,9 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
             context.log(f"[{domain_name}] Total after EASY: {current_total}")
 
         # Traitement MEDIUM si nécessaire
-        if current_total < TARGET_PER_DOMAIN:
+        if current_total < DISTRIBUTION_TOTAL_PER_DOMAIN:
             context.wait_if_paused()
-            needed_total = TARGET_PER_DOMAIN - current_total
+            needed_total = DISTRIBUTION_TOTAL_PER_DOMAIN - current_total
             context.log(
                 f"[{domain_name}] Needs {needed_total} additional questions via MEDIUM."
             )
@@ -885,9 +885,9 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
             context.log(f"[{domain_name}] Total after MEDIUM: {current_total}")
 
         # Traitement HARD si toujours nécessaire
-        if current_total < TARGET_PER_DOMAIN:
+        if current_total < DISTRIBUTION_TOTAL_PER_DOMAIN:
             context.wait_if_paused()
-            needed_total = TARGET_PER_DOMAIN - current_total
+            needed_total = DISTRIBUTION_TOTAL_PER_DOMAIN - current_total
             context.log(
                 f"[{domain_name}] Needs {needed_total} additional questions via HARD."
             )
@@ -910,61 +910,11 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
             current_total = progress.total_questions()
             context.log(f"[{domain_name}] Total after HARD: {current_total}")
 
-        # Fallback transverse
-        if current_total < TARGET_PER_DOMAIN:
-            context.wait_if_paused()
-            needed_total = TARGET_PER_DOMAIN - current_total
+        # Vérification finale : si le total reste inférieur à la distribution, le domaine est laissé tel quel.
+        if current_total < DISTRIBUTION_TOTAL_PER_DOMAIN:
             context.log(
-                f"[{domain_name}] After HARD = {current_total}. Fallback of {needed_total} questions."
+                f"[{domain_name}] Distribution completed with {current_total} questions (< {DISTRIBUTION_TOTAL_PER_DOMAIN})."
             )
-            practical_val = random.choice(['no', 'scenario'])
-            secondaries = pick_secondary_domains(all_domain_names, domain_name)
-            context.log(
-                f"[{domain_name} - FALLBACK] Practical: {practical_val}, Secondary domains: {secondaries}"
-            )
-            if secondaries:
-                domain_arg = (
-                    f"main domain :{domain_name}; includes context from domains: {', '.join(secondaries)}"
-                )
-            else:
-                domain_arg = domain_name
-            if practical_val == 'scenario':
-                candidates = [k for k, v in analysis.items() if v == '1']
-                scenario_illu_val = random.choice(candidates) if candidates else 'none'
-            else:
-                scenario_illu_val = 'none'
-            try:
-                desc = domain_descriptions.get(domain_id, "")
-                questions_data = generate_questions(
-                    provider_name=provider_name,
-                    certification=cert_name,
-                    domain=domain_arg,
-                    domain_descr=desc,
-                    level="medium",
-                    q_type="qcm",
-                    practical=practical_val,
-                    scenario_illustration_type=scenario_illu_val,
-                    num_questions=needed_total,
-                )
-                time.sleep(API_REQUEST_DELAY)
-                stats = db.insert_questions(domain_id, questions_data, practical_val)
-                imported = 0
-                if isinstance(stats, dict):
-                    imported = int(stats.get("imported_questions", 0) or 0)
-                if imported:
-                    progress.record_insertion("medium", "qcm", practical_val, imported)
-                    _add_questions(imported)
-                    context.log(
-                        f"[{domain_name}] {imported} fallback question(s) inserted."
-                    )
-                else:
-                    context.log(
-                        f"[{domain_name}] No fallback questions inserted (all duplicates?)."
-                    )
-            except Exception as exc:
-                context.log(
-                    f"[{domain_name}] Error during fallback generation: {exc}"
-                )
 
         final_total = progress.total_questions()
         current_domains, _ = _mark_domain_completed()

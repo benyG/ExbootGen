@@ -109,6 +109,17 @@ GUI_PASSWORD = os.environ.get("GUI_PASSWORD", "admin")
 # meaning that for the "easy" level we expect 10 multiple-choice questions
 # without scenario and 5 true/false questions without scenario.
 
+def _distribution_total(dist: dict[str, dict[str, dict[str, int]]]) -> int:
+    """Return the total number of questions implied by ``dist``."""
+
+    return sum(
+        count
+        for difficulty in dist.values()
+        for question_types in difficulty.values()
+        for count in question_types.values()
+    )
+
+
 DISTRIBUTION = {
     "easy": {
         "qcm": {"no": 12, "scenario": 0, "scenario-illustrated": 0},
@@ -129,3 +140,7 @@ DISTRIBUTION = {
         "drag-n-drop": {"no": 1, "scenario": 2, "scenario-illustrated": 2},
     },
 }
+
+# Total number of questions expected per domain when following the distribution.
+TOTAL_QUESTIONS_PER_DOMAIN = _distribution_total(DISTRIBUTION)
+
