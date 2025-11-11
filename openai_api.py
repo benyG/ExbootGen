@@ -782,7 +782,7 @@ def generate_questions(
         # Construction du prompt pour ce batch
         if use_text:
             content_prompt = f"""
-TASK: Use the provided text to generate {current} questions on the {domain} topic of the {certification} course. 
+TASK: Use the provided text to generate {current} questions on the {domain} topic of the {certification} course.
 Provided text: {domain_descr}
 Questions: {question_type_text}
 Difficulty level: {level}: {level_explained}
@@ -806,7 +806,7 @@ RULES:
 You are an expert exam item writer specialized in professional certification exams.
 
 GOAL:
-Generate {current} high-quality exam questions for the specific domain titled {domain} of the following certification exam 
+generate {current} questions for the specific domain titled {domain} of the following certification exam. Each question must be high-quality and exam-ready
 
 - Certification: {certification}
 - Vendor: {provider_name}
