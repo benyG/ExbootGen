@@ -312,6 +312,43 @@
       background: linear-gradient(135deg, rgba(248, 113, 113, 0.9), rgba(244, 114, 182, 0.95));
     }
 
+    .playbook-steps {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .playbook-step {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .playbook-step::before {
+      content: '•';
+      color: rgba(124, 247, 255, 0.75);
+      font-size: 0.8rem;
+    }
+
+    .playbook-step.is-success::before {
+      content: '✔';
+      color: rgba(124, 247, 255, 0.95);
+    }
+
+    .playbook-step.is-error {
+      color: #f87171;
+    }
+
+    .playbook-step.is-error::before {
+      content: '✖';
+      color: #f87171;
+    }
+
     .article-output {
       background: var(--glass-strong);
       border-radius: var(--radius-lg);
@@ -469,6 +506,7 @@
             aria-valuenow="0"
           ></div>
         </div>
+        <ul class="playbook-steps" id="playbookSteps" hidden></ul>
       </div>
     </section>
 
@@ -525,6 +563,7 @@
     const playbookProgressContainer = document.getElementById('playbookProgress');
     const playbookProgressBar = document.getElementById('playbookProgressBar');
     const playbookProgressLabel = document.getElementById('playbookProgressLabel');
+    const playbookStepsList = document.getElementById('playbookSteps');
     const generateArticleBtn = document.getElementById('generateArticleBtn');
     const generateTweetBtn = document.getElementById('generateTweetBtn');
     const generateLinkedinBtn = document.getElementById('generateLinkedinBtn');
@@ -595,6 +634,10 @@
       playbookProgressBar.classList.remove('is-error');
       setPlaybookProgressValue(0);
       playbookProgressContainer.hidden = false;
+      if (playbookStepsList) {
+        playbookStepsList.hidden = true;
+        playbookStepsList.innerHTML = '';
+      }
 
       let stepIndex = 0;
       let targetValue = PLAYBOOK_PROGRESS_STEPS[stepIndex].target;
@@ -633,6 +676,39 @@
       playbookProgressBar.classList.add('is-error');
       setPlaybookProgressValue(Math.max(playbookProgressState.value, 100));
       playbookProgressLabel.textContent = message;
+    }
+
+    function renderPlaybookSteps(steps) {
+      if (!playbookStepsList) {
+        return;
+      }
+
+      playbookStepsList.innerHTML = '';
+
+      if (!Array.isArray(steps) || steps.length === 0) {
+        playbookStepsList.hidden = true;
+        return;
+      }
+
+      steps.forEach(step => {
+        const item = document.createElement('li');
+        item.classList.add('playbook-step');
+        if (step && step.success) {
+          item.classList.add('is-success');
+        } else {
+          item.classList.add('is-error');
+        }
+        let message = '';
+        if (step && step.message) {
+          message = step.message;
+        } else if (step && step.label) {
+          message = step.label;
+        }
+        item.textContent = message;
+        playbookStepsList.appendChild(item);
+      });
+
+      playbookStepsList.hidden = false;
     }
 
     publishArticleBtn.disabled = true;
@@ -1142,6 +1218,7 @@
       try {
         toggleLoading(true, runPlaybookBtn);
         startPlaybookProgress();
+        renderPlaybookSteps([]);
         setStatus('Exécution du playbook : génération et publication en cours…');
         const response = await fetch('/articles/run-playbook', {
           method: 'POST',
@@ -1153,14 +1230,20 @@
           currentBlogId = payload.blog_id || currentBlogId;
           setStatus(payload.error || 'Un article de présentation existe déjà pour cette certification.', false);
           completePlaybookProgress('Aucun nouveau contenu généré');
+          renderPlaybookSteps([]);
           return;
         }
         if (!response.ok) {
           throw new Error(payload.error || 'Erreur inconnue lors de la publication');
         }
         currentBlogId = payload.blog_id || null;
-        currentArticle = payload.article || '';
-        articleOutput.textContent = currentArticle || 'Aucun contenu généré.';
+        if (payload.article_error) {
+          currentArticle = '';
+          articleOutput.textContent = `Erreur : ${payload.article_error}`;
+        } else {
+          currentArticle = payload.article || '';
+          articleOutput.textContent = currentArticle || 'Aucun contenu généré.';
+        }
 
         currentTweetDraft = payload.tweet || '';
         renderSocialBlock(
@@ -1197,29 +1280,55 @@
           courseArtOutput.textContent = DEFAULT_COURSE_ART_TEXT;
         }
 
-        const statuses = ['Test Examboot généré'];
-        if (payload.blog_id) {
-          statuses.push(`Article enregistré (#${payload.blog_id})`);
-        } else if (currentArticle) {
-          statuses.push('Article généré');
+        renderPlaybookSteps(payload.playbook_steps || []);
+        const stepMessages = Array.isArray(payload.playbook_steps)
+          ? payload.playbook_steps
+              .map(step => (step && step.message ? step.message : null))
+              .filter(Boolean)
+          : [];
+        let hasFailure = Array.isArray(payload.playbook_steps)
+          ? payload.playbook_steps.some(step => step && step.success === false)
+          : false;
+        let statusMessage = 'Playbook terminé.';
+        if (stepMessages.length) {
+          statusMessage = `Playbook terminé – ${stepMessages.join(' · ')}.`;
+        } else {
+          const statuses = [];
+          if (payload.exam_error) {
+            statuses.push(`Test Examboot non généré : ${payload.exam_error}`);
+          } else {
+            statuses.push('Test Examboot généré');
+          }
+          if (payload.blog_id) {
+            statuses.push(`Article enregistré (#${payload.blog_id})`);
+          } else if (currentArticle) {
+            statuses.push('Article généré');
+          } else if (payload.article_error) {
+            statuses.push(`Article non généré : ${payload.article_error}`);
+          }
+          statuses.push(`Tweet ${payload.tweet_published ? 'publié' : 'non publié'}`);
+          statuses.push(`LinkedIn ${payload.linkedin_published ? 'publié' : 'non publié'}`);
+          if (payload.course_art) {
+            statuses.push('Fiche certification enregistrée');
+          } else if (payload.course_art_error) {
+            statuses.push(`Fiche non enregistrée : ${payload.course_art_error}`);
+          }
+          const fallbackFailure =
+            Boolean(payload.article_error) ||
+            Boolean(payload.exam_error) ||
+            !payload.tweet_published ||
+            !payload.linkedin_published ||
+            Boolean(payload.course_art_error);
+          hasFailure = hasFailure || fallbackFailure;
+          statusMessage = `Playbook terminé – ${statuses.join(' · ')}.`;
         }
-        statuses.push(`Tweet ${payload.tweet_published ? 'publié' : 'non publié'}`);
-        statuses.push(`LinkedIn ${payload.linkedin_published ? 'publié' : 'non publié'}`);
-        if (payload.course_art) {
-          statuses.push('Fiche certification enregistrée');
-        } else if (payload.course_art_error) {
-          statuses.push(`Fiche non enregistrée : ${payload.course_art_error}`);
-        }
-        const hasFailure =
-          !payload.tweet_published ||
-          !payload.linkedin_published ||
-          Boolean(payload.course_art_error);
-        setStatus(`Playbook terminé – ${statuses.join(' · ')}.`, hasFailure);
+        setStatus(statusMessage, hasFailure);
         completePlaybookProgress('Playbook terminé');
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setStatus(message, true);
         failPlaybookProgress(message);
+        renderPlaybookSteps([]);
       } finally {
         toggleLoading(false);
         updateActionAvailability();

@@ -402,13 +402,20 @@ def _upload_twitter_media(image_path: Path) -> str:
         "Authorization": _build_oauth1_header("POST", X_API_MEDIA_UPLOAD_URL),
     }
 
-    with image_path.open("rb") as file_handle:
-        response = requests.post(
-            X_API_MEDIA_UPLOAD_URL,
-            headers=headers,
-            files={"media": file_handle},
-            timeout=30,
-        )
+    try:
+        with image_path.open("rb") as file_handle:
+            response = requests.post(
+                X_API_MEDIA_UPLOAD_URL,
+                headers=headers,
+                files={"media": file_handle},
+                timeout=30,
+            )
+    except requests.exceptions.RequestException as exc:
+        raise SocialPublishError(
+            "Impossible de se connecter à X (Twitter) pour téléverser l'image: "
+            f"{exc}",
+            status_code=502,
+        ) from exc
 
     if response.status_code >= 400:
         raise SocialPublishError(
@@ -463,12 +470,19 @@ def _publish_tweet(text: str, media_path: Optional[Path] = None) -> dict:
     if media_ids:
         payload["media"] = {"media_ids": media_ids}
 
-    response = requests.post(
-        X_API_TWEET_URL,
-        headers=headers,
-        json=payload,
-        timeout=30,
-    )
+    try:
+        response = requests.post(
+            X_API_TWEET_URL,
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+    except requests.exceptions.RequestException as exc:
+        raise SocialPublishError(
+            "Impossible de se connecter à X (Twitter) pour publier le tweet: "
+            f"{exc}",
+            status_code=502,
+        ) from exc
 
     if response.status_code >= 400:
         error_message = response.text
@@ -995,62 +1009,97 @@ def run_playbook():
 
     attach_image = bool(data.get("add_image"))
 
+    exam_error: Optional[str] = None
+    exam_generated = False
     try:
-        exam_url = _create_shareable_examboot_test(certification_id)
+        new_exam_url = _create_shareable_examboot_test(certification_id)
     except ExambootTestGenerationError as exc:
-        return jsonify({"error": str(exc)}), 502
+        exam_error = str(exc)
+    else:
+        exam_url = new_exam_url
+        exam_generated = True
 
-    try:
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            article_future = executor.submit(
-                _generate_and_persist_article_task,
+    article_payload: Optional[dict] = None
+    article_error: Optional[str] = None
+    tweet_text: str = ""
+    tweet_result: SocialPostResult = SocialPostResult(text="")
+    linkedin_text: str = ""
+    linkedin_result: SocialPostResult = SocialPostResult(text="")
+    course_art_payload: Optional[dict] = None
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        article_future = executor.submit(
+            _generate_and_persist_article_task,
+            selection,
+            exam_url,
+            topic_type,
+            certification_id,
+        )
+        tweet_future = executor.submit(
+            _generate_and_publish_tweet_task,
+            selection,
+            exam_url,
+            topic_type,
+            attach_image,
+        )
+        linkedin_future = executor.submit(
+            _generate_and_publish_linkedin_task,
+            selection,
+            exam_url,
+            topic_type,
+            attach_image,
+        )
+        course_art_future = (
+            executor.submit(
+                _generate_and_store_course_art_task,
                 selection,
-                exam_url,
-                topic_type,
                 certification_id,
             )
+            if topic_type == COURSE_ART_TOPIC
+            else None
+        )
+
+        try:
             article_payload = article_future.result()
+        except Exception as exc:  # pragma: no cover - surfaced in response
+            article_error = str(exc)
 
-            tweet_future = executor.submit(
-                _generate_and_publish_tweet_task,
-                selection,
-                exam_url,
-                topic_type,
-                attach_image,
-            )
-            linkedin_future = executor.submit(
-                _generate_and_publish_linkedin_task,
-                selection,
-                exam_url,
-                topic_type,
-                attach_image,
-            )
-            course_art_future = (
-                executor.submit(
-                    _generate_and_store_course_art_task,
-                    selection,
-                    certification_id,
-                )
-                if topic_type == COURSE_ART_TOPIC
-                else None
-            )
-
+        try:
             tweet_text, tweet_result = tweet_future.result()
-            linkedin_text, linkedin_result = linkedin_future.result()
-            course_art_payload = (
-                course_art_future.result() if course_art_future else None
+        except Exception as exc:  # pragma: no cover - surfaced in response
+            tweet_result = SocialPostResult(
+                text="",
+                published=False,
+                status_code=500,
+                error=str(exc),
             )
-    except Exception as exc:  # pragma: no cover - propagated to client for visibility
-        return jsonify({"error": str(exc)}), 500
+
+        try:
+            linkedin_text, linkedin_result = linkedin_future.result()
+        except Exception as exc:  # pragma: no cover - surfaced in response
+            linkedin_result = SocialPostResult(
+                text="",
+                published=False,
+                status_code=500,
+                error=str(exc),
+            )
+
+        if course_art_future:
+            try:
+                course_art_payload = course_art_future.result()
+            except Exception as exc:  # pragma: no cover - surfaced in response
+                course_art_payload = {"course_art": None, "error": str(exc)}
 
     response_payload = {
-        "article": article_payload["article"],
-        "blog_id": article_payload["blog_id"],
-        "title": article_payload["title"],
-        "summary": article_payload["summary"],
+        "article": article_payload["article"] if article_payload else "",
+        "blog_id": article_payload["blog_id"] if article_payload else None,
+        "title": article_payload["title"] if article_payload else None,
+        "summary": article_payload["summary"] if article_payload else None,
         "provider_name": selection.provider_name,
         "certification_name": selection.certification_name,
         "exam_url": exam_url,
+        "exam_generated": exam_generated,
+        "exam_error": exam_error,
         "tweet": tweet_text,
         "tweet_response": tweet_result.response,
         "tweet_published": tweet_result.published,
@@ -1060,6 +1109,8 @@ def run_playbook():
         "linkedin_published": linkedin_result.published,
         "linkedin_status_code": linkedin_result.status_code,
     }
+    if article_error:
+        response_payload["article_error"] = article_error
     if tweet_result.media_filename:
         response_payload["tweet_image"] = tweet_result.media_filename
     if tweet_result.error:
@@ -1075,6 +1126,115 @@ def run_playbook():
             response_payload["course_art_saved"] = True
         if course_art_payload.get("error"):
             response_payload["course_art_error"] = course_art_payload["error"]
+
+    playbook_steps = []
+    playbook_steps.append(
+        {
+            "id": "exam",
+            "label": "Test Examboot",
+            "success": exam_generated,
+            "message": (
+                "Test Examboot généré"
+                if exam_generated
+                else (
+                    "Test Examboot non généré"
+                    if not exam_error
+                    else f"Test Examboot non généré : {exam_error}"
+                )
+            ),
+        }
+    )
+
+    if article_payload:
+        article_message = (
+            f"Article enregistré (#{article_payload['blog_id']})"
+            if article_payload.get("blog_id")
+            else "Article généré"
+        )
+        playbook_steps.append(
+            {
+                "id": "article",
+                "label": "Article",
+                "success": True,
+                "message": article_message,
+            }
+        )
+    else:
+        playbook_steps.append(
+            {
+                "id": "article",
+                "label": "Article",
+                "success": False,
+                "message": (
+                    f"Article non généré : {article_error}"
+                    if article_error
+                    else "Article non généré"
+                ),
+            }
+        )
+
+    playbook_steps.append(
+        {
+            "id": "tweet",
+            "label": "Tweet",
+            "success": bool(tweet_result.published),
+            "message": (
+                "Tweet publié"
+                if tweet_result.published
+                else (
+                    f"Tweet non publié : {tweet_result.error}"
+                    if tweet_result.error
+                    else "Tweet non publié"
+                )
+            ),
+        }
+    )
+
+    playbook_steps.append(
+        {
+            "id": "linkedin",
+            "label": "LinkedIn",
+            "success": bool(linkedin_result.published),
+            "message": (
+                "LinkedIn publié"
+                if linkedin_result.published
+                else (
+                    f"LinkedIn non publié : {linkedin_result.error}"
+                    if linkedin_result.error
+                    else "LinkedIn non publié"
+                )
+            ),
+        }
+    )
+
+    if topic_type == COURSE_ART_TOPIC:
+        if course_art_payload and course_art_payload.get("course_art") is not None:
+            playbook_steps.append(
+                {
+                    "id": "course_art",
+                    "label": "Fiche certification",
+                    "success": True,
+                    "message": "Fiche certification enregistrée",
+                }
+            )
+        else:
+            course_art_error = None
+            if course_art_payload:
+                course_art_error = course_art_payload.get("error")
+            playbook_steps.append(
+                {
+                    "id": "course_art",
+                    "label": "Fiche certification",
+                    "success": False,
+                    "message": (
+                        f"Fiche non enregistrée : {course_art_error}"
+                        if course_art_error
+                        else "Fiche certification non enregistrée"
+                    ),
+                }
+            )
+
+    response_payload["playbook_steps"] = playbook_steps
 
     return jsonify(response_payload)
 
@@ -1127,19 +1287,37 @@ def _generate_and_publish_tweet_task(
 ) -> Tuple[str, SocialPostResult]:
     """Generate the tweet content and trigger its publication."""
 
-    tweet_text = generate_certification_tweet(
-        selection.certification_name,
-        selection.provider_name,
-        exam_url,
-        topic_type,
-    )
-    tweet_result = _run_tweet_workflow(
-        selection,
-        exam_url,
-        topic_type,
-        attach_image=attach_image,
-        tweet_text=tweet_text,
-    )
+    try:
+        tweet_text = generate_certification_tweet(
+            selection.certification_name,
+            selection.provider_name,
+            exam_url,
+            topic_type,
+        )
+    except Exception as exc:
+        return "", SocialPostResult(
+            text="",
+            published=False,
+            status_code=500,
+            error=str(exc),
+        )
+
+    try:
+        tweet_result = _run_tweet_workflow(
+            selection,
+            exam_url,
+            topic_type,
+            attach_image=attach_image,
+            tweet_text=tweet_text,
+        )
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        return tweet_text, SocialPostResult(
+            text=tweet_text,
+            published=False,
+            status_code=500,
+            error=str(exc),
+        )
+
     return tweet_text, tweet_result
 
 
@@ -1151,19 +1329,37 @@ def _generate_and_publish_linkedin_task(
 ) -> Tuple[str, SocialPostResult]:
     """Generate the LinkedIn post content and trigger its publication."""
 
-    linkedin_post = generate_certification_linkedin_post(
-        selection.certification_name,
-        selection.provider_name,
-        exam_url,
-        topic_type,
-    )
-    linkedin_result = _run_linkedin_workflow(
-        selection,
-        exam_url,
-        topic_type,
-        attach_image=attach_image,
-        linkedin_post=linkedin_post,
-    )
+    try:
+        linkedin_post = generate_certification_linkedin_post(
+            selection.certification_name,
+            selection.provider_name,
+            exam_url,
+            topic_type,
+        )
+    except Exception as exc:
+        return "", SocialPostResult(
+            text="",
+            published=False,
+            status_code=500,
+            error=str(exc),
+        )
+
+    try:
+        linkedin_result = _run_linkedin_workflow(
+            selection,
+            exam_url,
+            topic_type,
+            attach_image=attach_image,
+            linkedin_post=linkedin_post,
+        )
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        return linkedin_post, SocialPostResult(
+            text=linkedin_post,
+            published=False,
+            status_code=500,
+            error=str(exc),
+        )
+
     return linkedin_post, linkedin_result
 
 
