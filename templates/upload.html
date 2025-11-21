@@ -112,6 +112,11 @@
 
     .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.4rem; margin-top: 1.6rem; }
     .form-grid textarea { grid-column: 1 / -1; }
+    .file-picker { display: flex; gap: 0.6rem; align-items: center; }
+    .selected-files { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+    .file-chip { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.7rem; border-radius: 12px; background: rgba(124, 247, 255, 0.08); border: 1px solid rgba(124,247,255,0.25); color: var(--text-primary); font-size: 0.9rem; }
+    .file-chip button { border: none; background: rgba(255,255,255,0.08); color: var(--text-primary); border-radius: 10px; padding: 0.2rem 0.5rem; cursor: pointer; }
+    .file-chip button:hover { background: rgba(255,255,255,0.16); }
 
     .stellar-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 0.85rem 1.6rem; border-radius: 999px; background: linear-gradient(135deg, rgba(71,245,192,0.9), rgba(124,247,255,0.85)); color: #020617; font-weight: 600; text-decoration: none; border: none; cursor: pointer; box-shadow: 0 14px 35px rgba(71, 245, 192, 0.3); transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition); }
     .stellar-button:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 18px 42px rgba(71, 245, 192, 0.38); }
@@ -193,9 +198,14 @@
           <input type="text" id="dirInput" placeholder="/chemin/vers/dossier" required>
         </div>
         <div>
-          <label>Fichier PDF</label>
-          <input type="text" id="fileInput" list="pdfList" placeholder="Commencez à taper..." required>
+          <label>Fichier(s) PDF</label>
+          <div class="file-picker">
+            <input type="text" id="fileInput" list="pdfList" placeholder="Commencez à taper...">
+            <button type="button" id="addFileBtn" class="stellar-button secondary">Ajouter</button>
+          </div>
           <datalist id="pdfList"></datalist>
+          <div id="selectedFiles" class="selected-files" aria-live="polite"></div>
+          <small class="hint">Ajoutez autant de fichiers que nécessaire, un par un.</small>
         </div>
         <div style="grid-column:1 / -1; display:flex; justify-content:flex-end; gap:0.8rem;">
           <button type="submit" id="analyzeBtn" class="stellar-button">Analyser le PDF</button>
@@ -375,6 +385,63 @@
     const dirInput = document.getElementById("dirInput");
     const fileInput = document.getElementById("fileInput");
     const pdfList   = document.getElementById("pdfList");
+    const addFileBtn = document.getElementById("addFileBtn");
+    const selectedFilesContainer = document.getElementById("selectedFiles");
+
+    const selectedFiles = [];
+
+    const renderSelectedFiles = () => {
+        selectedFilesContainer.innerHTML = "";
+        if (!selectedFiles.length) {
+            const empty = document.createElement("span");
+            empty.textContent = "Aucun fichier sélectionné";
+            empty.style.color = "var(--text-muted)";
+            selectedFilesContainer.appendChild(empty);
+            return;
+        }
+        selectedFiles.forEach((path, idx) => {
+            const chip = document.createElement("div");
+            chip.className = "file-chip";
+            chip.textContent = path;
+            const removeBtn = document.createElement("button");
+            removeBtn.type = "button";
+            removeBtn.textContent = "✕";
+            removeBtn.addEventListener("click", () => {
+                selectedFiles.splice(idx, 1);
+                renderSelectedFiles();
+            });
+            chip.appendChild(removeBtn);
+            selectedFilesContainer.appendChild(chip);
+        });
+    };
+
+    const normalizePath = (dir, file) => {
+        const cleanDir = dir.replace(/\/+$/, "");
+        return cleanDir ? `${cleanDir}/${file}` : file;
+    };
+
+    const addCurrentFile = () => {
+        const dir = dirInput.value.trim();
+        const file = fileInput.value.trim();
+        if (!file) {
+            alert("Indiquez un fichier à ajouter.");
+            return;
+        }
+        const fullPath = normalizePath(dir, file);
+        if (!selectedFiles.includes(fullPath)) {
+            selectedFiles.push(fullPath);
+            renderSelectedFiles();
+        }
+        fileInput.value = "";
+    };
+
+    addFileBtn.addEventListener("click", addCurrentFile);
+    fileInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            addCurrentFile();
+        }
+    });
 
     fileInput.addEventListener("input", function() {
         const root = dirInput.value.trim();
@@ -406,15 +473,17 @@
         try {
             const formData = new FormData();
             formData.append("module_id", document.getElementById("moduleSelect").value);
-            const dir = dirInput.value.trim().replace(/\/+$/, "");
-            const file = fileInput.value.trim();
-            formData.append("file_path", dir ? `${dir}/${file}` : file);
+            if (!selectedFiles.length) {
+                alert("Ajoutez au moins un fichier à analyser.");
+                return;
+            }
+            formData.append("file_paths", JSON.stringify(selectedFiles));
             const res = await fetch(base + "upload-pdf", { method: "POST", body: formData });
             const data = await res.json();
             if (data.status === "ok") {
                 currentSession = data.session_id;
-                document.getElementById("jsonPreview").value = JSON.stringify(data.json_data, null, 4);
-                document.getElementById("jsonTitle").textContent = `Aperçu JSON extrait (${data.filename})`;
+                document.getElementById("jsonPreview").value = JSON.stringify({ files: data.files }, null, 4);
+                document.getElementById("jsonTitle").textContent = `Aperçu JSON extrait (${data.files.length} fichier(s))`;
                 document.getElementById("jsonContainer").classList.add("active");
             } else {
                 alert("Erreur : " + (data.message || "analyse impossible"));
@@ -460,6 +529,8 @@
       document.getElementById("jsonPreview").value = '';
       document.getElementById("jsonContainer").classList.remove("active");
     });
+
+    renderSelectedFiles();
 
     const modSearch = document.getElementById('moduleSearch');
     const moduleSelect = document.getElementById('moduleSelect');
