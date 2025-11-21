@@ -88,11 +88,16 @@ def api_certifications(provider_id):
     conn = db_conn()
     try:
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, name FROM courses WHERE prov=%s ORDER BY name", (provider_id,))
+        cur.execute(
+            "SELECT id, name, descr2 FROM courses WHERE prov=%s ORDER BY name",
+            (provider_id,),
+        )
         return jsonify(cur.fetchall())
     finally:
-        try: cur.close()
-        except Exception: pass
+        try:
+            cur.close()
+        except Exception:
+            pass
         conn.close()
 
 @pdf_bp.route("/api/modules/<int:cert_id>")
