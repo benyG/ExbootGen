@@ -112,6 +112,12 @@
 
     .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.4rem; margin-top: 1.6rem; }
     .form-grid textarea { grid-column: 1 / -1; }
+    .file-picker { display: flex; gap: 0.6rem; align-items: center; }
+    #fileSearch { min-width: 250px; }
+    .selected-files { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+    .file-chip { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.7rem; border-radius: 12px; background: rgba(124, 247, 255, 0.08); border: 1px solid rgba(124,247,255,0.25); color: var(--text-primary); font-size: 0.9rem; }
+    .file-chip button { border: none; background: rgba(255,255,255,0.08); color: var(--text-primary); border-radius: 10px; padding: 0.2rem 0.5rem; cursor: pointer; }
+    .file-chip button:hover { background: rgba(255,255,255,0.16); }
 
     .stellar-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 0.85rem 1.6rem; border-radius: 999px; background: linear-gradient(135deg, rgba(71,245,192,0.9), rgba(124,247,255,0.85)); color: #020617; font-weight: 600; text-decoration: none; border: none; cursor: pointer; box-shadow: 0 14px 35px rgba(71, 245, 192, 0.3); transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition); }
     .stellar-button:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 18px 42px rgba(71, 245, 192, 0.38); }
@@ -193,11 +199,20 @@
           <input type="text" id="dirInput" placeholder="/chemin/vers/dossier" required>
         </div>
         <div>
-          <label>Fichier PDF</label>
-          <input type="text" id="fileInput" list="pdfList" placeholder="Commencez à taper..." required>
+          <label for="fileSearch">Rechercher parmi les PDF</label>
+          <input type="text" id="fileSearch" placeholder="Filtrer les fichiers disponibles" maxlength="250">
+          <label>Fichier(s) PDF</label>
+          <div class="file-picker">
+            <input type="text" id="fileInput" list="pdfList" placeholder="Commencez à taper...">
+            <button type="button" id="addFileBtn" class="stellar-button secondary">Ajouter</button>
+            <button type="button" id="addAllBtn" class="stellar-button secondary">Ajouter tout</button>
+          </div>
           <datalist id="pdfList"></datalist>
+          <div id="selectedFiles" class="selected-files" aria-live="polite"></div>
+          <small class="hint">Ajoutez autant de fichiers que nécessaire, un par un.</small>
         </div>
         <div style="grid-column:1 / -1; display:flex; justify-content:flex-end; gap:0.8rem;">
+          <button type="button" id="syncBtn" class="stellar-button secondary" title="Synchroniser les domaines">Synchro</button>
           <button type="submit" id="analyzeBtn" class="stellar-button">Analyser le PDF</button>
         </div>
       </form>
@@ -250,9 +265,10 @@
 
     document.querySelectorAll('[data-animate]').forEach(el => observer.observe(el));
 
-    function option(text, value) {
+    function option(text, value, dataset = {}) {
       const o = document.createElement("option");
       o.textContent = text; o.value = value;
+      Object.entries(dataset || {}).forEach(([k, v]) => { o.dataset[k] = v; });
       return o;
     }
 
@@ -297,14 +313,18 @@
             if (certSearch) {
                 certSearch.setOptions([fallbackCert], { keepSearch: false, selectedValue: '' });
             } else {
-                certSelect.appendChild(option(fallbackCert.label, fallbackCert.value));
+                certSelect.appendChild(option(fallbackCert.label, fallbackCert.value, fallbackCert.dataset));
             }
             modSelect.appendChild(option("— Aucun module —", ""));
             return;
         }
 
         fetch(`${base}api/certifications/${prov_id}`).then(r => r.json()).then(data => {
-            const items = (data || []).map(c => ({ value: c.id, label: c.name }));
+            const items = (data || []).map(c => ({
+                value: c.id,
+                label: c.name,
+                dataset: { code_cert: c.code_cert || '' }
+            }));
             let list = items.length ? items : [{ value: '', label: '— Aucune certification —' }];
             if (items.length && Number(prov_id) === 169) {
                 const defCert = items.find(c => Number(c.value) === 23);
@@ -316,7 +336,7 @@
                         certSearch.select.dispatchEvent(new Event("change"));
                     } else {
                         certSelect.innerHTML = "";
-                        list.forEach(opt => certSelect.appendChild(option(opt.label, opt.value)));
+                        list.forEach(opt => certSelect.appendChild(option(opt.label, opt.value, opt.dataset)));
                         certSelect.value = selectedValue;
                         certSelect.dispatchEvent(new Event("change"));
                     }
@@ -330,7 +350,7 @@
                 certSearch.select.dispatchEvent(new Event("change"));
             } else {
                 certSelect.innerHTML = "";
-                list.forEach(opt => certSelect.appendChild(option(opt.label, opt.value)));
+                list.forEach(opt => certSelect.appendChild(option(opt.label, opt.value, opt.dataset)));
                 certSelect.value = selectedValue;
                 certSelect.dispatchEvent(new Event("change"));
             }
@@ -348,37 +368,17 @@
         });
     });
 
-    certSelect.addEventListener("change", function () {
-        const cert_id = this.value;
-        const modSelect = document.getElementById("moduleSelect");
-
-        modSelect.innerHTML = "";
-        if (!cert_id) {
-            modSelect.appendChild(option("— Aucun module —", ""));
-            return;
-        }
-
-        fetch(`${base}api/modules/${cert_id}`).then(r => r.json()).then(data => {
-            modSelect.innerHTML = "";
-            if (!data || data.length === 0) {
-                modSelect.appendChild(option("— Aucun module —", ""));
-                return;
-            }
-            data.forEach(m => modSelect.appendChild(option(m.name, m.id)));
-            modSearch.value = "";
-            modSearch.dispatchEvent(new Event('input'));
-        }).catch(() => {
-            modSelect.appendChild(option("— Erreur chargement —", ""));
-        });
-    });
-
     const dirInput = document.getElementById("dirInput");
+    const fileSearch = document.getElementById("fileSearch");
     const fileInput = document.getElementById("fileInput");
     const pdfList   = document.getElementById("pdfList");
+    const addFileBtn = document.getElementById("addFileBtn");
+    const addAllBtn = document.getElementById("addAllBtn");
+    const selectedFilesContainer = document.getElementById("selectedFiles");
 
-    fileInput.addEventListener("input", function() {
+    const refreshPdfList = () => {
         const root = dirInput.value.trim();
-        const query = this.value.trim();
+        const query = fileSearch.value.trim() || fileInput.value.trim();
         if (!root || query.length === 0) {
             pdfList.innerHTML = "";
             return;
@@ -393,7 +393,132 @@
                     pdfList.appendChild(opt);
                 });
             });
+    };
+
+    certSelect.addEventListener("change", function () {
+        const cert_id = this.value;
+        const modSelect = document.getElementById("moduleSelect");
+
+        const selectedOption = this.selectedOptions[0];
+        const defaultQuery = (selectedOption?.dataset?.code_cert || '').trim();
+        fileSearch.value = defaultQuery ? `${defaultQuery}-` : '';
+        refreshPdfList();
+
+        modSelect.innerHTML = "";
+        if (!cert_id) {
+            modSelect.appendChild(option("— Aucun module —", ""));
+            return;
+        }
+
+        fetch(`${base}api/modules/${cert_id}`).then(r => r.json()).then(data => {
+            modSelect.innerHTML = "";
+            if (!data || data.length === 0) {
+                modSelect.appendChild(option("— Aucun module —", ""));
+                return;
+            }
+            data.forEach(m => modSelect.appendChild(option(m.name, m.id, { code_cert: m.code_cert || '' })));
+            modSearch.value = "";
+            modSearch.dispatchEvent(new Event('input'));
+        }).catch(() => {
+            modSelect.appendChild(option("— Erreur chargement —", ""));
+        });
     });
+
+    document.getElementById("moduleSelect").addEventListener("change", function () {
+        const selectedOption = this.selectedOptions[0];
+        const defaultQuery = (selectedOption?.dataset?.code_cert || '').trim();
+        fileSearch.value = defaultQuery ? `${defaultQuery}-` : fileSearch.value;
+        refreshPdfList();
+    });
+
+    const selectedFiles = [];
+
+    const renderSelectedFiles = () => {
+        selectedFilesContainer.innerHTML = "";
+        if (!selectedFiles.length) {
+            const empty = document.createElement("span");
+            empty.textContent = "Aucun fichier sélectionné";
+            empty.style.color = "var(--text-muted)";
+            selectedFilesContainer.appendChild(empty);
+            return;
+        }
+        selectedFiles.forEach((path, idx) => {
+            const chip = document.createElement("div");
+            chip.className = "file-chip";
+            chip.textContent = path;
+            const removeBtn = document.createElement("button");
+            removeBtn.type = "button";
+            removeBtn.textContent = "✕";
+            removeBtn.addEventListener("click", () => {
+                selectedFiles.splice(idx, 1);
+                renderSelectedFiles();
+            });
+            chip.appendChild(removeBtn);
+            selectedFilesContainer.appendChild(chip);
+        });
+    };
+
+    const normalizePath = (dir, file) => {
+        const cleanDir = dir.replace(/\/+$/, "");
+        return cleanDir ? `${cleanDir}/${file}` : file;
+    };
+
+    const addFileToSelection = (fullPath) => {
+        if (!fullPath) return false;
+        if (selectedFiles.includes(fullPath)) return false;
+        selectedFiles.push(fullPath);
+        return true;
+    };
+
+    const addCurrentFile = () => {
+        const dir = dirInput.value.trim();
+        const file = fileInput.value.trim();
+        if (!file) {
+            alert("Indiquez un fichier à ajouter.");
+            return;
+        }
+        const fullPath = normalizePath(dir, file);
+        if (addFileToSelection(fullPath)) {
+            renderSelectedFiles();
+        }
+        fileInput.value = "";
+    };
+
+    const addAllFiles = () => {
+        const dir = dirInput.value.trim();
+        const options = Array.from(pdfList.options).map(o => o.value.trim()).filter(Boolean);
+        if (!options.length) {
+            alert("Aucun fichier filtré à ajouter.");
+            return;
+        }
+
+        let addedCount = 0;
+        options.forEach(file => {
+            const fullPath = normalizePath(dir, file);
+            if (addFileToSelection(fullPath)) {
+                addedCount++;
+            }
+        });
+
+        if (addedCount) {
+            renderSelectedFiles();
+        } else {
+            alert("Tous les fichiers filtrés sont déjà sélectionnés.");
+        }
+    };
+
+    addFileBtn.addEventListener("click", addCurrentFile);
+    addAllBtn.addEventListener("click", addAllFiles);
+    fileInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            addCurrentFile();
+        }
+    });
+
+    fileSearch.addEventListener("input", refreshPdfList);
+    fileInput.addEventListener("input", refreshPdfList);
+    dirInput.addEventListener("input", () => { pdfList.innerHTML = ""; });
 
     let currentSession = null;
     document.getElementById("uploadForm").addEventListener("submit", async function(e) {
@@ -406,15 +531,17 @@
         try {
             const formData = new FormData();
             formData.append("module_id", document.getElementById("moduleSelect").value);
-            const dir = dirInput.value.trim().replace(/\/+$/, "");
-            const file = fileInput.value.trim();
-            formData.append("file_path", dir ? `${dir}/${file}` : file);
+            if (!selectedFiles.length) {
+                alert("Ajoutez au moins un fichier à analyser.");
+                return;
+            }
+            formData.append("file_paths", JSON.stringify(selectedFiles));
             const res = await fetch(base + "upload-pdf", { method: "POST", body: formData });
             const data = await res.json();
             if (data.status === "ok") {
                 currentSession = data.session_id;
-                document.getElementById("jsonPreview").value = JSON.stringify(data.json_data, null, 4);
-                document.getElementById("jsonTitle").textContent = `Aperçu JSON extrait (${data.filename})`;
+                document.getElementById("jsonPreview").value = JSON.stringify({ files: data.files }, null, 4);
+                document.getElementById("jsonTitle").textContent = `Aperçu JSON extrait (${data.files.length} fichier(s))`;
                 document.getElementById("jsonContainer").classList.add("active");
             } else {
                 alert("Erreur : " + (data.message || "analyse impossible"));
@@ -455,11 +582,34 @@
         }
     });
 
+    document.getElementById("syncBtn")?.addEventListener("click", async function () {
+        const btn = this;
+        const overlay = document.getElementById("loadingOverlay");
+        btn.disabled = true;
+        overlay.classList.add('show');
+        try {
+            const res = await fetch(base + "api/sync-code-cert", { method: "POST" });
+            const data = await res.json();
+            if (data.status === "ok") {
+                alert(`✅ Synchronisation terminée. ${data.inserted || 0} domaine(s) créé(s), ${data.updated || 0} mis à jour.`);
+            } else {
+                alert("❌ Échec synchro : " + (data.message || "inconnu"));
+            }
+        } catch (err) {
+            alert("Erreur réseau : " + err);
+        } finally {
+            btn.disabled = false;
+            overlay.classList.remove('show');
+        }
+    });
+
     document.getElementById("resetPreview").addEventListener("click", function(){
       currentSession = null;
       document.getElementById("jsonPreview").value = '';
       document.getElementById("jsonContainer").classList.remove("active");
     });
+
+    renderSelectedFiles();
 
     const modSearch = document.getElementById('moduleSearch');
     const moduleSelect = document.getElementById('moduleSelect');
