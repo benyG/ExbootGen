@@ -114,7 +114,10 @@ def api_modules(cert_id):
     conn = db_conn()
     try:
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, name FROM modules WHERE course=%s ORDER BY name", (cert_id,))
+        cur.execute(
+            "SELECT id, name, code_cert FROM modules WHERE course=%s ORDER BY name",
+            (cert_id,),
+        )
         return jsonify(cur.fetchall())
     finally:
         try: cur.close()

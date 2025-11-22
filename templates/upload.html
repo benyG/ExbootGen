@@ -416,12 +416,19 @@
                 modSelect.appendChild(option("— Aucun module —", ""));
                 return;
             }
-            data.forEach(m => modSelect.appendChild(option(m.name, m.id)));
+            data.forEach(m => modSelect.appendChild(option(m.name, m.id, { code_cert: m.code_cert || '' })));
             modSearch.value = "";
             modSearch.dispatchEvent(new Event('input'));
         }).catch(() => {
             modSelect.appendChild(option("— Erreur chargement —", ""));
         });
+    });
+
+    document.getElementById("moduleSelect").addEventListener("change", function () {
+        const selectedOption = this.selectedOptions[0];
+        const defaultQuery = (selectedOption?.dataset?.code_cert || '').trim();
+        fileSearch.value = defaultQuery ? `${defaultQuery}-` : fileSearch.value;
+        refreshPdfList();
     });
 
     const selectedFiles = [];
