@@ -89,7 +89,15 @@ def api_certifications(provider_id):
     try:
         cur = conn.cursor(dictionary=True)
         cur.execute(
-            "SELECT id, name, descr2 AS code_cert FROM courses WHERE prov=%s ORDER BY name",
+            """
+            SELECT c.id, c.name, m.code_cert
+            FROM courses c
+            LEFT JOIN modules m
+              ON m.course = 23
+             AND m.name   = LEFT(CONCAT(c.name, '-default'), 255)
+            WHERE c.prov = %s
+            ORDER BY c.name
+            """,
             (provider_id,),
         )
         return jsonify(cur.fetchall())
