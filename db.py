@@ -322,6 +322,7 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
             context = question.get("context", "").strip()
             diagram_descr = question.get("diagram_descr", "").strip()
             image = question.get("image", "").strip()
+            src_file = (question.get("src_file") or "").strip() or None
             text = question.get("text", "").strip()
             if context or image:
                 full_text = ""
@@ -341,8 +342,8 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
 
             # Insertion de la question avec le champ descr
             query_question = """
-                INSERT INTO questions (text, descr, level, module, nature, ty, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                INSERT INTO questions (text, descr, level, module, nature, ty, src_file, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
             """
             try:
                 cursor.execute(query_question, (
@@ -351,7 +352,8 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
                     level_num,
                     domain_id,
                     nature_num,
-                    ty_num
+                    ty_num,
+                    src_file
                 ))
                 question_id = cursor.lastrowid
                 q_imported += 1
