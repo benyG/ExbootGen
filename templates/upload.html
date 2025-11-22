@@ -401,7 +401,7 @@
 
         const selectedOption = this.selectedOptions[0];
         const defaultQuery = (selectedOption?.dataset?.code_cert || '').trim();
-        fileSearch.value = defaultQuery ? `${defaultQuery}-` : '';
+        fileSearch.value = defaultQuery || '';
         refreshPdfList();
 
         modSelect.innerHTML = "";
@@ -427,7 +427,7 @@
     document.getElementById("moduleSelect").addEventListener("change", function () {
         const selectedOption = this.selectedOptions[0];
         const defaultQuery = (selectedOption?.dataset?.code_cert || '').trim();
-        fileSearch.value = defaultQuery ? `${defaultQuery}-` : fileSearch.value;
+        fileSearch.value = defaultQuery || fileSearch.value;
         refreshPdfList();
     });
 
