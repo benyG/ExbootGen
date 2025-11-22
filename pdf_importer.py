@@ -89,7 +89,15 @@ def api_certifications(provider_id):
     try:
         cur = conn.cursor(dictionary=True)
         cur.execute(
-            "SELECT id, name, descr2 FROM courses WHERE prov=%s ORDER BY name",
+            """
+            SELECT c.id, c.name, m.code_cert
+            FROM courses c
+            LEFT JOIN modules m
+              ON m.course = 23
+             AND m.name   = LEFT(CONCAT(c.name, '-default'), 255)
+            WHERE c.prov = %s
+            ORDER BY c.name
+            """,
             (provider_id,),
         )
         return jsonify(cur.fetchall())
@@ -137,6 +145,60 @@ def api_search_pdfs():
             break
 
     return jsonify(matches)
+
+
+@pdf_bp.route("/api/sync-code-cert", methods=["POST"])
+def api_sync_code_cert():
+    """Synchronize default modules and their ``code_cert`` values."""
+    conn = db_conn()
+    try:
+        cur = conn.cursor()
+        conn.start_transaction()
+
+        cur.execute(
+            """
+            INSERT INTO modules (name, descr, course, code_cert)
+            SELECT
+              LEFT(CONCAT(c.name, '-default'), 255) AS name,
+              CONCAT('Généré depuis la certification "', c.name, '"') AS descr,
+              23 AS course,
+              c.descr2 AS code_cert
+            FROM courses c
+            LEFT JOIN modules m
+              ON m.course = 23
+             AND m.name   = LEFT(CONCAT(c.name, '-default'), 255)
+            WHERE c.id <> 23
+              AND m.id IS NULL
+            """
+        )
+        inserted = cur.rowcount
+
+        cur.execute(
+            """
+            UPDATE modules m
+            JOIN courses c
+              ON m.course = 23
+             AND m.name   = LEFT(CONCAT(c.name, '-default'), 255)
+            SET m.code_cert = c.descr2
+            WHERE c.id <> 23
+            """
+        )
+        updated = cur.rowcount
+
+        conn.commit()
+        return jsonify({"status": "ok", "inserted": inserted, "updated": updated})
+    except Exception as exc:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return jsonify({"status": "error", "message": str(exc)}), 500
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        conn.close()
 
 # -------------------- UI --------------------
 
