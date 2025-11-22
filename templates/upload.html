@@ -401,7 +401,7 @@
 
         const selectedOption = this.selectedOptions[0];
         const defaultQuery = (selectedOption?.dataset?.code_cert || '').trim();
-        fileSearch.value = defaultQuery;
+        fileSearch.value = defaultQuery ? `${defaultQuery}-` : '';
         refreshPdfList();
 
         modSelect.innerHTML = "";
