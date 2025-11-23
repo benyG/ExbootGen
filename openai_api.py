@@ -108,13 +108,13 @@ Produce a JSON object describing the certification with the following exact stru
 {{
   "prerequisites": ["text1", "text2", "text3"],
   "targeted_profession": ["job title1", "job title2", "job title3"],
-  "studytip": "In 30-50 words tell here how ExamBoot.net can help to prepare for the certification"
+  "studytip": "In 50-100 words tell here how ExamBoot.net can help to prepare for the certification"
 }}
 Guidelines:
 - Return exactly three concise bullet-style strings in both arrays, each 6-12 words.
 - Mention specific skills, knowledge, or credentials relevant to {certification} in the prerequisites.
 - Mention realistic job titles aligned with the certification outcome in the targeted_profession list.
-- The studytip MUST be 1 or 2 sentences of 30-50 words, highlight ExamBoot.net, and stay actionable.
+- The studytip MUST be 50-100 words, highlight ExamBoot.net, and stay actionable.
 - Respond with valid JSON only, no explanations or Markdown.
 """
 
@@ -720,7 +720,7 @@ def generate_questions(
     ]
     }}'''
     elif q_type == 'matching':
-        question_type_text = "Question type must be matching-question. The objective is to pair each item with its corresponding counterpart, referred to as 'Matches.'"
+        question_type_text = "Question type must be matching-question. The objective is to pair each item with its corresponding counterpart, referred to as 'Matches'. The number of possible answers can be 4, or even 5 in some cases, but must never exceed 5."
         response_format = f'''{{
     "questions": [
         {{
@@ -743,7 +743,7 @@ def generate_questions(
     }}'''
     elif q_type == 'drag-n-drop':
         question_type_text = (
-            "Questions should be of the drag and drop type. These questions can either ask for sorting (rearranging in the correct order) or categorization (sorting based on specific criteria). Some answers may simply be there to mislead the user and in this case the JSON key 'isok' has the value 0. The text of the answers must not reveal their order number in any way."
+            "Questions should be of the drag and drop type. These questions can either ask for sorting (rearranging in the correct order) or categorization (sorting based on specific criteria). Some answers may simply be there to mislead the user and in this case the JSON key 'isok' has the value 0. The text of the answers must not reveal their order number in any way. The number of possible answers can be 4, or even 5 in some cases, but must never exceed 5."
         )
         response_format = f'''{{
   "questions": [
@@ -768,6 +768,7 @@ def generate_questions(
     else:
         question_type_text = (
             "Question type must be multi-choices. Four answer choices per question with one or two correct answers."
+            "Questions with two correct answers must end with: 'Select the TWO best answers.'"
         )
         response_format = ""
     
@@ -836,6 +837,7 @@ STRICT SCOPE:
 RULES:
 1. If you want to present a line of code in your response, surround that portion with '[code]...[/code]'. This will help in formatting it.
 2. If you want to present a console command or result in your response, surround that portion with '[console]...[/console]'. This will help in formatting it.
+3. The text of each response section (value, target) must remain of a reasonable length and not exceed 120 characters.
 """
 
         data = {
@@ -907,6 +909,7 @@ def generate_lab_blueprint(
     TASK:
     For certification exam: {certification} from vendor {vendor}.
     Retrieve the official course content for the domains "{domains_label}" and generate a practical lab with at least {min_steps} steps.
+    If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate informations.
     - Main domain description: {domain_descr}
     - Lab Difficulty: {difficulty}
     - Expected step types (JSON): {step_types_json}
