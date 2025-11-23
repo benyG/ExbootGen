@@ -129,6 +129,9 @@
     .distribution-row { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.45rem 0; border-top: 1px solid rgba(148,163,184,0.08); }
     .distribution-row:first-of-type { border-top: none; }
     .distribution-row strong { text-transform: capitalize; letter-spacing: 0.01em; }
+    .option-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.7rem; }
+    .option-row input[type="checkbox"] { width: auto; height: auto; }
+    .option-hint { color: var(--text-muted); font-size: 0.9rem; }
     .scenario-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.5rem; }
     .scenario-grid label { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.1rem; }
     .scenario-grid input { width: 100%; border-radius: 10px; border: 1px solid rgba(148, 163, 184, 0.22); padding: 0.45rem 0.6rem; background: rgba(4, 7, 17, 0.6); color: var(--text-primary); }
@@ -201,6 +204,7 @@
       <h2 class="text-2xl font-semibold" style="font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.03em;">Préparer une population</h2>
       <form id="select-form" method="POST" action="{{ url_for('populate_index') }}" class="form-grid">
         <input type="hidden" name="distribution" id="distributionInput" value='{{ distribution_defaults | tojson }}'>
+        <input type="hidden" name="apply_addition" id="applyAdditionInput" value="{{ 'true' if selected_apply_addition else 'false' }}">
         <div>
           <label for="provider_id">Provider</label>
           <select name="provider_id" id="provider_id">
@@ -225,6 +229,11 @@
           <div>
             <p class="panel-title">Personnaliser la distribution</p>
             <p style="color: var(--text-muted); margin: 0;">Définissez le nombre de questions par niveau, type et scénario. Les valeurs laissées vides reviendront à 0 et la configuration par défaut sera utilisée si vous n'enregistrez pas de modifications.</p>
+            <div class="option-row">
+              <input type="checkbox" id="applyAdditionCheckbox">
+              <label for="applyAdditionCheckbox" style="margin-bottom:0;">Appliquer en Addition</label>
+              <span class="option-hint">Ajoute exactement les quantités saisies en plus des questions existantes.</span>
+            </div>
           </div>
           <div class="panel-actions">
             <button type="button" class="pill-button" id="cancelDistribution">Masquer</button>
@@ -345,6 +354,8 @@
       const providerSearch = window.makeSelectSearchable ? window.makeSelectSearchable(providerEl, { placeholder: 'Rechercher un provider…' }) : null;
       const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certEl, { placeholder: 'Rechercher une certification…' }) : null;
       const distributionInput = document.getElementById('distributionInput');
+      const applyAdditionInput = document.getElementById('applyAdditionInput');
+      const applyAdditionCheckbox = document.getElementById('applyAdditionCheckbox');
       const defaultDistribution = {{ distribution_defaults | tojson }};
 
       const distributionPanel = document.getElementById('distributionPanel');
@@ -359,6 +370,7 @@
       };
 
       let distributionState = JSON.parse(JSON.stringify(getCurrentDistribution()));
+      let applyAdditionState = (applyAdditionInput?.value || '').toLowerCase() === 'true';
 
       const syncInputsFromState = () => {
         document.querySelectorAll('[data-distribution-input]').forEach(input => {
@@ -366,6 +378,12 @@
           const value = distributionState?.[difficulty]?.[questionType]?.[scenario];
           input.value = typeof value === 'number' ? value : 0;
         });
+        if (applyAdditionCheckbox) {
+          applyAdditionCheckbox.checked = applyAdditionState;
+        }
+        if (applyAdditionInput) {
+          applyAdditionInput.value = applyAdditionState ? 'true' : 'false';
+        }
       };
 
       const openDistributionPanel = () => {
@@ -410,12 +428,15 @@
       });
       document.getElementById('resetDistribution').addEventListener('click', () => {
         distributionState = JSON.parse(JSON.stringify(defaultDistribution));
+        applyAdditionState = false;
         syncInputsFromState();
       });
 
       document.getElementById('saveDistribution').addEventListener('click', () => {
         distributionState = collectDistribution();
         distributionInput.value = JSON.stringify(distributionState);
+        applyAdditionState = !!applyAdditionCheckbox?.checked;
+        applyAdditionInput.value = applyAdditionState ? 'true' : 'false';
         closeDistributionPanel();
       });
 
@@ -449,6 +470,7 @@
         const resumeUrlTemplate = "{{ url_for('resume_populate', job_id='__JOB__') }}";
         const processUrl = "{{ url_for('populate_process') }}";
         const distributionPayload = {{ (selected_distribution or distribution_defaults) | tojson }};
+        const applyAddition = {{ 'true' if selected_apply_addition else 'false' }};
         let currentJobId = null;
 
         function appendLog(message, cssClass){
@@ -521,7 +543,8 @@
             $.post(processUrl, {
                 provider_id: "{{ provider_id }}",
                 cert_id: "{{ cert_id }}",
-                distribution: JSON.stringify(distributionPayload || {})
+                distribution: JSON.stringify(distributionPayload || {}),
+                apply_addition: applyAddition ? 'true' : 'false'
             }, function(resp){
                 if(resp && resp.job_id){
                     currentJobId = resp.job_id;

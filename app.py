@@ -267,6 +267,20 @@ def x_callback() -> str:
 # Définition de l'ordre des niveaux de difficulté
 DIFFICULTY_LEVELS = ["easy", "medium", "hard"]
 
+
+def _is_truthy(value: Optional[object]) -> bool:
+    """Interpret common truthy strings and booleans.
+
+    Returns ``True`` for values such as ``"true"``, ``"1"``, ``"on"`` or the
+    boolean ``True``.
+    """
+
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
 def _normalise_distribution(
     raw_distribution: Optional[object],
 ) -> Optional[Dict[str, Dict[str, Dict[str, int]]]]:
@@ -390,12 +404,14 @@ def populate_index():
         provider_id = int(request.form.get("provider_id"))
         cert_id = int(request.form.get("cert_id"))
         distribution_override = _normalise_distribution(request.form.get("distribution"))
+        apply_addition = _is_truthy(request.form.get("apply_addition"))
         return render_template(
             "populate.html",
             provider_id=provider_id,
             cert_id=cert_id,
             is_populating=True,
             selected_distribution=distribution_override,
+            selected_apply_addition=apply_addition,
             distribution_defaults=DISTRIBUTION,
         )
     providers = db.get_providers()
@@ -404,6 +420,7 @@ def populate_index():
         providers=providers,
         is_populating=False,
         distribution_defaults=DISTRIBUTION,
+        selected_apply_addition=False,
     )
 
 @app.route("/populate/get_certifications", methods=["POST"])
@@ -788,6 +805,8 @@ def run_population(
     provider_id: int,
     cert_id: int,
     distribution: Optional[Dict[str, Dict[str, Dict[str, int]]]] = None,
+    *,
+    apply_addition: bool = False,
 ) -> None:
     """Execute the population process for a certification."""
 
@@ -888,6 +907,38 @@ def run_population(
         progress = progress_map[domain_id]
         current_total = progress.total_questions()
         context.log(f"[{domain_name}] Initial question count: {current_total}")
+
+        if apply_addition:
+            context.log(
+                f"[{domain_name}] Mode 'Appliquer en Addition' activé : ajout des quantités demandées."
+            )
+            for difficulty in DIFFICULTY_LEVELS:
+                distribution = distribution_map.get(difficulty, {})
+                if not distribution:
+                    continue
+                inserted = process_domain_by_difficulty(
+                    context,
+                    domain_id,
+                    domain_name,
+                    difficulty,
+                    distribution,
+                    provider_name,
+                    cert_name,
+                    analysis,
+                    all_domain_names,
+                    domain_descriptions,
+                    progress=progress,
+                    addition_mode=True,
+                )
+                if inserted:
+                    _add_questions(inserted)
+
+            final_total = progress.total_questions()
+            current_domains, _ = _mark_domain_completed()
+            context.log(
+                f"[{domain_name}] Domain completed (mode addition): final total = {final_total} ({current_domains}/{total_domains})."
+            )
+            return
 
         if current_total >= distribution_total:
             current_domains, _ = _mark_domain_completed()
@@ -1004,6 +1055,7 @@ def run_population_job(
     provider_id: int,
     cert_id: int,
     distribution: Optional[Dict[str, Dict[str, Dict[str, int]]]] = None,
+    apply_addition: bool = False,
 ) -> None:
     """Celery task wrapper for :func:`run_population`."""
 
@@ -1011,12 +1063,20 @@ def run_population_job(
     metadata = {"provider_id": provider_id, "cert_id": cert_id}
     if distribution:
         metadata["distribution"] = distribution
+    if apply_addition:
+        metadata["apply_addition"] = True
     context = JobContext(job_store, job_id)
 
     _ensure_job_marked_running(job_id, metadata)
 
     try:
-        run_population(context, provider_id, cert_id, distribution=distribution)
+        run_population(
+            context,
+            provider_id,
+            cert_id,
+            distribution=distribution,
+            apply_addition=apply_addition,
+        )
     except Exception as exc:  # pragma: no cover - propagated to Celery
         context.set_status("failed", error=str(exc))
         raise
@@ -1029,6 +1089,8 @@ def _run_population_thread(
     provider_id: int,
     cert_id: int,
     distribution: Optional[Dict[str, Dict[str, Dict[str, int]]]] = None,
+    *,
+    apply_addition: bool = False,
 ) -> threading.Thread:
     """Run the population workflow in a local background thread.
 
@@ -1048,7 +1110,13 @@ def _run_population_thread(
         _ensure_job_marked_running(job_id, metadata)
 
         try:
-            run_population(context, provider_id, cert_id, distribution=distribution)
+            run_population(
+                context,
+                provider_id,
+                cert_id,
+                distribution=distribution,
+                apply_addition=apply_addition,
+            )
         except Exception as exc:  # pragma: no cover - logged for diagnostics
             app.logger.exception(
                 "Population job failed during local execution: job_id=%s", job_id
@@ -1071,11 +1139,18 @@ def _start_population_locally(
     distribution: Optional[Dict[str, Dict[str, Dict[str, int]]]] = None,
     *,
     error: Exception | None = None,
+    apply_addition: bool = False,
 ):
     """Execute the population workflow locally and return an HTTP response."""
 
     try:
-        _run_population_thread(job_id, provider_id, cert_id, distribution=distribution)
+        _run_population_thread(
+            job_id,
+            provider_id,
+            cert_id,
+            distribution=distribution,
+            apply_addition=apply_addition,
+        )
     except Exception:  # pragma: no cover - fallback may still fail
         failure_message = (
             "Impossible de démarrer le traitement : la file d'attente des tâches est indisponible."
@@ -1136,10 +1211,13 @@ def populate_process():
     provider_id = int(request.form.get("provider_id"))
     cert_id = int(request.form.get("cert_id"))
     distribution_override = _normalise_distribution(request.form.get("distribution"))
+    apply_addition = _is_truthy(request.form.get("apply_addition"))
 
     metadata = {"provider_id": provider_id, "cert_id": cert_id}
     if distribution_override:
         metadata["distribution"] = distribution_override
+    if apply_addition:
+        metadata["apply_addition"] = True
 
     job_id = initialise_job(
         job_store,
@@ -1150,12 +1228,17 @@ def populate_process():
 
     if _is_task_queue_disabled():
         return _start_population_locally(
-            job_id, provider_id, cert_id, distribution=distribution_override
+            job_id,
+            provider_id,
+            cert_id,
+            distribution=distribution_override,
+            apply_addition=apply_addition,
         )
 
     try:
         run_population_job.apply_async(
-            args=(provider_id, cert_id, distribution_override), task_id=job_id
+            args=(provider_id, cert_id, distribution_override, apply_addition),
+            task_id=job_id,
         )
     except QUEUE_EXCEPTIONS as exc:  # pragma: no cover - defensive, surfaced to client
         app.logger.exception(
@@ -1163,7 +1246,12 @@ def populate_process():
         )
         _disable_task_queue(str(exc))
         return _start_population_locally(
-            job_id, provider_id, cert_id, distribution=distribution_override, error=exc
+            job_id,
+            provider_id,
+            cert_id,
+            distribution=distribution_override,
+            error=exc,
+            apply_addition=apply_addition,
         )
     except Exception as exc:
         if getattr(celery_app.conf, "task_always_eager", False):
@@ -1207,6 +1295,7 @@ def process_domain_by_difficulty(
     domain_descriptions: Dict[int, str],
     *,
     progress: Optional[DomainProgress] = None,
+    addition_mode: bool = False,
 ) -> int:
     """Generate and insert questions for a domain according to the distribution."""
 
@@ -1240,25 +1329,36 @@ def process_domain_by_difficulty(
                 f"[{domain_name} - {difficulty.upper()}] {qtype} with scenario '{scenario_type}' existing: "
                 f"{existing_count} (target: {target_count})."
             )
-            if existing_count < target_count:
+            if addition_mode:
+                needed = max(target_count, 0)
+                if needed <= 0:
+                    continue
+                context.wait_if_paused()
+                context.log(
+                    f"[{domain_name} - {difficulty.upper()}] Adding {needed} questions for "
+                    f"{qtype} with scenario '{scenario_type}' (mode addition)."
+                )
+            elif existing_count < target_count:
                 context.wait_if_paused()
                 needed = target_count - existing_count
                 context.log(
                     f"[{domain_name} - {difficulty.upper()}] Needs {needed} questions for "
                     f"{qtype} with scenario '{scenario_type}'."
                 )
-                if practical_val != 'no':
-                    secondaries = pick_secondary_domains(all_domain_names, domain_name)
-                    context.log(
-                        f"[{domain_name} - {difficulty.upper()}] Secondary domains: {secondaries}"
-                    )
-                    domain_arg = (
-                        f"main domain :{domain_name}; includes context from domains: {', '.join(secondaries)}"
-                        if secondaries
-                        else domain_name
-                    )
-                else:
-                    domain_arg = domain_name
+            else:
+                continue
+            if practical_val != 'no':
+                secondaries = pick_secondary_domains(all_domain_names, domain_name)
+                context.log(
+                    f"[{domain_name} - {difficulty.upper()}] Secondary domains: {secondaries}"
+                )
+                domain_arg = (
+                    f"main domain :{domain_name}; includes context from domains: {', '.join(secondaries)}"
+                    if secondaries
+                    else domain_name
+                )
+            else:
+                domain_arg = domain_name
 
                 try:
                     desc = domain_descriptions.get(domain_id, "")
