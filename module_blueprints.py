@@ -9,7 +9,10 @@ import mysql.connector
 from flask import Blueprint, jsonify, render_template, request
 
 from config import DB_CONFIG
-from openai_api import generate_module_blueprint_excerpt
+from openai_api import (
+    generate_domains_outline,
+    generate_module_blueprint_excerpt,
+)
 
 module_blueprints_bp = Blueprint("module_blueprints", __name__)
 
@@ -46,6 +49,99 @@ def _fetchall(query: str, params: Iterable | None = None) -> list[dict]:
     finally:
         conn.close()
     return rows
+
+
+def _generate_and_create_modules(cert_id: int, cert_name: str) -> tuple[list[dict], str | None]:
+    """Generate modules for a certification and persist them.
+
+    The generation logic mirrors ``dom.api_generate_domains``: it calls
+    ``generate_domains_outline`` then validates the response before inserting the
+    modules into the database.
+    """
+
+    try:
+        response = generate_domains_outline(cert_name)
+    except Exception as exc:  # pragma: no cover - network failures
+        return [], str(exc)
+
+    if isinstance(response, list):
+        modules = response
+    elif isinstance(response, dict):
+        modules = response.get("modules")
+    else:
+        modules = None
+
+    if not isinstance(modules, list):
+        return [], "Réponse invalide du modèle."
+
+    cleaned: list[dict] = []
+    for module in modules:
+        if not isinstance(module, dict):
+            continue
+        name = module.get("name") or module.get("module_name")
+        descr = (
+            module.get("descr")
+            or module.get("module_descr")
+            or module.get("description")
+        )
+        if not name:
+            continue
+        cleaned.append({"module_name": name, "module_descr": (descr or "").strip()})
+
+    if not cleaned:
+        return [], "Aucun domaine valide n'a été généré."
+
+    failure_keywords = (
+        "unable to access",
+        "cannot retrieve",
+        "pas en mesure",
+        "not available",
+        "no puedo",
+        "non posso",
+        "nicht in der lage",
+        "impossible d'accéder",
+        "error",
+    )
+    for module in cleaned:
+        name_lower = module["module_name"].lower()
+        descr_lower = module["module_descr"].lower()
+        if any(keyword in name_lower for keyword in ("error", "n/a", "not available")):
+            return [], (
+                "Le modèle n'a pas fourni les domaines officiels. "
+                "Merci de saisir manuellement les informations issues du site du fournisseur "
+                "ou de réessayer avec un autre prompt."
+            )
+        if any(keyword in descr_lower for keyword in failure_keywords):
+            return [], (
+                "Le modèle n'a pas pu récupérer les domaines officiels. "
+                "Veuillez fournir manuellement l'outline officiel ou réessayer."
+            )
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    try:
+        cur = conn.cursor()
+        try:
+            cur.executemany(
+                "INSERT INTO modules (name, descr, course) VALUES (%s, %s, %s)",
+                [
+                    (module["module_name"], module["module_descr"] or None, cert_id)
+                    for module in cleaned
+                ],
+            )
+            conn.commit()
+        except mysql.connector.Error as exc:
+            conn.rollback()
+            return [], str(exc)
+        finally:
+            cur.close()
+    finally:
+        conn.close()
+
+    modules = _fetchall(
+        "SELECT id, name, blueprint FROM modules WHERE course = %s ORDER BY name",
+        (cert_id,),
+    )
+    return modules, None
 
 
 @module_blueprints_bp.route("/")
@@ -282,7 +378,15 @@ def api_generate_blueprints(cert_id: int):
         conn.close()
 
     if not modules:
-        return jsonify({"error": "Aucun domaine enregistré pour cette certification."}), 404
+        if mode == "all":
+            modules, error = _generate_and_create_modules(cert_id, cert_name)
+            if error:
+                return jsonify({"error": error}), 502
+        else:
+            return (
+                jsonify({"error": "Aucun domaine enregistré pour cette certification."}),
+                404,
+            )
 
     if requested_ids is not None:
         targets = [module for module in modules if module["id"] in requested_ids]
