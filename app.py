@@ -1,5 +1,6 @@
 import os
 import random
+import json
 import threading
 import os
 import time
@@ -69,7 +70,12 @@ except (ModuleNotFoundError, ImportError):  # pragma: no cover - fallback when r
     class RedisError(Exception):
         """Fallback RedisError used when the redis dependency is unavailable."""
 
-from config import API_REQUEST_DELAY, DISTRIBUTION, GUI_PASSWORD, TOTAL_QUESTIONS_PER_DOMAIN
+from config import (
+    API_REQUEST_DELAY,
+    DISTRIBUTION,
+    GUI_PASSWORD,
+    _distribution_total,
+)
 import db
 from eraser_api import render_diagram
 from jobs import (
@@ -261,8 +267,47 @@ def x_callback() -> str:
 # Définition de l'ordre des niveaux de difficulté
 DIFFICULTY_LEVELS = ["easy", "medium", "hard"]
 
-# Objectif global de questions par domaine basé sur la distribution configurée
-DISTRIBUTION_TOTAL_PER_DOMAIN = TOTAL_QUESTIONS_PER_DOMAIN
+def _normalise_distribution(
+    raw_distribution: Optional[object],
+) -> Optional[Dict[str, Dict[str, Dict[str, int]]]]:
+    """Convert an arbitrary object into a normalised distribution mapping.
+
+    Returns ``None`` when the payload cannot be interpreted, allowing callers to
+    fall back to the default configuration defined in :mod:`config`.
+    """
+
+    if raw_distribution is None:
+        return None
+
+    if isinstance(raw_distribution, str):
+        try:
+            raw_distribution = json.loads(raw_distribution)
+        except ValueError:
+            app.logger.warning(
+                "Distribution fournie invalide : impossible de parser le JSON, utilisation de la configuration par défaut.",
+            )
+            return None
+
+    if not isinstance(raw_distribution, dict):
+        return None
+
+    cleaned: Dict[str, Dict[str, Dict[str, int]]] = {}
+    for difficulty, question_types in raw_distribution.items():
+        if not isinstance(question_types, dict):
+            continue
+        for question_type, scenarios in question_types.items():
+            if not isinstance(scenarios, dict):
+                continue
+            for scenario, value in scenarios.items():
+                try:
+                    count = int(value)
+                except (TypeError, ValueError):
+                    count = 0
+                cleaned.setdefault(difficulty, {}).setdefault(question_type, {})[
+                    scenario
+                ] = max(count, 0)
+
+    return cleaned or None
 
 
 class DomainProgress:
@@ -344,9 +389,22 @@ def populate_index():
     if request.method == "POST":
         provider_id = int(request.form.get("provider_id"))
         cert_id = int(request.form.get("cert_id"))
-        return render_template("populate.html", provider_id=provider_id, cert_id=cert_id, is_populating=True)
+        distribution_override = _normalise_distribution(request.form.get("distribution"))
+        return render_template(
+            "populate.html",
+            provider_id=provider_id,
+            cert_id=cert_id,
+            is_populating=True,
+            selected_distribution=distribution_override,
+            distribution_defaults=DISTRIBUTION,
+        )
     providers = db.get_providers()
-    return render_template("populate.html", providers=providers, is_populating=False)
+    return render_template(
+        "populate.html",
+        providers=providers,
+        is_populating=False,
+        distribution_defaults=DISTRIBUTION,
+    )
 
 @app.route("/populate/get_certifications", methods=["POST"])
 def get_certifications():
@@ -725,7 +783,12 @@ def fix_status(job_id):
     return jsonify(data)
 
 
-def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
+def run_population(
+    context: JobContext,
+    provider_id: int,
+    cert_id: int,
+    distribution: Optional[Dict[str, Dict[str, Dict[str, int]]]] = None,
+) -> None:
     """Execute the population process for a certification."""
 
     providers = {pid: name for pid, name in db.get_providers()}
@@ -757,6 +820,9 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
     except Exception as exc:
         analysis = {}
         log_analysis = f"Certification analysis unavailable: {exc}"
+
+    distribution_map = distribution or DISTRIBUTION
+    distribution_total = _distribution_total(distribution_map)
 
     context.log(log_analysis)
     context.update_counters(analysis=log_analysis)
@@ -823,22 +889,22 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
         current_total = progress.total_questions()
         context.log(f"[{domain_name}] Initial question count: {current_total}")
 
-        if current_total >= DISTRIBUTION_TOTAL_PER_DOMAIN:
+        if current_total >= distribution_total:
             current_domains, _ = _mark_domain_completed()
             context.log(
-                f"[{domain_name}] Domain already complete (>= {DISTRIBUTION_TOTAL_PER_DOMAIN} questions). ({current_domains}/{total_domains})"
+                f"[{domain_name}] Domain already complete (>= {distribution_total} questions). ({current_domains}/{total_domains})"
             )
             return
 
         context.log(
-            f"[{domain_name}] Needs {DISTRIBUTION_TOTAL_PER_DOMAIN - current_total} additional questions to reach {DISTRIBUTION_TOTAL_PER_DOMAIN}."
+            f"[{domain_name}] Needs {distribution_total - current_total} additional questions to reach {distribution_total}."
         )
 
         # Traitement EASY si le domaine est vide
         if current_total == 0:
             context.wait_if_paused()
             context.log(f"[{domain_name}] Empty domain, using EASY distribution.")
-            distribution = DISTRIBUTION.get("easy", {})
+            distribution = distribution_map.get("easy", {})
             inserted_easy = process_domain_by_difficulty(
                 context,
                 domain_id,
@@ -859,13 +925,13 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
             context.log(f"[{domain_name}] Total after EASY: {current_total}")
 
         # Traitement MEDIUM si nécessaire
-        if current_total < DISTRIBUTION_TOTAL_PER_DOMAIN:
+        if current_total < distribution_total:
             context.wait_if_paused()
-            needed_total = DISTRIBUTION_TOTAL_PER_DOMAIN - current_total
+            needed_total = distribution_total - current_total
             context.log(
                 f"[{domain_name}] Needs {needed_total} additional questions via MEDIUM."
             )
-            distribution = DISTRIBUTION.get("medium", {})
+            distribution = distribution_map.get("medium", {})
             inserted_medium = process_domain_by_difficulty(
                 context,
                 domain_id,
@@ -885,13 +951,13 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
             context.log(f"[{domain_name}] Total after MEDIUM: {current_total}")
 
         # Traitement HARD si toujours nécessaire
-        if current_total < DISTRIBUTION_TOTAL_PER_DOMAIN:
+        if current_total < distribution_total:
             context.wait_if_paused()
-            needed_total = DISTRIBUTION_TOTAL_PER_DOMAIN - current_total
+            needed_total = distribution_total - current_total
             context.log(
                 f"[{domain_name}] Needs {needed_total} additional questions via HARD."
             )
-            distribution = DISTRIBUTION.get("hard", {})
+            distribution = distribution_map.get("hard", {})
             inserted_hard = process_domain_by_difficulty(
                 context,
                 domain_id,
@@ -911,9 +977,9 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
             context.log(f"[{domain_name}] Total after HARD: {current_total}")
 
         # Vérification finale : si le total reste inférieur à la distribution, le domaine est laissé tel quel.
-        if current_total < DISTRIBUTION_TOTAL_PER_DOMAIN:
+        if current_total < distribution_total:
             context.log(
-                f"[{domain_name}] Distribution completed with {current_total} questions (< {DISTRIBUTION_TOTAL_PER_DOMAIN})."
+                f"[{domain_name}] Distribution completed with {current_total} questions (< {distribution_total})."
             )
 
         final_total = progress.total_questions()
@@ -933,17 +999,24 @@ def run_population(context: JobContext, provider_id: int, cert_id: int) -> None:
 
 
 @celery_app.task(bind=True, name="population.run")
-def run_population_job(self, provider_id: int, cert_id: int) -> None:
+def run_population_job(
+    self,
+    provider_id: int,
+    cert_id: int,
+    distribution: Optional[Dict[str, Dict[str, Dict[str, int]]]] = None,
+) -> None:
     """Celery task wrapper for :func:`run_population`."""
 
     job_id = self.request.id
     metadata = {"provider_id": provider_id, "cert_id": cert_id}
+    if distribution:
+        metadata["distribution"] = distribution
     context = JobContext(job_store, job_id)
 
     _ensure_job_marked_running(job_id, metadata)
 
     try:
-        run_population(context, provider_id, cert_id)
+        run_population(context, provider_id, cert_id, distribution=distribution)
     except Exception as exc:  # pragma: no cover - propagated to Celery
         context.set_status("failed", error=str(exc))
         raise
@@ -951,7 +1024,12 @@ def run_population_job(self, provider_id: int, cert_id: int) -> None:
         context.set_status("completed")
 
 
-def _run_population_thread(job_id: str, provider_id: int, cert_id: int) -> threading.Thread:
+def _run_population_thread(
+    job_id: str,
+    provider_id: int,
+    cert_id: int,
+    distribution: Optional[Dict[str, Dict[str, Dict[str, int]]]] = None,
+) -> threading.Thread:
     """Run the population workflow in a local background thread.
 
     When the Celery broker is unavailable (for instance when Redis refuses
@@ -962,13 +1040,15 @@ def _run_population_thread(job_id: str, provider_id: int, cert_id: int) -> threa
     """
 
     metadata = {"provider_id": provider_id, "cert_id": cert_id}
+    if distribution:
+        metadata["distribution"] = distribution
 
     def _target() -> None:
         context = JobContext(job_store, job_id)
         _ensure_job_marked_running(job_id, metadata)
 
         try:
-            run_population(context, provider_id, cert_id)
+            run_population(context, provider_id, cert_id, distribution=distribution)
         except Exception as exc:  # pragma: no cover - logged for diagnostics
             app.logger.exception(
                 "Population job failed during local execution: job_id=%s", job_id
@@ -988,13 +1068,14 @@ def _start_population_locally(
     job_id: str,
     provider_id: int,
     cert_id: int,
+    distribution: Optional[Dict[str, Dict[str, Dict[str, int]]]] = None,
     *,
     error: Exception | None = None,
 ):
     """Execute the population workflow locally and return an HTTP response."""
 
     try:
-        _run_population_thread(job_id, provider_id, cert_id)
+        _run_population_thread(job_id, provider_id, cert_id, distribution=distribution)
     except Exception:  # pragma: no cover - fallback may still fail
         failure_message = (
             "Impossible de démarrer le traitement : la file d'attente des tâches est indisponible."
@@ -1054,25 +1135,36 @@ def _ensure_job_marked_running(job_id: str, metadata: Dict[str, int]) -> None:
 def populate_process():
     provider_id = int(request.form.get("provider_id"))
     cert_id = int(request.form.get("cert_id"))
+    distribution_override = _normalise_distribution(request.form.get("distribution"))
+
+    metadata = {"provider_id": provider_id, "cert_id": cert_id}
+    if distribution_override:
+        metadata["distribution"] = distribution_override
 
     job_id = initialise_job(
         job_store,
         job_id=uuid.uuid4().hex,
         description="populate-certification",
-        metadata={"provider_id": provider_id, "cert_id": cert_id},
+        metadata=metadata,
     )
 
     if _is_task_queue_disabled():
-        return _start_population_locally(job_id, provider_id, cert_id)
+        return _start_population_locally(
+            job_id, provider_id, cert_id, distribution=distribution_override
+        )
 
     try:
-        run_population_job.apply_async(args=(provider_id, cert_id), task_id=job_id)
+        run_population_job.apply_async(
+            args=(provider_id, cert_id, distribution_override), task_id=job_id
+        )
     except QUEUE_EXCEPTIONS as exc:  # pragma: no cover - defensive, surfaced to client
         app.logger.exception(
             "Unable to enqueue population job: provider_id=%s cert_id=%s", provider_id, cert_id
         )
         _disable_task_queue(str(exc))
-        return _start_population_locally(job_id, provider_id, cert_id, error=exc)
+        return _start_population_locally(
+            job_id, provider_id, cert_id, distribution=distribution_override, error=exc
+        )
     except Exception as exc:
         if getattr(celery_app.conf, "task_always_eager", False):
             app.logger.exception(
