@@ -7,6 +7,7 @@
   <a href="{{ url_for('reloc.index') }}" data-route="{{ url_for('reloc.index') }}"{% if active_page|default('') == 'relocate' %} class="active"{% endif %}>Relocate(AI)</a>
   <a href="{{ url_for('pdf.index') }}" data-route="{{ url_for('pdf.index') }}"{% if active_page|default('') == 'pdf_import' %} class="active"{% endif %}>PDF Import</a>
   <a href="{{ url_for('pdf.generate_index') }}" data-route="{{ url_for('pdf.generate_index') }}"{% if active_page|default('') == 'pdf_generate' %} class="active"{% endif %}>Generate via PDF</a>
+  <a href="{{ url_for('pdf.export_index') }}" data-route="{{ url_for('pdf.export_index') }}"{% if active_page|default('') == 'pdf_export' %} class="active"{% endif %}>PDF Export</a>
   <a href="{{ url_for('quest.index') }}" data-route="{{ url_for('quest.index') }}"{% if active_page|default('') == 'json_import' %} class="active"{% endif %}>JSON Import</a>
   <a href="{{ url_for('articles.index') }}" data-route="{{ url_for('articles.index') }}"{% if active_page|default('') == 'articles' %} class="active"{% endif %}>Article Builder(AI)</a>
   <a href="{{ url_for('hol.player') }}" data-route="{{ url_for('hol.player') }}"{% if active_page|default('') == 'hol_player' %} class="active"{% endif %}>Hands-on Labs</a>
