@@ -117,6 +117,29 @@
 
     .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.4rem; margin-top: 2rem; }
 
+    .distribution-panel { margin-top: 1.2rem; background: rgba(8, 12, 24, 0.92); border-radius: var(--radius-xl); border: 1px solid rgba(148, 163, 184, 0.22); box-shadow: 0 18px 45px rgba(4, 7, 17, 0.45); padding: 1.4rem; position: relative; display: none; }
+    .distribution-panel.is-open { display: block; }
+    .distribution-panel .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.6rem; }
+    .panel-title { margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 1.3rem; letter-spacing: 0.02em; }
+    .panel-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+
+    .distribution-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin: 1rem 0 1.4rem; }
+    .distribution-card { background: rgba(12, 16, 28, 0.75); border: 1px solid rgba(148, 163, 184, 0.18); border-radius: var(--radius-lg); padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.8rem; }
+    .distribution-card h3 { margin: 0; font-size: 1.05rem; letter-spacing: 0.02em; font-family: 'Space Grotesk', sans-serif; }
+    .distribution-row { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.45rem 0; border-top: 1px solid rgba(148,163,184,0.08); }
+    .distribution-row:first-of-type { border-top: none; }
+    .distribution-row strong { text-transform: capitalize; letter-spacing: 0.01em; }
+    .option-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.7rem; }
+    .option-row input[type="checkbox"] { width: auto; height: auto; }
+    .option-hint { color: var(--text-muted); font-size: 0.9rem; }
+    .scenario-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.5rem; }
+    .scenario-grid label { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.1rem; }
+    .scenario-grid input { width: 100%; border-radius: 10px; border: 1px solid rgba(148, 163, 184, 0.22); padding: 0.45rem 0.6rem; background: rgba(4, 7, 17, 0.6); color: var(--text-primary); }
+    .scenario-grid input:focus { outline: none; border-color: rgba(71, 245, 192, 0.5); box-shadow: 0 0 0 2px rgba(71, 245, 192, 0.18); }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.2rem; flex-wrap: wrap; }
+    .pill-button { padding: 0.65rem 1.2rem; border-radius: 999px; border: 1px solid rgba(148,163,184,0.22); background: rgba(15, 19, 32, 0.75); color: var(--text-primary); cursor: pointer; transition: transform 0.25s ease, background 0.25s ease, border-color 0.25s ease; }
+    .pill-button:hover { background: rgba(30,41,69,0.9); transform: translateY(-1px); border-color: rgba(148,163,184,0.32); }
+
     .status-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.2rem; margin-top: 1.5rem; }
     .status-card { border-radius: var(--radius-lg); padding: 1.4rem 1.6rem; background: rgba(8, 12, 24, 0.78); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: 0 16px 34px rgba(8, 12, 23, 0.48); display: flex; flex-direction: column; gap: 0.35rem; }
     .status-card span { font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.16em; }
@@ -180,6 +203,8 @@
     <section class="glass-card" data-animate>
       <h2 class="text-2xl font-semibold" style="font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.03em;">Préparer une population</h2>
       <form id="select-form" method="POST" action="{{ url_for('populate_index') }}" class="form-grid">
+        <input type="hidden" name="distribution" id="distributionInput" value='{{ distribution_defaults | tojson }}'>
+        <input type="hidden" name="apply_addition" id="applyAdditionInput" value="{{ 'true' if selected_apply_addition else 'false' }}">
         <div>
           <label for="provider_id">Provider</label>
           <select name="provider_id" id="provider_id">
@@ -193,9 +218,60 @@
           <select name="cert_id" id="cert_id"></select>
         </div>
         <div style="align-self:flex-end;">
+          <button type="button" id="toggleDistributionPanel" class="stellar-button secondary" style="width:100%;">Distribution</button>
+        </div>
+        <div style="align-self:flex-end;">
           <button type="submit" class="stellar-button" style="width:100%;">Lancer la population</button>
         </div>
       </form>
+      <div id="distributionPanel" class="distribution-panel" aria-hidden="true">
+        <div class="panel-header">
+          <div>
+            <p class="panel-title">Personnaliser la distribution</p>
+            <p style="color: var(--text-muted); margin: 0;">Définissez le nombre de questions par niveau, type et scénario. Les valeurs laissées vides reviendront à 0 et la configuration par défaut sera utilisée si vous n'enregistrez pas de modifications.</p>
+            <div class="option-row">
+              <input type="checkbox" id="applyAdditionCheckbox">
+              <label for="applyAdditionCheckbox" style="margin-bottom:0;">Appliquer en Addition</label>
+              <span class="option-hint">Ajoute exactement les quantités saisies en plus des questions existantes.</span>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="button" class="pill-button" id="cancelDistribution">Masquer</button>
+            <button type="button" class="pill-button" id="zeroDistribution">Set to 0</button>
+            <button type="button" class="pill-button" id="resetDistribution">Réinitialiser</button>
+            <button type="button" class="stellar-button" id="saveDistribution">Enregistrer</button>
+          </div>
+        </div>
+        <div class="distribution-grid">
+          {% for difficulty, question_types in distribution_defaults.items() %}
+          <div class="distribution-card">
+            <h3>{{ difficulty|capitalize }}</h3>
+            {% for qtype, scenarios in question_types.items() %}
+            <div class="distribution-row">
+              <strong>{{ qtype }}</strong>
+              <div class="scenario-grid">
+                {% for scenario, count in scenarios.items() %}
+                <div>
+                  <label>{{ scenario.replace('-', ' ') }}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    data-distribution-input
+                    data-difficulty="{{ difficulty }}"
+                    data-question-type="{{ qtype }}"
+                    data-scenario="{{ scenario }}"
+                    value="{{ count }}"
+                  >
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
     </section>
     {% else %}
     <section class="glass-card" data-animate>
@@ -278,6 +354,110 @@
       const certEl = document.getElementById('cert_id');
       const providerSearch = window.makeSelectSearchable ? window.makeSelectSearchable(providerEl, { placeholder: 'Rechercher un provider…' }) : null;
       const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certEl, { placeholder: 'Rechercher une certification…' }) : null;
+      const distributionInput = document.getElementById('distributionInput');
+      const applyAdditionInput = document.getElementById('applyAdditionInput');
+      const applyAdditionCheckbox = document.getElementById('applyAdditionCheckbox');
+      const defaultDistribution = {{ distribution_defaults | tojson }};
+
+      const distributionPanel = document.getElementById('distributionPanel');
+      const distributionToggle = document.getElementById('toggleDistributionPanel');
+
+      const getCurrentDistribution = () => {
+        try {
+          return JSON.parse(distributionInput.value) || defaultDistribution;
+        } catch (err) {
+          return defaultDistribution;
+        }
+      };
+
+      let distributionState = JSON.parse(JSON.stringify(getCurrentDistribution()));
+      let applyAdditionState = (applyAdditionInput?.value || '').toLowerCase() === 'true';
+
+      const syncInputsFromState = () => {
+        document.querySelectorAll('[data-distribution-input]').forEach(input => {
+          const { difficulty, questionType, scenario } = input.dataset;
+          const value = distributionState?.[difficulty]?.[questionType]?.[scenario];
+          input.value = typeof value === 'number' ? value : 0;
+        });
+        if (applyAdditionCheckbox) {
+          applyAdditionCheckbox.checked = applyAdditionState;
+        }
+        if (applyAdditionInput) {
+          applyAdditionInput.value = applyAdditionState ? 'true' : 'false';
+        }
+      };
+
+      const openDistributionPanel = () => {
+        syncInputsFromState();
+        distributionPanel.classList.add('is-open');
+        distributionPanel.setAttribute('aria-hidden', 'false');
+        distributionToggle?.setAttribute('aria-expanded', 'true');
+      };
+
+      const closeDistributionPanel = () => {
+        distributionPanel.classList.remove('is-open');
+        distributionPanel.setAttribute('aria-hidden', 'true');
+        distributionToggle?.setAttribute('aria-expanded', 'false');
+      };
+
+      const buildZeroDistribution = () => {
+        const empty = {};
+        Object.entries(defaultDistribution || {}).forEach(([difficulty, questionTypes]) => {
+          empty[difficulty] = {};
+          Object.entries(questionTypes || {}).forEach(([questionType, scenarios]) => {
+            empty[difficulty][questionType] = {};
+            Object.keys(scenarios || {}).forEach(scenario => {
+              empty[difficulty][questionType][scenario] = 0;
+            });
+          });
+        });
+        return empty;
+      };
+
+      const collectDistribution = () => {
+        const updated = {};
+        document.querySelectorAll('[data-distribution-input]').forEach(input => {
+          const difficulty = input.dataset.difficulty;
+          const questionType = input.dataset.questionType;
+          const scenario = input.dataset.scenario;
+          const value = Number(input.value) || 0;
+          updated[difficulty] = updated[difficulty] || {};
+          updated[difficulty][questionType] = updated[difficulty][questionType] || {};
+          updated[difficulty][questionType][scenario] = value;
+        });
+        return updated;
+      };
+
+      distributionToggle.addEventListener('click', () => {
+        const isOpen = distributionPanel.classList.contains('is-open');
+        if (isOpen) {
+          closeDistributionPanel();
+        } else {
+          openDistributionPanel();
+        }
+      });
+
+      document.getElementById('cancelDistribution').addEventListener('click', () => {
+        syncInputsFromState();
+        closeDistributionPanel();
+      });
+      document.getElementById('zeroDistribution').addEventListener('click', () => {
+        distributionState = buildZeroDistribution();
+        syncInputsFromState();
+      });
+      document.getElementById('resetDistribution').addEventListener('click', () => {
+        distributionState = JSON.parse(JSON.stringify(defaultDistribution));
+        applyAdditionState = false;
+        syncInputsFromState();
+      });
+
+      document.getElementById('saveDistribution').addEventListener('click', () => {
+        distributionState = collectDistribution();
+        distributionInput.value = JSON.stringify(distributionState);
+        applyAdditionState = !!applyAdditionCheckbox?.checked;
+        applyAdditionInput.value = applyAdditionState ? 'true' : 'false';
+        closeDistributionPanel();
+      });
 
       $("#provider_id").change(function(){
         $.post("{{ url_for('get_certifications') }}", { provider_id: $(this).val() }, function(data){
@@ -308,6 +488,8 @@
         const pauseUrlTemplate = "{{ url_for('pause_populate', job_id='__JOB__') }}";
         const resumeUrlTemplate = "{{ url_for('resume_populate', job_id='__JOB__') }}";
         const processUrl = "{{ url_for('populate_process') }}";
+        const distributionPayload = {{ (selected_distribution or distribution_defaults) | tojson }};
+        const applyAddition = {{ 'true' if selected_apply_addition else 'false' }};
         let currentJobId = null;
 
         function appendLog(message, cssClass){
@@ -379,7 +561,9 @@
             lastLogIndex = 0;
             $.post(processUrl, {
                 provider_id: "{{ provider_id }}",
-                cert_id: "{{ cert_id }}"
+                cert_id: "{{ cert_id }}",
+                distribution: JSON.stringify(distributionPayload || {}),
+                apply_addition: applyAddition ? 'true' : 'false'
             }, function(resp){
                 if(resp && resp.job_id){
                     currentJobId = resp.job_id;
