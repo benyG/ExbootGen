@@ -237,6 +237,7 @@
           </div>
           <div class="panel-actions">
             <button type="button" class="pill-button" id="cancelDistribution">Masquer</button>
+            <button type="button" class="pill-button" id="zeroDistribution">Set to 0</button>
             <button type="button" class="pill-button" id="resetDistribution">Réinitialiser</button>
             <button type="button" class="stellar-button" id="saveDistribution">Enregistrer</button>
           </div>
@@ -399,6 +400,20 @@
         distributionToggle?.setAttribute('aria-expanded', 'false');
       };
 
+      const buildZeroDistribution = () => {
+        const empty = {};
+        Object.entries(defaultDistribution || {}).forEach(([difficulty, questionTypes]) => {
+          empty[difficulty] = {};
+          Object.entries(questionTypes || {}).forEach(([questionType, scenarios]) => {
+            empty[difficulty][questionType] = {};
+            Object.keys(scenarios || {}).forEach(scenario => {
+              empty[difficulty][questionType][scenario] = 0;
+            });
+          });
+        });
+        return empty;
+      };
+
       const collectDistribution = () => {
         const updated = {};
         document.querySelectorAll('[data-distribution-input]').forEach(input => {
@@ -425,6 +440,10 @@
       document.getElementById('cancelDistribution').addEventListener('click', () => {
         syncInputsFromState();
         closeDistributionPanel();
+      });
+      document.getElementById('zeroDistribution').addEventListener('click', () => {
+        distributionState = buildZeroDistribution();
+        syncInputsFromState();
       });
       document.getElementById('resetDistribution').addEventListener('click', () => {
         distributionState = JSON.parse(JSON.stringify(defaultDistribution));
