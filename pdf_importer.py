@@ -1,14 +1,19 @@
 import os
 import json
+import re
 import time
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-from flask import Blueprint, request, jsonify, render_template
+from flask import Blueprint, request, jsonify, render_template, send_file
 from werkzeug.utils import secure_filename
 
 from routes_pdf import detect_questions, extract_text_from_pdf, db_conn
 from openai_api import generate_questions
 from config import DISTRIBUTION, API_REQUEST_DELAY
 import db
+
+import fitz  # PyMuPDF
 
 # -------- Blueprint / Templates --------
 pdf_bp = Blueprint('pdf', __name__)
@@ -68,6 +73,182 @@ def to_nature_code(raw):
         return v if v in (1, 2, 3, 4, 5) else 1
     except Exception:
         return 1
+
+
+# -------------------- Helpers : données certification --------------------
+
+
+def _fetch_certification(conn, cert_id: int) -> dict | None:
+    """Return certification info with a fallback for missing code column."""
+
+    cur = conn.cursor(dictionary=True)
+    try:
+        try:
+            cur.execute("SELECT id, name, code FROM courses WHERE id=%s", (cert_id,))
+        except Exception:
+            cur.execute("SELECT id, name FROM courses WHERE id=%s", (cert_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        if "code" not in row or not row.get("code"):
+            # Fallback to a code stored on modules or default to the name.
+            cur.execute(
+                "SELECT code_cert FROM modules WHERE course=%s AND code_cert IS NOT NULL AND code_cert<>'' LIMIT 1",
+                (cert_id,),
+            )
+            code_row = cur.fetchone()
+            row["code"] = (code_row or {}).get("code_cert") or row.get("name")
+        return row
+    finally:
+        cur.close()
+
+
+def _fetch_domains(conn, cert_id: int) -> list[str]:
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT name FROM modules WHERE course=%s ORDER BY name", (cert_id,))
+        return [name for (name,) in cur.fetchall()]
+    finally:
+        cur.close()
+
+
+def _parse_answer(raw: str) -> str:
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict) and "value" in data:
+            return str(data.get("value", "")).strip() or raw
+    except Exception:
+        pass
+    return raw
+
+
+def _fetch_random_questions(conn, cert_id: int, limit: int) -> list[dict]:
+    """Return random QCM questions for a certification with their answers."""
+
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """
+            SELECT q.id, q.text, m.name AS module_name
+            FROM questions q
+            JOIN modules m ON m.id = q.module
+            WHERE m.course = %s AND q.nature = 1
+            ORDER BY RAND()
+            LIMIT %s
+            """,
+            (cert_id, limit),
+        )
+        questions = cur.fetchall()
+        if not questions:
+            return []
+
+        question_ids = [q["id"] for q in questions]
+        placeholders = ",".join(["%s"] * len(question_ids))
+        cur.execute(
+            f"""
+            SELECT qa.question, qa.isok, a.text
+            FROM quest_ans qa
+            JOIN answers a ON a.id = qa.answer
+            WHERE qa.question IN ({placeholders})
+            ORDER BY qa.question, qa.id
+            """,
+            question_ids,
+        )
+        answer_map: dict[int, list[dict]] = {}
+        for row in cur.fetchall():
+            answer_map.setdefault(row["question"], []).append(
+                {"text": _parse_answer(row["text"]), "isok": bool(row["isok"])}
+            )
+
+        for q in questions:
+            q["answers"] = answer_map.get(q["id"], [])
+        return questions
+    finally:
+        cur.close()
+
+
+# -------------------- Helpers : PDF --------------------
+
+
+def _replace_placeholder(page: fitz.Page, placeholder: str, value: str, *, fontsize: int = 14):
+    areas = list(page.search_for(placeholder))
+    if not areas:
+        return
+    expanded = [fitz.Rect(r.x0 - 2, r.y0 - 2, r.x1 + 2, r.y1 + 2) for r in areas]
+    for rect in expanded:
+        page.add_redact_annot(rect, fill=(1, 1, 1))
+    page.apply_redactions()
+    for rect in expanded:
+        page.insert_textbox(
+            rect,
+            value,
+            fontsize=fontsize,
+            fontname="helvetica",
+            align=1,
+            color=(0, 0, 0),
+        )
+
+
+def _clean_text(value: str) -> str:
+    value = re.sub(r"<br\s*/?>", "\n", value, flags=re.IGNORECASE)
+    value = re.sub(r"<[^>]+>", " ", value)
+    value = re.sub(r"\s+", " ", value)
+    return value.strip()
+
+
+def _wrap_lines(text: str, max_width: float, *, fontname: str, fontsize: int) -> list[str]:
+    words = text.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if not candidate:
+            continue
+        width = fitz.get_text_length(candidate, fontname=fontname, fontsize=fontsize)
+        if width <= max_width or not current:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    if not lines:
+        lines.append("")
+    return lines
+
+
+def _render_question_lines(question: dict, idx: int, max_width: float, *, fontsize: int = 11) -> list[tuple[str, str]]:
+    """Return [(text, fontname)] lines formatted like the sample screenshot."""
+
+    font_regular = "helvetica"
+    font_bold = "helvetica-bold"
+
+    lines: list[tuple[str, str]] = [(f"QUESTION {idx}", font_bold)]
+    lines.append(("", font_regular))
+
+    question_text = _clean_text(question.get("text", ""))
+    for line in _wrap_lines(question_text, max_width, fontname=font_regular, fontsize=fontsize):
+        lines.append((line, font_regular))
+
+    lines.append(("", font_regular))
+
+    answers = question.get("answers", [])
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    correct_letters: list[str] = []
+    for i, ans in enumerate(answers):
+        label = letters[i] if i < len(letters) else f"Opt{i+1}"
+        answer_text = _clean_text(ans.get("text", ""))
+        for line in _wrap_lines(f"{label}. {answer_text}", max_width, fontname=font_regular, fontsize=fontsize):
+            lines.append((line, font_regular))
+        if ans.get("isok"):
+            correct_letters.append(label)
+
+    lines.append(("", font_regular))
+
+    if correct_letters:
+        lines.append((f"Answer: {', '.join(correct_letters)}", font_bold))
+
+    return lines
 
 # -------------------- APIs dropdown (schéma: provs, courses.prov, modules.course) --------------------
 
@@ -209,6 +390,11 @@ def api_sync_code_cert():
 def index():
     return render_template("upload.html")
 
+
+@pdf_bp.route("/export")
+def export_index():
+    return render_template("pdf_export.html")
+
 # -------------------- PDF Question Generator --------------------
 
 @pdf_bp.route("/generate")
@@ -336,6 +522,128 @@ def generate_questions_from_pdf():
     session_id = os.urandom(8).hex()
     SESSIONS[session_id] = {"domain_id": domain_id, "questions": questions}
     return jsonify({"status": "ok", "session_id": session_id, "json_data": {"questions": questions}})
+
+
+@pdf_bp.route("/export/questions", methods=["POST"])
+def export_questions_pdf():
+    try:
+        cert_id = int(request.form.get("cert_id", 0))
+        num_questions = int(request.form.get("num_questions", 0))
+    except ValueError:
+        return jsonify({"status": "error", "message": "Paramètres invalides"}), 400
+
+    if cert_id <= 0 or num_questions <= 0:
+        return jsonify({"status": "error", "message": "Certification et nombre de questions requis"}), 400
+
+    user_name = (request.form.get("user_name") or "ExamBoot User").strip()
+    user_email = (request.form.get("user_email") or "user@example.com").strip()
+
+    template_path = BASE_DIR / "docs" / "PDF-Template-ExamBoot.pdf"
+    if not template_path.exists():
+        return jsonify({"status": "error", "message": "Template PDF introuvable"}), 500
+
+    conn = db_conn()
+    try:
+        cert = _fetch_certification(conn, cert_id)
+        if not cert:
+            return jsonify({"status": "error", "message": "Certification introuvable"}), 404
+
+        domains = _fetch_domains(conn, cert_id)
+        questions = _fetch_random_questions(conn, cert_id, num_questions)
+        if not questions:
+            return jsonify({"status": "error", "message": "Aucune question disponible pour cette certification"}), 400
+        if len(questions) < num_questions:
+            return jsonify({"status": "error", "message": "Pas assez de questions pour le nombre demandé"}), 400
+    finally:
+        conn.close()
+
+    export_id = uuid.uuid4().hex
+    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    cert_name = cert.get("name") or ""
+    cert_code = cert.get("code") or cert_name
+    domain_block = "\n".join(f"• {d}" for d in domains) if domains else "Aucun domaine défini"
+
+    template = fitz.open(template_path)
+    output = fitz.open()
+
+    # Page 1 (couverture) + page 2 (sommaire)
+    output.insert_pdf(template, from_page=0, to_page=1)
+
+    cover = output[0]
+    summary = output[1]
+
+    for page in (cover, summary):
+        _replace_placeholder(page, "[username_name]", user_name)
+        _replace_placeholder(page, "[user_email]", user_email)
+        _replace_placeholder(page, "[date_time_UTC]", now_utc)
+        _replace_placeholder(page, "[UUID]", export_id)
+        _replace_placeholder(page, "[Certification_Name]", cert_name)
+    # Zone CODE sur la couverture
+    for rect in cover.search_for("CODE"):
+        cover.insert_textbox(rect, cert_code, fontsize=12, fontname="helvetica", align=1, color=(0, 0, 0))
+
+    _replace_placeholder(summary, "[DOMAINES]", domain_block)
+    _replace_placeholder(summary, "[EXPORT ID]", export_id)
+    _replace_placeholder(summary, "[NOM PRÉNOM]", user_name)
+    _replace_placeholder(summary, "[EMAIL]", user_email)
+
+    # Pages des questions (plusieurs questions par page)
+    question_template_rect = template[2].rect
+    margin = 56
+    content_rect = fitz.Rect(
+        question_template_rect.x0 + margin,
+        question_template_rect.y0 + 140,
+        question_template_rect.x1 - margin,
+        question_template_rect.y1 - margin,
+    )
+    max_width = content_rect.width
+    line_height = 11 * 1.5
+
+    def new_question_page():
+        page = output.new_page(width=question_template_rect.width, height=question_template_rect.height)
+        page.show_pdf_page(page.rect, template, 2)
+        _replace_placeholder(page, "[EXPORT ID]", export_id)
+        _replace_placeholder(page, "[NOM PRÉNOM]", user_name)
+        _replace_placeholder(page, "[EMAIL]", user_email)
+        return page
+
+    page = new_question_page()
+    cursor_y = content_rect.y0
+
+    for idx, question in enumerate(questions, start=1):
+        q_lines = _render_question_lines(question, idx, max_width, fontsize=11)
+        needed_height = len(q_lines) * line_height
+
+        if cursor_y + needed_height > content_rect.y1:
+            page = new_question_page()
+            cursor_y = content_rect.y0
+
+        for text, fontname in q_lines:
+            if text:
+                page.insert_text(
+                    (content_rect.x0, cursor_y),
+                    text,
+                    fontsize=11,
+                    fontname=fontname,
+                    color=(0, 0, 0),
+                )
+            cursor_y += line_height
+
+    # Dernière page
+    output.insert_pdf(template, from_page=3, to_page=3)
+
+    output_path = UPLOAD_DIR / f"export_{export_id}.pdf"
+    output.save(output_path)
+    output.close()
+    template.close()
+
+    download_name = f"{cert_code or 'questions'}.pdf"
+    return send_file(
+        output_path,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=download_name,
+    )
 
 # -------------------- Upload / Analyse PDF --------------------
 
