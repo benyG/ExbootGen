@@ -22,6 +22,10 @@ BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+# Base directory allowed for PDF discovery to avoid walking arbitrary paths
+PDF_SEARCH_ROOT = Path(os.environ.get("PDF_SEARCH_ROOT", UPLOAD_DIR)).resolve()
+os.makedirs(PDF_SEARCH_ROOT, exist_ok=True)
+
 # Mémoire légère (session d’analyse)
 # Chaque session stocke l'identifiant du module/domaine sous la clé
 # ``domain_id`` (nouveau flux) ou ``module_id`` (ancien flux /upload-pdf).
@@ -309,19 +313,40 @@ def api_modules(cert_id):
 
 @pdf_bp.route("/api/search-pdfs")
 def api_search_pdfs():
-    """Return a list of PDF files under ``root`` matching query ``q``."""
-    root = request.args.get("root") or ""
+    """Return a list of PDF files under ``root`` matching query ``q``.
+
+    The search is constrained to ``PDF_SEARCH_ROOT`` to avoid disclosing the
+    server filesystem through arbitrary directory traversal.
+    """
+
+    def is_within_base(path: Path, base: Path) -> bool:
+        try:
+            path.relative_to(base)
+            return True
+        except ValueError:
+            return False
+
+    raw_root = (request.args.get("root") or "").strip()
     query = (request.args.get("q") or "").lower()
-    if not root or not os.path.isdir(root):
+    if not raw_root or not query:
+        return jsonify([])
+
+    candidate = Path(raw_root)
+    if candidate.is_absolute():
+        root_path = candidate.resolve()
+    else:
+        root_path = (PDF_SEARCH_ROOT / candidate).resolve()
+
+    if not root_path.exists() or not root_path.is_dir() or not is_within_base(root_path, PDF_SEARCH_ROOT):
         return jsonify([])
 
     matches = []
-    for dirpath, _, files in os.walk(root):
+    for dirpath, _, files in os.walk(root_path):
         for name in files:
             if not name.lower().endswith(".pdf"):
                 continue
             if query in name.lower():
-                rel_path = os.path.relpath(os.path.join(dirpath, name), root)
+                rel_path = os.path.relpath(os.path.join(dirpath, name), root_path)
                 matches.append(rel_path)
                 if len(matches) >= 20:
                     break
