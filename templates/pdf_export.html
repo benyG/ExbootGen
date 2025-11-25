@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Exporter un QCM PDF · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 20% 20%, rgba(76,201,240,0.15), transparent 55%),
+                     radial-gradient(circle at 80% 30%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.22), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --radius-lg: 20px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+
+    .container {
+      width: min(1080px, 92vw);
+      margin: 0 auto;
+      padding: 2.5rem 0 3.5rem;
+    }
+
+    .glass {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 26px;
+      padding: clamp(1.6rem, 2vw, 2rem);
+      box-shadow: 0 24px 60px rgba(2, 6, 23, 0.55);
+      backdrop-filter: blur(18px);
+    }
+
+    h1 {
+      margin: 0 0 0.6rem;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(1.8rem, 3vw, 2.4rem);
+      letter-spacing: -0.01em;
+    }
+
+    p { margin: 0; color: var(--text-muted); line-height: 1.6; }
+
+    form { display: grid; gap: 1.2rem; margin-top: 1.4rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    label { font-weight: 600; display: block; margin-bottom: 0.4rem; }
+    select, input { width: 100%; border-radius: 14px; border: 1px solid var(--border); background: rgba(10, 15, 28, 0.9); color: var(--text-primary); padding: 0.85rem 0.95rem; font-size: 0.95rem; }
+    select:focus, input:focus { outline: none; border-color: rgba(71, 245, 192, 0.7); box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.2); }
+
+    .full-row { grid-column: 1 / -1; }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 0.9rem 1.4rem;
+      background: linear-gradient(135deg, rgba(71,245,192,0.95), rgba(124,247,255,0.9));
+      color: #020617;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.25s var(--transition), box-shadow 0.25s var(--transition);
+      width: 100%;
+    }
+    button:hover { transform: translateY(-2px) scale(1.01); box-shadow: 0 16px 30px rgba(71, 245, 192, 0.35); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    .status { margin-top: 1rem; padding: 1rem; border-radius: 14px; background: rgba(15, 19, 32, 0.75); border: 1px solid rgba(148,163,184,0.18); color: var(--text-muted); min-height: 56px; }
+    .status strong { color: var(--text-primary); }
+
+    header { position: sticky; top: 0; backdrop-filter: blur(12px); background: rgba(4,7,17,0.7); border-bottom: 1px solid rgba(148,163,184,0.18); z-index: 10; }
+    .header-inner { width: min(1080px, 92vw); margin: 0 auto; padding: 1.2rem 0; display: flex; align-items: center; justify-content: space-between; }
+    .brand { display: flex; align-items: center; gap: 0.8rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { width: 2.6rem; height: 2.6rem; border-radius: 14px; display: grid; place-items: center; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.26)); border: 1px solid rgba(148,163,184,0.25); color: #7cf7ff; font-weight: 700; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.16); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-mark">EX</div>
+        <div>
+          <div style="font-weight:700; letter-spacing:0.02em;">ExBoot Laboratory</div>
+          <div style="color:var(--text-muted); font-size:0.9rem;">Export PDF de questions</div>
+        </div>
+      </div>
+      {% set active_page = 'pdf_export' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="glass">
+      <h1>Assembler un PDF d'entraînement</h1>
+      <p>Choisissez une certification, indiquez le nombre de questions à extraire et obtenez un PDF prêt à être utilisé basé sur le template ExamBoot.</p>
+
+      <form id="exportForm">
+        <div>
+          <label>Provider</label>
+          <select id="provider" name="provider" required></select>
+        </div>
+        <div>
+          <label>Certification</label>
+          <select id="certification" name="cert_id" required></select>
+        </div>
+        <div>
+          <label>Nombre de questions</label>
+          <input type="number" id="numQuestions" name="num_questions" min="1" value="10" required />
+        </div>
+        <div>
+          <label>Nom complet (optionnel)</label>
+          <input type="text" id="userName" name="user_name" placeholder="Nom utilisé dans le PDF" />
+        </div>
+        <div>
+          <label>Email (optionnel)</label>
+          <input type="email" id="userEmail" name="user_email" placeholder="Email affiché dans le PDF" />
+        </div>
+        <div class="full-row">
+          <button type="submit" id="submitBtn">Générer le PDF</button>
+        </div>
+      </form>
+
+      <div class="status" id="status">Sélectionnez une certification puis lancez la génération.</div>
+    </div>
+  </div>
+
+  <script>
+    const providerSelect = document.getElementById('provider');
+    const certSelect = document.getElementById('certification');
+    const form = document.getElementById('exportForm');
+    const statusBox = document.getElementById('status');
+    const submitBtn = document.getElementById('submitBtn');
+
+    function setStatus(message, isError = false) {
+      statusBox.innerHTML = message;
+      statusBox.style.color = isError ? '#fda4af' : 'var(--text-muted)';
+    }
+
+    async function loadProviders() {
+      const res = await fetch('/pdf/api/providers');
+      const data = await res.json();
+      providerSelect.innerHTML = '<option value="">Choisir...</option>' + data.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    }
+
+    async function loadCertifications(providerId) {
+      certSelect.innerHTML = '<option value="">Choisir...</option>';
+      if (!providerId) return;
+      const res = await fetch(`/pdf/api/certifications/${providerId}`);
+      const data = await res.json();
+      certSelect.innerHTML = '<option value="">Choisir...</option>' + data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    }
+
+    providerSelect.addEventListener('change', (e) => {
+      loadCertifications(e.target.value);
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!certSelect.value) {
+        setStatus('Veuillez choisir une certification.', true);
+        return;
+      }
+
+      submitBtn.disabled = true;
+      setStatus('Génération en cours...');
+
+      const formData = new FormData(form);
+      try {
+        const response = await fetch('/pdf/export/questions', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.message || 'Une erreur est survenue');
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const certName = certSelect.options[certSelect.selectedIndex].text || 'questions';
+        a.download = `${certName.replace(/\s+/g, '_')}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        setStatus('<strong>Succès :</strong> le PDF a été généré.');
+      } catch (err) {
+        setStatus(err.message, true);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    loadProviders();
+  </script>
+</body>
+</html>
