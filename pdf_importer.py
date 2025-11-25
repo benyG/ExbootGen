@@ -333,11 +333,20 @@ def api_search_pdfs():
 
     candidate = Path(raw_root)
     if candidate.is_absolute():
+        # On permet désormais les chemins absolus explicitement saisis :
+        # s'ils existent et pointent vers un dossier, on les parcourt
+        # sans restreindre à PDF_SEARCH_ROOT (l'utilisateur fournit déjà
+        # la cible exacte).
         root_path = candidate.resolve()
     else:
         root_path = (PDF_SEARCH_ROOT / candidate).resolve()
 
-    if not root_path.exists() or not root_path.is_dir() or not is_within_base(root_path, PDF_SEARCH_ROOT):
+    if not root_path.exists() or not root_path.is_dir():
+        return jsonify([])
+
+    # Pour les chemins relatifs, on continue de vérifier qu'ils restent
+    # confinés au répertoire autorisé.
+    if not candidate.is_absolute() and not is_within_base(root_path, PDF_SEARCH_ROOT):
         return jsonify([])
 
     matches = []
