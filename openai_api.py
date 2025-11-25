@@ -837,7 +837,7 @@ STRICT SCOPE:
 RULES:
 1. If you want to present a line of code in your response, surround that portion with '[code]...[/code]'. This will help in formatting it.
 2. If you want to present a console command or result in your response, surround that portion with '[console]...[/console]'. This will help in formatting it.
-3. The text of each response section (value, target) must remain of a reasonable length and not exceed 120 characters.
+3. The text of each response section (value, target) must remain of a reasonable length and not exceed 150 characters.
 """
 
         data = {
