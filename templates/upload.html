@@ -274,13 +274,14 @@
     }
 
     const base = '{{ url_for('pdf.index') }}';
+    const apiBase = base.endsWith('/') ? base : `${base}/`;
 
     const providerSelect = document.getElementById("providerSelect");
     const certSelect = document.getElementById("certSelect");
     const providerSearch = window.makeSelectSearchable ? window.makeSelectSearchable(providerSelect, { placeholder: 'Rechercher un provider…' }) : null;
     const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certSelect, { placeholder: 'Rechercher une certification…' }) : null;
 
-    fetch(base + "api/providers").then(r => r.json()).then(data => {
+    fetch(apiBase + "api/providers").then(r => r.json()).then(data => {
         const items = (data || []).map(p => ({ value: p.id, label: p.name }));
         const defProv = items.find(p => Number(p.value) === 169);
         const list = items.length ? items : [{ value: '', label: '— Aucun provider —' }];
@@ -320,7 +321,7 @@
             return;
         }
 
-        fetch(`${base}api/certifications/${prov_id}`).then(r => r.json()).then(data => {
+        fetch(`${apiBase}api/certifications/${prov_id}`).then(r => r.json()).then(data => {
             const items = (data || []).map(c => ({
                 value: c.id,
                 label: c.name,
@@ -440,7 +441,7 @@
             renderPdfResults([], query);
             return;
         }
-        fetch(`${base}api/search-pdfs?root=${encodeURIComponent(root)}&q=${encodeURIComponent(query)}`)
+        fetch(`${apiBase}api/search-pdfs?root=${encodeURIComponent(root)}&q=${encodeURIComponent(query)}`)
             .then(r => r.json())
             .then(data => {
                 pdfList.innerHTML = "";
@@ -468,7 +469,7 @@
             return;
         }
 
-        fetch(`${base}api/modules/${cert_id}`).then(r => r.json()).then(data => {
+        fetch(`${apiBase}api/modules/${cert_id}`).then(r => r.json()).then(data => {
             modSelect.innerHTML = "";
             if (!data || data.length === 0) {
                 modSelect.appendChild(option("— Aucun module —", ""));
@@ -597,7 +598,7 @@
                 return;
             }
             formData.append("file_paths", JSON.stringify(selectedFiles));
-            const res = await fetch(base + "upload-pdf", { method: "POST", body: formData });
+            const res = await fetch(apiBase + "upload-pdf", { method: "POST", body: formData });
             const data = await res.json();
             if (data.status === "ok") {
                 currentSession = data.session_id;
@@ -628,7 +629,7 @@
         overlay.classList.add('show');
 
         try {
-            const res = await fetch(base + "import-questions", { method: "POST", body: formData });
+            const res = await fetch(apiBase + "import-questions", { method: "POST", body: formData });
             const data = await res.json();
             if (data.status === "ok") {
                 alert(`✅ Import terminé : ${data.imported_questions} questions, ${data.imported_answers} réponses`);
@@ -649,7 +650,7 @@
         btn.disabled = true;
         overlay.classList.add('show');
         try {
-            const res = await fetch(base + "api/sync-code-cert", { method: "POST" });
+            const res = await fetch(apiBase + "api/sync-code-cert", { method: "POST" });
             const data = await res.json();
             if (data.status === "ok") {
                 alert(`✅ Synchronisation terminée. ${data.inserted || 0} domaine(s) créé(s), ${data.updated || 0} mis à jour.`);
