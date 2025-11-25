@@ -183,7 +183,7 @@ def _replace_placeholder(page: fitz.Page, placeholder: str, value: str, *, fonts
             rect,
             value,
             fontsize=fontsize,
-            fontname="helv",
+            fontname="helvetica",
             align=1,
             color=(0, 0, 0),
         )
@@ -220,8 +220,8 @@ def _wrap_lines(text: str, max_width: float, *, fontname: str, fontsize: int) ->
 def _render_question_lines(question: dict, idx: int, max_width: float, *, fontsize: int = 11) -> list[tuple[str, str]]:
     """Return [(text, fontname)] lines formatted like the sample screenshot."""
 
-    font_regular = "helv"
-    font_bold = "helv-Bold"
+    font_regular = "helvetica"
+    font_bold = "helvetica-bold"
 
     lines: list[tuple[str, str]] = [(f"QUESTION {idx}", font_bold)]
     lines.append(("", font_regular))
@@ -580,7 +580,7 @@ def export_questions_pdf():
         _replace_placeholder(page, "[Certification_Name]", cert_name)
     # Zone CODE sur la couverture
     for rect in cover.search_for("CODE"):
-        cover.insert_textbox(rect, cert_code, fontsize=12, fontname="helv", align=1, color=(0, 0, 0))
+        cover.insert_textbox(rect, cert_code, fontsize=12, fontname="helvetica", align=1, color=(0, 0, 0))
 
     _replace_placeholder(summary, "[DOMAINES]", domain_block)
     _replace_placeholder(summary, "[EXPORT ID]", export_id)
