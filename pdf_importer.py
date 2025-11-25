@@ -586,7 +586,7 @@ def export_questions_pdf():
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     cert_name = cert.get("name") or ""
     cert_code = cert.get("code") or cert_name
-    domain_block = "\n".join(f"• {d}" for d in domains) if domains else "Aucun domaine défini"
+    domain_block = "\n".join(f"- {d}" for d in domains) if domains else "Aucun domaine défini"
 
     template = fitz.open(template_path)
     output = fitz.open()
@@ -630,6 +630,7 @@ def export_questions_pdf():
         _replace_placeholder(page, "[EXPORT ID]", export_id)
         _replace_placeholder(page, "[NOM PRÉNOM]", user_name)
         _replace_placeholder(page, "[EMAIL]", user_email)
+        _replace_placeholder(page, "[UUID]", export_id)
         return page
 
     page = new_question_page()
@@ -656,6 +657,12 @@ def export_questions_pdf():
 
     # Dernière page
     output.insert_pdf(template, from_page=3, to_page=3)
+
+    closing_page = output[-1]
+    _replace_placeholder(closing_page, "[UUID]", export_id)
+    _replace_placeholder(closing_page, "[EXPORT ID]", export_id)
+    _replace_placeholder(closing_page, "[NOM PRÉNOM]", user_name)
+    _replace_placeholder(closing_page, "[EMAIL]", user_email)
 
     output_path = UPLOAD_DIR / f"export_{export_id}.pdf"
     output.save(output_path)
