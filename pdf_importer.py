@@ -174,10 +174,11 @@ def _replace_placeholder(page: fitz.Page, placeholder: str, value: str, *, fonts
     areas = list(page.search_for(placeholder))
     if not areas:
         return
-    for rect in areas:
+    expanded = [fitz.Rect(r.x0 - 2, r.y0 - 2, r.x1 + 2, r.y1 + 2) for r in areas]
+    for rect in expanded:
         page.add_redact_annot(rect, fill=(1, 1, 1))
     page.apply_redactions()
-    for rect in areas:
+    for rect in expanded:
         page.insert_textbox(
             rect,
             value,
@@ -195,19 +196,59 @@ def _clean_text(value: str) -> str:
     return value.strip()
 
 
-def _render_question_block(question: dict, idx: int) -> str:
-    parts = [f"QUESTION {idx}", _clean_text(question.get("text", ""))]
+def _wrap_lines(text: str, max_width: float, *, fontname: str, fontsize: int) -> list[str]:
+    words = text.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if not candidate:
+            continue
+        width = fitz.get_text_length(candidate, fontname=fontname, fontsize=fontsize)
+        if width <= max_width or not current:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    if not lines:
+        lines.append("")
+    return lines
+
+
+def _render_question_lines(question: dict, idx: int, max_width: float, *, fontsize: int = 11) -> list[tuple[str, str]]:
+    """Return [(text, fontname)] lines formatted like the sample screenshot."""
+
+    font_regular = "helv"
+    font_bold = "helv-Bold"
+
+    lines: list[tuple[str, str]] = [(f"QUESTION {idx}", font_bold)]
+    lines.append(("", font_regular))
+
+    question_text = _clean_text(question.get("text", ""))
+    for line in _wrap_lines(question_text, max_width, fontname=font_regular, fontsize=fontsize):
+        lines.append((line, font_regular))
+
+    lines.append(("", font_regular))
+
     answers = question.get("answers", [])
     letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    correct_letters = []
+    correct_letters: list[str] = []
     for i, ans in enumerate(answers):
         label = letters[i] if i < len(letters) else f"Opt{i+1}"
-        parts.append(f"{label}. {_clean_text(ans.get('text', ''))}")
+        answer_text = _clean_text(ans.get("text", ""))
+        for line in _wrap_lines(f"{label}. {answer_text}", max_width, fontname=font_regular, fontsize=fontsize):
+            lines.append((line, font_regular))
         if ans.get("isok"):
             correct_letters.append(label)
+
+    lines.append(("", font_regular))
+
     if correct_letters:
-        parts.append(f"Answer: {', '.join(correct_letters)}")
-    return "\n".join([p for p in parts if p])
+        lines.append((f"Answer: {', '.join(correct_letters)}", font_bold))
+
+    return lines
 
 # -------------------- APIs dropdown (schéma: provs, courses.prov, modules.course) --------------------
 
@@ -527,13 +568,7 @@ def export_questions_pdf():
 
     # Page 1 (couverture) + page 2 (sommaire)
     output.insert_pdf(template, from_page=0, to_page=1)
-    # Pages questions
-    for _ in questions:
-        output.insert_pdf(template, from_page=2, to_page=2)
-    # Dernière page
-    output.insert_pdf(template, from_page=3, to_page=3)
 
-    # Remplacement des placeholders
     cover = output[0]
     summary = output[1]
 
@@ -552,24 +587,50 @@ def export_questions_pdf():
     _replace_placeholder(summary, "[NOM PRÉNOM]", user_name)
     _replace_placeholder(summary, "[EMAIL]", user_email)
 
-    # Pages des questions
-    for idx, question in enumerate(questions, start=1):
-        page = output[idx + 1]
+    # Pages des questions (plusieurs questions par page)
+    question_template_rect = template[2].rect
+    margin = 56
+    content_rect = fitz.Rect(
+        question_template_rect.x0 + margin,
+        question_template_rect.y0 + 140,
+        question_template_rect.x1 - margin,
+        question_template_rect.y1 - margin,
+    )
+    max_width = content_rect.width
+    line_height = 11 * 1.5
+
+    def new_question_page():
+        page = output.new_page(width=question_template_rect.width, height=question_template_rect.height)
+        page.show_pdf_page(page.rect, template, 2)
         _replace_placeholder(page, "[EXPORT ID]", export_id)
         _replace_placeholder(page, "[NOM PRÉNOM]", user_name)
         _replace_placeholder(page, "[EMAIL]", user_email)
+        return page
 
-        text_content = _render_question_block(question, idx)
-        rect = page.rect
-        margin = 56
-        content_rect = fitz.Rect(rect.x0 + margin, rect.y0 + 140, rect.x1 - margin, rect.y1 - margin)
-        page.insert_textbox(
-            content_rect,
-            text_content,
-            fontsize=12,
-            fontname="helv",
-            align=0,
-        )
+    page = new_question_page()
+    cursor_y = content_rect.y0
+
+    for idx, question in enumerate(questions, start=1):
+        q_lines = _render_question_lines(question, idx, max_width, fontsize=11)
+        needed_height = len(q_lines) * line_height
+
+        if cursor_y + needed_height > content_rect.y1:
+            page = new_question_page()
+            cursor_y = content_rect.y0
+
+        for text, fontname in q_lines:
+            if text:
+                page.insert_text(
+                    (content_rect.x0, cursor_y),
+                    text,
+                    fontsize=11,
+                    fontname=fontname,
+                    color=(0, 0, 0),
+                )
+            cursor_y += line_height
+
+    # Dernière page
+    output.insert_pdf(template, from_page=3, to_page=3)
 
     output_path = UPLOAD_DIR / f"export_{export_id}.pdf"
     output.save(output_path)
