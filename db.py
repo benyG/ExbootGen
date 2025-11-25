@@ -362,6 +362,30 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
                 if err.errno == 1062:
                     logging.info("Duplicate question skipped")
                     q_skipped += 1
+
+                    # If the existing question has no source file recorded yet,
+                    # update it with the current file name to keep provenance.
+                    if src_file:
+                        try:
+                            cursor.execute(
+                                "SELECT id, src_file FROM questions WHERE text = %s AND module = %s LIMIT 1",
+                                (question_text, domain_id),
+                            )
+                            row = cursor.fetchone()
+                            if row:
+                                existing_id, existing_src_file = row
+                                if not (existing_src_file or "").strip():
+                                    cursor.execute(
+                                        "UPDATE questions SET src_file = %s WHERE id = %s",
+                                        (src_file, existing_id),
+                                    )
+                                    logging.info(
+                                        f"Updated empty src_file for duplicate question ID: {existing_id}"
+                                    )
+                        except Exception as update_err:
+                            logging.warning(
+                                "Failed to update src_file for duplicate question: %s", update_err
+                            )
                     continue
                 else:
                     raise

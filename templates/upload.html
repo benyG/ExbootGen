@@ -208,6 +208,7 @@
             <button type="button" id="addAllBtn" class="stellar-button secondary">Ajouter tout</button>
           </div>
           <datalist id="pdfList"></datalist>
+          <div id="pdfResults" class="selected-files" aria-live="polite" style="margin-top:0.5rem;"></div>
           <div id="selectedFiles" class="selected-files" aria-live="polite"></div>
           <small class="hint">Ajoutez autant de fichiers que nécessaire, un par un.</small>
         </div>
@@ -372,15 +373,71 @@
     const fileSearch = document.getElementById("fileSearch");
     const fileInput = document.getElementById("fileInput");
     const pdfList   = document.getElementById("pdfList");
+    const pdfResults = document.getElementById("pdfResults");
     const addFileBtn = document.getElementById("addFileBtn");
     const addAllBtn = document.getElementById("addAllBtn");
     const selectedFilesContainer = document.getElementById("selectedFiles");
+
+    const renderPdfResults = (items, query) => {
+        pdfResults.innerHTML = "";
+
+        if (!dirInput.value.trim()) {
+            const msg = document.createElement("div");
+            msg.textContent = "Indiquez d'abord un dossier PDF.";
+            msg.style.color = "var(--text-muted)";
+            pdfResults.appendChild(msg);
+            return;
+        }
+
+        if (!query) {
+            const msg = document.createElement("div");
+            msg.textContent = "Tapez un mot-clé pour rechercher vos PDF.";
+            msg.style.color = "var(--text-muted)";
+            pdfResults.appendChild(msg);
+            return;
+        }
+
+        if (!items.length) {
+            const msg = document.createElement("div");
+            msg.textContent = "Aucun PDF correspondant.";
+            msg.style.color = "var(--text-muted)";
+            pdfResults.appendChild(msg);
+            return;
+        }
+
+        const list = document.createElement("div");
+        list.style.display = "flex";
+        list.style.flexWrap = "wrap";
+        list.style.gap = "0.5rem";
+
+        items.forEach(p => {
+            const chip = document.createElement("div");
+            chip.className = "file-chip";
+            chip.textContent = p;
+            chip.title = "Cliquer pour sélectionner";
+            chip.tabIndex = 0;
+            chip.addEventListener("click", () => {
+                fileInput.value = p;
+                addCurrentFile();
+            });
+            chip.addEventListener("keydown", (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    chip.click();
+                }
+            });
+            list.appendChild(chip);
+        });
+
+        pdfResults.appendChild(list);
+    };
 
     const refreshPdfList = () => {
         const root = dirInput.value.trim();
         const query = fileSearch.value.trim() || fileInput.value.trim();
         if (!root || query.length === 0) {
             pdfList.innerHTML = "";
+            renderPdfResults([], query);
             return;
         }
         fetch(`${base}api/search-pdfs?root=${encodeURIComponent(root)}&q=${encodeURIComponent(query)}`)
@@ -392,6 +449,7 @@
                     opt.value = p;
                     pdfList.appendChild(opt);
                 });
+                renderPdfResults(data, query);
             });
     };
 
@@ -518,7 +576,10 @@
 
     fileSearch.addEventListener("input", refreshPdfList);
     fileInput.addEventListener("input", refreshPdfList);
-    dirInput.addEventListener("input", () => { pdfList.innerHTML = ""; });
+    dirInput.addEventListener("input", () => {
+        pdfList.innerHTML = "";
+        renderPdfResults([], fileSearch.value.trim());
+    });
 
     let currentSession = null;
     document.getElementById("uploadForm").addEventListener("submit", async function(e) {
@@ -610,6 +671,7 @@
     });
 
     renderSelectedFiles();
+    renderPdfResults([], "");
 
     const modSearch = document.getElementById('moduleSearch');
     const moduleSelect = document.getElementById('moduleSelect');
