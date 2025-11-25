@@ -221,7 +221,7 @@ def _wrap_lines(text: str, max_width: float, *, fontname: str, fontsize: int) ->
     return lines
 
 
-def _render_question_lines(question: dict, idx: int, max_width: float, *, fontsize: int = 11) -> list[tuple[str, str]]:
+def _render_question_lines(question: dict, idx: int, max_width: float, *, fontsize: int = 10) -> list[tuple[str, str]]:
     """Return [(text, fontname)] lines formatted like the sample screenshot."""
 
     font_regular = "helvetica"
@@ -622,7 +622,8 @@ def export_questions_pdf():
         question_template_rect.y1 - margin,
     )
     max_width = content_rect.width
-    line_height = 11 * 1.5
+    fontsize = 10
+    line_height = fontsize * 1.5
 
     def new_question_page():
         page = output.new_page(width=question_template_rect.width, height=question_template_rect.height)
@@ -637,7 +638,7 @@ def export_questions_pdf():
     cursor_y = content_rect.y0
 
     for idx, question in enumerate(questions, start=1):
-        q_lines = _render_question_lines(question, idx, max_width, fontsize=11)
+        q_lines = _render_question_lines(question, idx, max_width, fontsize=fontsize)
         needed_height = len(q_lines) * line_height
 
         if cursor_y + needed_height > content_rect.y1:
@@ -649,7 +650,7 @@ def export_questions_pdf():
                 page.insert_text(
                     (content_rect.x0, cursor_y),
                     text,
-                    fontsize=11,
+                    fontsize=fontsize,
                     fontname=fontname,
                     color=(0, 0, 0),
                 )
