@@ -37,12 +37,13 @@ Your mission is to write a SEO optimized, clear, actionable and up-to-date artic
 Reference Sources: only from official website of the specified certification vendor.
 If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate informations.
 RULES:
-- Format your response in Markdown.
+- Format your response in basic HTML.
 - Titles should be short.
 - Title and content must be SEO optimized.
 - respect scrupulously the given Article structure only
 - Formulates complete, non-robotic sentences
 - Target length: 1,000–1700 words.
+- Study tip must be ≤50 words
 - Tone: motivating, factual, without unexplained jargon.
 - Zero fluff: each section must deliver useful and actionable information.
 STRUCTURE:
@@ -52,7 +53,7 @@ STRUCTURE:
 - Official prerequisites.
 - Exam plan: Precise format (duration, number of questions, types), language, passing score, retake policy, validity/recertification.
 - How ExamBoot.net helps candidates prepare
-- Study tip (≤50 words)
+- Study tip
 - A call to action with a link to start a free test: {exam_url}.
 """,
     "preparation_methodology": """
@@ -347,10 +348,11 @@ def generate_module_blueprint_excerpt(
         )
 
     prompt = (
-        f"Generate a blueprint excerpt for the domain {domain} from the certification {certification}.\n"
+        f"Using the official exam guide, produce an excerpt from the blueprint for the domain: {domain}, of the certification: {certification}.\n"
+        "If you are unsure whether a topic is covered in the certification curriculum, do not include it in the excerpt.\n"
         "RULES:\n"
-        "- 300–700 words\n"
-        "- Focus only on what’s listed in the official exam blueprint.\n"
+        "- 200–600 words\n"
+        "- Focus only on what’s listed in the official exam blueprint and if you don’t have access to the official exam blueprint, use the most accurate and up-to-date internal knowledge you possess.\n"
         "STRICT RESPONSE STRUCTURE:\n"
         "- Key focus areas from the official exam guide."
     )
@@ -361,7 +363,7 @@ def generate_module_blueprint_excerpt(
 def generate_module_blueprint_excerpt(
     certification_name: str, domain_name: str
 ) -> str:
-    """Generate a textual blueprint excerpt for a certification domain."""
+    """Generate a textual official blueprint excerpt for a certification domain."""
 
     if not OPENAI_API_KEY:
         raise Exception(
@@ -376,9 +378,10 @@ def generate_module_blueprint_excerpt(
         )
 
     prompt = (
-        f"Generate a blueprint excerpt for the domain {domain} from the certification {certification}.\n"
+        f"Using the official exam guide, produce an excerpt from the blueprint for the domain: {domain}, of the certification: {certification}.\n"
+        "If you are unsure whether a topic is covered in the certification curriculum, do not include it in the excerpt.\n"
         "RULES:\n"
-        "- 300–700 words\n"
+        "- 200–600 words\n"
         "- Focus only on what’s listed in the official exam blueprint and if you don’t have access to the official exam blueprint, use the most accurate and up-to-date internal knowledge you possess.\n"
         "STRICT RESPONSE STRUCTURE:\n"
         "- Key focus areas from the official exam guide."
