@@ -239,19 +239,34 @@
       return div.innerHTML;
     };
 
+    function setSelectOptions(selectEl, placeholder, items) {
+      selectEl.innerHTML = '';
+      const defaultOpt = document.createElement('option');
+      defaultOpt.value = '';
+      defaultOpt.textContent = placeholder;
+      selectEl.appendChild(defaultOpt);
+
+      items.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        opt.textContent = item.name ?? '';
+        selectEl.appendChild(opt);
+      });
+    }
+
     async function loadProviders() {
       const res = await fetch('/edit-question/api/providers');
       const providers = await res.json();
-      providerSelect.innerHTML = '<option value="">— Tous —</option>' + providers.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+      setSelectOptions(providerSelect, '— Tous —', providers);
     }
 
     async function loadCertifications() {
       const provId = providerSelect.value;
-      certificationSelect.innerHTML = '<option value="">— Toutes —</option>';
+      setSelectOptions(certificationSelect, '— Toutes —', []);
       if (!provId) return;
       const res = await fetch(`/edit-question/api/certifications/${provId}`);
       const certs = await res.json();
-      certificationSelect.innerHTML = '<option value="">— Toutes —</option>' + certs.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      setSelectOptions(certificationSelect, '— Toutes —', certs);
     }
 
     async function searchQuestions() {
