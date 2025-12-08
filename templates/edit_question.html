@@ -273,10 +273,10 @@
 
       resultsContainer.innerHTML = results.map(r => `
         <article class="result-card" data-id="${r.id}">
-          <strong>#${r.id} · ${r.module_name || 'Module ?'}</strong>
+          <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
           <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
-          <small>${r.provider || 'Provider ?'} · ${r.certification || 'Certification ?'}</small>
-          <small class="src">${r.src_file ? `src_file : ${r.src_file}` : 'src_file non renseigné'}</small>
+          <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
+          <small class="src">${r.src_file ? `src_file : ${escapeHtml(r.src_file)}` : 'src_file non renseigné'}</small>
         </article>
       `).join('');
     }
