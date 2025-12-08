@@ -239,19 +239,34 @@
       return div.innerHTML;
     };
 
+    function setSelectOptions(selectEl, placeholder, items) {
+      selectEl.innerHTML = '';
+      const defaultOpt = document.createElement('option');
+      defaultOpt.value = '';
+      defaultOpt.textContent = placeholder;
+      selectEl.appendChild(defaultOpt);
+
+      items.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        opt.textContent = item.name ?? '';
+        selectEl.appendChild(opt);
+      });
+    }
+
     async function loadProviders() {
       const res = await fetch('/edit-question/api/providers');
       const providers = await res.json();
-      providerSelect.innerHTML = '<option value="">— Tous —</option>' + providers.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+      setSelectOptions(providerSelect, '— Tous —', providers);
     }
 
     async function loadCertifications() {
       const provId = providerSelect.value;
-      certificationSelect.innerHTML = '<option value="">— Toutes —</option>';
+      setSelectOptions(certificationSelect, '— Toutes —', []);
       if (!provId) return;
       const res = await fetch(`/edit-question/api/certifications/${provId}`);
       const certs = await res.json();
-      certificationSelect.innerHTML = '<option value="">— Toutes —</option>' + certs.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      setSelectOptions(certificationSelect, '— Toutes —', certs);
     }
 
     async function searchQuestions() {
@@ -273,10 +288,10 @@
 
       resultsContainer.innerHTML = results.map(r => `
         <article class="result-card" data-id="${r.id}">
-          <strong>#${r.id} · ${r.module_name || 'Module ?'}</strong>
+          <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
           <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
-          <small>${r.provider || 'Provider ?'} · ${r.certification || 'Certification ?'}</small>
-          <small class="src">${r.src_file ? `src_file : ${r.src_file}` : 'src_file non renseigné'}</small>
+          <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
+          <small class="src">${r.src_file ? `src_file : ${escapeHtml(r.src_file)}` : 'src_file non renseigné'}</small>
         </article>
       `).join('');
     }
@@ -312,7 +327,7 @@
       wrapper.className = 'answer-item';
       wrapper.dataset.meta = JSON.stringify(meta || {});
       wrapper.innerHTML = `
-        <textarea placeholder="Texte de la réponse">${value || ''}</textarea>
+        <textarea placeholder="Texte de la réponse"></textarea>
         <div style="display:flex; flex-direction: column; align-items: flex-end; gap: 0.45rem;">
           <label style="display:flex; align-items:center; gap:0.35rem; color: var(--muted); font-size:0.95rem;">
             <input type="checkbox" ${isok ? 'checked' : ''}> Correcte
@@ -320,6 +335,8 @@
           <button type="button" class="secondary remove-answer">Supprimer</button>
         </div>
       `;
+      const textarea = wrapper.querySelector('textarea');
+      textarea.value = value || '';
       wrapper.querySelector('.remove-answer').addEventListener('click', () => wrapper.remove());
       answersContainer.appendChild(wrapper);
     }
