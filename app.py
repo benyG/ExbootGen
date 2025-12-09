@@ -146,8 +146,7 @@ def make_celery() -> Celery:
         except ValueError:
             raise ValueError("CELERY_POOL_LIMIT doit être un entier positif") from None
     else:
-        cpu_count = os.cpu_count() or 1
-        pool_limit = max(cpu_count, 4)
+        pool_limit = _default_parallelism(maximum=8)
 
     if eager:
         broker_url = broker_url or "memory://"
