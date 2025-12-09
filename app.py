@@ -56,7 +56,7 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for environments with
             self.conf.update(**kwargs)
 
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
 try:  # pragma: no cover - optional runtime dependency
     from kombu.exceptions import OperationalError  # type: ignore
@@ -103,6 +103,8 @@ from handsonlab import hol_bp
 
 # Instanciation de l'application Flask
 app = Flask(__name__, template_folder="templates")
+# Minimal secret key required for session-based authentication protecting the UI
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "exboot-secret-key")
 
 
 def _env_flag(name: str, default: str = "0") -> bool:
@@ -367,6 +369,47 @@ def pick_secondary_domains(all_domains, primary_domain):
 @app.route("/")
 def home():
     return render_template("home.html")
+
+
+def _is_authenticated() -> bool:
+    """Return True when the user is logged in."""
+
+    return session.get("user") == "exboot"
+
+
+@app.before_request
+def require_login():
+    """Protect the application with a simple session-based login check."""
+
+    allowed_endpoints = {"login", "static"}
+    if request.endpoint in allowed_endpoints or request.endpoint is None:
+        return None
+
+    if _is_authenticated():
+        return None
+
+    login_url = url_for("login", next=request.url)
+    return redirect(login_url)
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error: str | None = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        if username == "exboot" and password == GUI_PASSWORD:
+            session["user"] = "exboot"
+            target = request.args.get("next") or url_for("home")
+            return redirect(target)
+        error = "Nom d'utilisateur ou mot de passe incorrect."
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+def logout():
+    session.pop("user", None)
+    return redirect(url_for("login"))
 
 
 @app.route("/reports")
