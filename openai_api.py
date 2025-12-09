@@ -332,7 +332,7 @@ def generate_certification_linkedin_post(
 
 def generate_module_blueprint_excerpt(
     certification_name: str, domain_name: str
-) -> str:
+ ) -> str:
     """Generate a textual blueprint excerpt for a certification domain."""
 
     if not OPENAI_API_KEY:
@@ -349,10 +349,10 @@ def generate_module_blueprint_excerpt(
 
     prompt = (
         f"Using the official exam guide, produce an excerpt from the blueprint for the domain: {domain}, of the certification: {certification}.\n"
-        "If you are unsure whether a topic is covered in the certification curriculum, do not include it in the excerpt.\n"
         "RULES:\n"
-        "- 200–600 words\n"
+        "- 150–500 words\n"
         "- Focus only on what’s listed in the official exam blueprint and if you don’t have access to the official exam blueprint, use the most accurate and up-to-date internal knowledge you possess.\n"
+        "- If you are unsure whether a topic is covered in the certification curriculum, do not include it in the excerpt.\n"        
         "STRICT RESPONSE STRUCTURE:\n"
         "- Key focus areas from the official exam guide."
     )
@@ -362,7 +362,7 @@ def generate_module_blueprint_excerpt(
 
 def generate_module_blueprint_excerpt(
     certification_name: str, domain_name: str
-) -> str:
+ ) -> str:
     """Generate a textual official blueprint excerpt for a certification domain."""
 
     if not OPENAI_API_KEY:
@@ -379,10 +379,10 @@ def generate_module_blueprint_excerpt(
 
     prompt = (
         f"Using the official exam guide, produce an excerpt from the blueprint for the domain: {domain}, of the certification: {certification}.\n"
-        "If you are unsure whether a topic is covered in the certification curriculum, do not include it in the excerpt.\n"
         "RULES:\n"
-        "- 200–600 words\n"
+        "- 150–500 words\n"
         "- Focus only on what’s listed in the official exam blueprint and if you don’t have access to the official exam blueprint, use the most accurate and up-to-date internal knowledge you possess.\n"
+        "- If you are unsure whether a topic is covered in the certification curriculum, do not include it in the excerpt.\n" 
         "STRICT RESPONSE STRUCTURE:\n"
         "- Key focus areas from the official exam guide."
     )
@@ -804,6 +804,7 @@ RULES:
 1. If you want to present a line of code in your response, surround that portion with '[code]...[/code]'. This will help in formatting it.
 2. If you want to present a console command or result in your response, surround that portion with '[console]...[/console]'. This will help in formatting it.
 3. Strictly align questions to the content of the syllabus of the domain selected for the indicated certification.
+4. Questions must be self-contained and cannot rely on the reader has the provided text. Do not use phrases like "in the provided text"; restate the necessary context directly in the question stem or options.
 """
         else:
             content_prompt = f"""
@@ -841,6 +842,8 @@ RULES:
 1. If you want to present a line of code in your response, surround that portion with '[code]...[/code]'. This will help in formatting it.
 2. If you want to present a console command or result in your response, surround that portion with '[console]...[/console]'. This will help in formatting it.
 3. The text of each response section (value, target) must remain of a reasonable length and not exceed 150 characters.
+4. Questions must be self-contained and cannot rely on the reader having seen the domain description above; avoid wording such as "according to the text" and restate any needed facts in the stem or options.
+5. Ensure every correct answer can be inferred directly from the content you include in the question.
 """
 
         data = {
