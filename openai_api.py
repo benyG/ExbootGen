@@ -359,37 +359,6 @@ def generate_module_blueprint_excerpt(
 
     return _run_completion(prompt)
 
-
-def generate_module_blueprint_excerpt(
-    certification_name: str, domain_name: str
- ) -> str:
-    """Generate a textual official blueprint excerpt for a certification domain."""
-
-    if not OPENAI_API_KEY:
-        raise Exception(
-            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un blueprint."
-        )
-
-    certification = (certification_name or "").strip()
-    domain = (domain_name or "").strip()
-    if not certification or not domain:
-        raise ValueError(
-            "Les noms de certification et de domaine sont requis pour générer un blueprint."
-        )
-
-    prompt = (
-        f"Using the official exam guide, produce an excerpt from the blueprint for the domain: {domain}, of the certification: {certification}.\n"
-        "RULES:\n"
-        "- 150–500 words\n"
-        "- Focus only on what’s listed in the official exam blueprint and if you don’t have access to the official exam blueprint, use the most accurate and up-to-date internal knowledge you possess.\n"
-        "- If you are unsure whether a topic is covered in the certification curriculum, do not include it in the excerpt.\n" 
-        "STRICT RESPONSE STRUCTURE:\n"
-        "- Key focus areas from the official exam guide."
-    )
-
-    return _run_completion(prompt)
-
-
 def _build_course_art_prompt(certification: str, vendor: str) -> str:
     """Return the course art prompt even if the template constant is missing."""
 
