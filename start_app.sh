@@ -73,6 +73,25 @@ fi
 sleep 5
 
 # ---------------------------------------------------------------------------
+#  Lancement de Celery Beat pour l'exécution automatique des planifications
+# ---------------------------------------------------------------------------
+celery_beat_cmd=(celery -A app.celery_app beat --loglevel=info)
+
+if command -v setsid >/dev/null 2>&1; then
+    echo "Démarrage de Celery Beat (logs : /tmp/celery_beat.log)..."
+    setsid "${celery_beat_cmd[@]}" > /tmp/celery_beat.log 2>&1 &
+elif command -v nohup >/dev/null 2>&1; then
+    echo "Démarrage de Celery Beat (logs : /tmp/celery_beat.log)..."
+    nohup "${celery_beat_cmd[@]}" > /tmp/celery_beat.log 2>&1 &
+else
+    echo "[AVERTISSEMENT] Impossible de lancer Celery Beat en arrière-plan automatiquement." >&2
+    echo "                Lancez-le manuellement avec : ${celery_beat_cmd[*]}" >&2
+fi
+
+# Laisser quelques secondes au scheduler pour démarrer
+sleep 2
+
+# ---------------------------------------------------------------------------
 #  Lancement du serveur WSGI (Gunicorn si disponible, sinon Waitress)
 # ---------------------------------------------------------------------------
 if command -v gunicorn >/dev/null 2>&1; then

@@ -10,10 +10,12 @@ from pathlib import Path
 from threading import Lock
 from types import SimpleNamespace
 from typing import Dict, Iterable, List, Optional, Tuple
+from datetime import datetime, date, time as dt_time
 
 try:  # pragma: no cover - optional runtime dependency
     from celery import Celery  # type: ignore
     from celery.exceptions import CeleryError  # type: ignore
+    from celery.schedules import crontab  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover - fallback for environments without Celery
     class CeleryError(Exception):
         """Fallback CeleryError used when the dependency is unavailable."""
@@ -55,6 +57,9 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for environments with
 
         def conf_update(self, **kwargs):
             self.conf.update(**kwargs)
+
+    def crontab(*_, **__):  # type: ignore
+        return 60
 
 
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
@@ -99,7 +104,7 @@ from reloc import reloc_bp
 from pdf_importer import pdf_bp
 from quest import quest_bp
 from edit_questions import edit_question_bp
-from articles import articles_bp, render_x_callback
+from articles import articles_bp, render_x_callback, run_scheduled_publication, SocialPostResult
 from handsonlab import hol_bp
 
 # Instanciation de l'application Flask
@@ -242,6 +247,12 @@ def make_celery() -> Celery:
         broker_transport_options=broker_transport_options,
         result_backend_transport_options=result_transport_options,
     )
+    celery_app.conf.beat_schedule = {
+        "dispatch-due-schedules-every-minute": {
+            "task": "schedule.dispatch_due",
+            "schedule": crontab(),  # every minute
+        }
+    }
 
     if redis_max_connections is not None and redis_max_connections > 0:
         celery_app.conf.redis_max_connections = redis_max_connections
@@ -449,6 +460,23 @@ def schedule_list():
     return jsonify(entries)
 
 
+def _schedule_entry_datetime(entry: Dict[str, object]) -> datetime | None:
+    """Return the combined datetime of a schedule entry."""
+
+    day = entry.get("day")
+    time_of_day = entry.get("time")
+    if not isinstance(day, str) or not isinstance(time_of_day, str):
+        return None
+
+    try:
+        planned_day = date.fromisoformat(day)
+        planned_time = dt_time.fromisoformat(time_of_day)
+    except ValueError:
+        return None
+
+    return datetime.combine(planned_day, planned_time)
+
+
 @app.route("/schedule/api", methods=["POST"])
 def schedule_save():
     """Persist a schedule entry."""
@@ -490,13 +518,65 @@ def schedule_save():
     return jsonify({"status": "saved", "id": entry["id"]})
 
 
+def _launch_execute_schedule_inline(job_id: str, date: str, entries: List[dict]) -> str:
+    """Launch execution of planned actions in a background thread."""
+
+    def _run_inline() -> None:
+        context = JobContext(job_store, job_id)
+        set_cached_status(job_id, "running")
+        initialise_job(
+            job_store,
+            job_id=job_id,
+            description="execute-planning",
+            metadata={"date": date, "count": len(entries)},
+        )
+        job_store.set_status(job_id, "running")
+
+        try:
+            _execute_planned_actions(context, date, entries)
+        except Exception as exc:  # pragma: no cover - defensive logging only
+            app.logger.exception("Execution planifiée échouée pour le %s", date)
+            context.set_status("failed", error=str(exc))
+        else:
+            context.set_status("completed")
+
+    threading.Thread(
+        target=_run_inline,
+        name=f"execute-planning-{job_id}",
+        daemon=True,
+    ).start()
+    return job_id
+
+
+def _enqueue_schedule_job(date: str, entries: List[dict]) -> Dict[str, str]:
+    """Enqueue a schedule execution job using Celery or fallback to inline."""
+
+    job_id = uuid.uuid4().hex
+
+    if _is_task_queue_disabled():
+        _launch_execute_schedule_inline(job_id, date, entries)
+        return {"status": "queued", "job_id": job_id, "mode": "inline"}
+
+    try:
+        async_result = execute_schedule_job.apply_async(args=(date, entries), task_id=job_id)
+    except QUEUE_EXCEPTIONS as exc:
+        _disable_task_queue(exc)
+        _launch_execute_schedule_inline(job_id, date, entries)
+        return {"status": "queued", "job_id": job_id, "mode": "inline"}
+
+    if getattr(celery_app.conf, "task_always_eager", False):
+        return {"status": "queued", "job_id": job_id, "mode": "eager"}
+
+    return {"status": "queued", "job_id": async_result.id, "mode": "celery"}
+
+
 def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]) -> None:
     """Iterate through planned actions and simulate their execution.
 
     This job focuses on traceability: it logs each planned publication with its
     channels and metadata so operators can verify that the calendar has been
-    respected. The actual publication bridges can be plugged in later by
-    replacing the inline log statements with calls to the existing publishers.
+    respecté. Il déclenche désormais les mêmes logiques de génération et de
+    publication que l'Article Builder (AI) pour chaque canal demandé.
     """
 
     context.log(f"Planification du {date}: {len(entries)} action(s) détectée(s).")
@@ -512,6 +592,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         link = entry.get("link") or "Lien non fourni"
         time_of_day = entry.get("time") or "Heure non précisée"
         channels = entry.get("channels") or []
+        attach_image = bool(entry.get("addImage", True))
 
         context.log(
             f"[{index}/{len(entries)}] {provider_name} · {cert_name} "
@@ -525,15 +606,75 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         if note:
             context.log(f"Note interne : {note}")
 
-        # Placeholder for real publication logic.
         try:
-            # Simuler un traitement rapide et laisser place aux futurs appels API.
-            time.sleep(0.05)
-            counters["succeeded"] += 1
-            context.log("Action planifiée marquée comme exécutée.")
-        except Exception as exc:  # pragma: no cover - defensive logging only
+            provider_id = int(entry.get("providerId"))
+            cert_id = int(entry.get("certId"))
+        except (TypeError, ValueError):
             counters["failed"] += 1
-            context.log(f"Erreur lors de l'exécution de l'action : {exc}")
+            context.log("IDs provider/certification invalides : action ignorée.")
+            counters["processed"] += 1
+            context.update_counters(**counters, date=date)
+            continue
+
+        try:
+            result = run_scheduled_publication(
+                provider_id=provider_id,
+                certification_id=cert_id,
+                exam_url=link,
+                topic_type=str(entry.get("subject") or ""),
+                channels=channels,
+                attach_image=attach_image,
+            )
+        except Exception as exc:  # pragma: no cover - surfaced in job log
+            counters["failed"] += 1
+            context.log(f"Erreur lors du déclenchement des publications : {exc}")
+        else:
+            channel_outcomes: List[bool] = []
+
+            if "article" in channels:
+                article_payload = result.get("article")
+                article_error = result.get("article_error")
+                if article_payload:
+                    blog_id = result.get("blog_id")
+                    context.log(
+                        f"Article généré et enregistré"
+                        f"{f' (blog #{blog_id})' if blog_id else ''}."
+                    )
+                    channel_outcomes.append(True)
+                    if result.get("course_art") is not None:
+                        context.log("Fiche certification enregistrée.")
+                    if result.get("course_art_error"):
+                        context.log(f"Fiche certification non enregistrée : {result['course_art_error']}")
+                else:
+                    channel_outcomes.append(False)
+                    context.log(
+                        f"Article non généré : {article_error or 'raison inconnue'}"
+                    )
+
+            if "x" in channels:
+                tweet_result: SocialPostResult | None = result.get("tweet_result")
+                if tweet_result and tweet_result.published:
+                    context.log("Tweet publié avec succès.")
+                    channel_outcomes.append(True)
+                else:
+                    channel_outcomes.append(False)
+                    error = (tweet_result and tweet_result.error) or "Tweet non publié."
+                    context.log(error)
+
+            if "linkedin" in channels:
+                linkedin_result: SocialPostResult | None = result.get("linkedin_result")
+                if linkedin_result and linkedin_result.published:
+                    context.log("Post LinkedIn publié avec succès.")
+                    channel_outcomes.append(True)
+                else:
+                    channel_outcomes.append(False)
+                    error = (linkedin_result and linkedin_result.error) or "LinkedIn non publié."
+                    context.log(error)
+
+            if channel_outcomes and all(channel_outcomes):
+                counters["succeeded"] += 1
+            else:
+                counters["failed"] += 1
 
         counters["processed"] += 1
         context.update_counters(**counters, date=date)
@@ -569,35 +710,49 @@ def execute_schedule_job(self, date: str, entries: List[dict]) -> None:
         context.set_status("completed")
 
 
-def _start_execute_schedule_inline(job_id: str, date: str, entries: List[dict]):
-    """Launch execution of planned actions in a background thread."""
+@celery_app.task(name="schedule.dispatch_due")
+def dispatch_due_schedules() -> Dict[str, object]:
+    """Scan planned publications and enqueue those that are due."""
 
-    def _run_inline() -> None:
-        context = JobContext(job_store, job_id)
-        set_cached_status(job_id, "running")
-        initialise_job(
-            job_store,
-            job_id=job_id,
-            description="execute-planning",
-            metadata={"date": date, "count": len(entries)},
-        )
-        job_store.set_status(job_id, "running")
+    now = datetime.now()
+    try:
+        entries = db.get_schedule_entries()
+    except Exception as exc:  # pragma: no cover - defensive path
+        app.logger.exception("Impossible de charger les planifications à exécuter automatiquement.")
+        raise
 
-        try:
-            _execute_planned_actions(context, date, entries)
-        except Exception as exc:  # pragma: no cover - defensive logging only
-            app.logger.exception("Execution planifiée échouée pour le %s", date)
-            context.set_status("failed", error=str(exc))
-        else:
-            context.set_status("completed")
+    due_by_day: Dict[str, List[dict]] = {}
+    skipped_invalid: List[str] = []
+    for entry in entries:
+        scheduled_at = _schedule_entry_datetime(entry)
+        if scheduled_at is None:
+            skipped_invalid.append(str(entry.get("id", "?")))
+            continue
+        if scheduled_at <= now:
+            due_by_day.setdefault(entry["day"], []).append(entry)
 
-    threading.Thread(
-        target=_run_inline,
-        name=f"execute-planning-{job_id}",
-        daemon=True,
-    ).start()
+    dispatched: List[Dict[str, object]] = []
+    for day, day_entries in sorted(due_by_day.items()):
+        dispatch = _enqueue_schedule_job(day, day_entries)
+        dispatch["date"] = day
+        dispatch["count"] = len(day_entries)
+        dispatched.append(dispatch)
+        for entry in day_entries:
+            try:
+                db.delete_schedule_entry(entry["id"])
+            except Exception as exc:  # pragma: no cover - defensive logging only
+                app.logger.exception(
+                    "Impossible de supprimer la planification %s après envoi en file.",
+                    entry.get("id"),
+                )
 
-    return jsonify({"status": "queued", "job_id": job_id, "mode": "inline"})
+    summary: Dict[str, object] = {
+        "dispatched_batches": len(dispatched),
+        "dispatched_entries": sum(item["count"] for item in dispatched) if dispatched else 0,
+    }
+    if skipped_invalid:
+        summary["skipped_invalid"] = skipped_invalid
+    return summary
 
 
 def _is_authenticated() -> bool:
@@ -652,15 +807,7 @@ def schedule_execute():
     if not isinstance(entries, list) or not entries:
         return jsonify({"error": "Aucune action planifiée transmise."}), 400
 
-    job_id = initialise_job(
-        job_store,
-        job_id=uuid.uuid4().hex,
-        description="execute-planning",
-        metadata={"date": date, "count": len(entries)},
-    )
-
-    # Exécution inline pour les environnements sans worker Celery.
-    return _start_execute_schedule_inline(job_id, date, entries)
+    return jsonify(_enqueue_schedule_job(date, entries))
 
 
 @app.route("/reports")

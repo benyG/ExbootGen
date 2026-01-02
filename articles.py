@@ -13,7 +13,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Iterable, Optional, Tuple
 from urllib.parse import ParseResult, parse_qsl, quote, urlparse
 
 import mysql.connector
@@ -1237,6 +1237,136 @@ def run_playbook():
     response_payload["playbook_steps"] = playbook_steps
 
     return jsonify(response_payload)
+
+
+def run_scheduled_publication(
+    provider_id: int,
+    certification_id: int,
+    exam_url: str,
+    topic_type: str,
+    channels: Iterable[str],
+    attach_image: bool = False,
+) -> dict:
+    """Execute the publication workflow for scheduled posts.
+
+    This function mirrors the Article Builder playbook but only runs the tasks
+    requested by ``channels`` (e.g. ``["linkedin", "x", "article"]``). It
+    returns the same payload structure used by the UI so that callers can log
+    or persist outcomes.
+    """
+
+    channels_set = {channel for channel in channels if channel}
+    if not channels_set:
+        raise ValueError("Aucun canal sélectionné pour la publication.")
+
+    selection = _fetch_selection(provider_id, certification_id)
+
+    article_payload: Optional[dict] = None
+    article_error: Optional[str] = None
+    tweet_text: str = ""
+    tweet_result: Optional[SocialPostResult] = None
+    linkedin_text: str = ""
+    linkedin_result: Optional[SocialPostResult] = None
+    course_art_payload: Optional[dict] = None
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        article_future = (
+            executor.submit(
+                _generate_and_persist_article_task,
+                selection,
+                exam_url,
+                topic_type,
+                certification_id,
+            )
+            if "article" in channels_set
+            else None
+        )
+        tweet_future = (
+            executor.submit(
+                _generate_and_publish_tweet_task,
+                selection,
+                exam_url,
+                topic_type,
+                attach_image,
+            )
+            if "x" in channels_set
+            else None
+        )
+        linkedin_future = (
+            executor.submit(
+                _generate_and_publish_linkedin_task,
+                selection,
+                exam_url,
+                topic_type,
+                attach_image,
+            )
+            if "linkedin" in channels_set
+            else None
+        )
+        course_art_future = (
+            executor.submit(
+                _generate_and_store_course_art_task,
+                selection,
+                certification_id,
+            )
+            if topic_type == COURSE_ART_TOPIC and "article" in channels_set
+            else None
+        )
+
+        if article_future:
+            try:
+                article_payload = article_future.result()
+            except Exception as exc:  # pragma: no cover - surfaced to caller
+                article_error = str(exc)
+
+        if tweet_future:
+            try:
+                tweet_text, tweet_result = tweet_future.result()
+            except Exception as exc:  # pragma: no cover - surfaced to caller
+                tweet_result = SocialPostResult(
+                    text="",
+                    published=False,
+                    status_code=500,
+                    error=str(exc),
+                )
+
+        if linkedin_future:
+            try:
+                linkedin_text, linkedin_result = linkedin_future.result()
+            except Exception as exc:  # pragma: no cover - surfaced to caller
+                linkedin_result = SocialPostResult(
+                    text="",
+                    published=False,
+                    status_code=500,
+                    error=str(exc),
+                )
+
+        if course_art_future:
+            try:
+                course_art_payload = course_art_future.result()
+            except Exception as exc:  # pragma: no cover - surfaced to caller
+                course_art_payload = {"course_art": None, "error": str(exc)}
+
+    payload: dict = {
+        "article": article_payload["article"] if article_payload else "",
+        "blog_id": article_payload["blog_id"] if article_payload else None,
+        "title": article_payload["title"] if article_payload else None,
+        "summary": article_payload["summary"] if article_payload else None,
+        "provider_name": selection.provider_name,
+        "certification_name": selection.certification_name,
+        "exam_url": exam_url,
+        "tweet": tweet_text,
+        "tweet_result": tweet_result,
+        "linkedin_post": linkedin_text,
+        "linkedin_result": linkedin_result,
+    }
+    if article_error:
+        payload["article_error"] = article_error
+    if course_art_payload:
+        payload["course_art"] = course_art_payload.get("course_art")
+        if course_art_payload.get("error"):
+            payload["course_art_error"] = course_art_payload["error"]
+    return payload
 
 
 def _generate_and_persist_article_task(
