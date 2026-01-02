@@ -58,7 +58,12 @@ REM  Lancement du worker Celery dans une nouvelle fenetre
 REM ---------------------------------------------------------------------------
 start "Celery Worker" cmd /k "celery -A app.celery_app worker --loglevel=info"
 
-REM Laisser quelques secondes au worker pour se connecter a Redis
+REM ---------------------------------------------------------------------------
+REM  Lancement de Celery Beat pour l'execution automatique des plannings
+REM ---------------------------------------------------------------------------
+start "Celery Beat" cmd /k "celery -A app.celery_app beat --loglevel=info"
+
+REM Laisser quelques secondes aux services Celery pour se connecter a Redis
 timeout /t 5 /nobreak >nul
 
 REM ---------------------------------------------------------------------------
