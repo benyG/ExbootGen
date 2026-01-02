@@ -33,6 +33,98 @@ def get_connection():
     )
 
 
+def _dict_from_schedule_row(row):
+    """Build a schedule entry dict from a database row."""
+
+    return {
+        "id": row[0],
+        "day": row[1].isoformat(),
+        "time": row[2].isoformat(timespec="minutes"),
+        "providerId": row[3],
+        "providerName": row[4],
+        "certId": row[5],
+        "certName": row[6],
+        "subject": row[7],
+        "subjectLabel": row[8],
+        "contentType": row[9],
+        "contentTypeLabel": row[10],
+        "link": row[11],
+        "channels": json.loads(row[12]) if row[12] else [],
+        "note": row[13] or "",
+    }
+
+
+def get_schedule_entries():
+    """Fetch all stored schedule entries."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT
+            id, day, time_of_day, provider_id, provider_name,
+            cert_id, cert_name, subject, subject_label,
+            content_type, content_label, link, channels, note
+        FROM schedule_entries
+        ORDER BY day, time_of_day
+    """
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [_dict_from_schedule_row(row) for row in rows]
+
+
+def upsert_schedule_entry(entry):
+    """Insert or replace a schedule entry."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        INSERT INTO schedule_entries (
+            id, day, time_of_day, provider_id, provider_name,
+            cert_id, cert_name, subject, subject_label,
+            content_type, content_label, link, channels, note
+        ) VALUES (
+            %(id)s, %(day)s, %(time)s, %(providerId)s, %(providerName)s,
+            %(certId)s, %(certName)s, %(subject)s, %(subjectLabel)s,
+            %(contentType)s, %(contentTypeLabel)s, %(link)s, %(channels)s, %(note)s
+        )
+        ON DUPLICATE KEY UPDATE
+            day = VALUES(day),
+            time_of_day = VALUES(time_of_day),
+            provider_id = VALUES(provider_id),
+            provider_name = VALUES(provider_name),
+            cert_id = VALUES(cert_id),
+            cert_name = VALUES(cert_name),
+            subject = VALUES(subject),
+            subject_label = VALUES(subject_label),
+            content_type = VALUES(content_type),
+            content_label = VALUES(content_label),
+            link = VALUES(link),
+            channels = VALUES(channels),
+            note = VALUES(note)
+    """
+    payload = {
+        **entry,
+        "channels": json.dumps(entry.get("channels") or []),
+    }
+    cursor.execute(query, payload)
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def delete_schedule_entry(entry_id: str):
+    """Delete a single schedule entry by id."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM schedule_entries WHERE id = %s", (entry_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
 def get_providers():
     conn = get_connection()
     cursor = conn.cursor()
