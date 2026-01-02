@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schedule · ExBoot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #040711;
+      --glass: rgba(12, 16, 29, 0.72);
+      --glass-strong: rgba(17, 22, 36, 0.9);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text: #f8fafc;
+      --muted: rgba(226, 232, 240, 0.78);
+      --warning: #f59e0b;
+      --danger: #f87171;
+      --radius-lg: 22px;
+      --radius-md: 14px;
+      --shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background:
+        radial-gradient(circle at 15% 20%, rgba(124,247,255,0.12), transparent 45%),
+        radial-gradient(circle at 80% 10%, rgba(244,114,182,0.14), transparent 50%),
+        radial-gradient(circle at 50% 80%, rgba(71,245,192,0.16), transparent 60%),
+        var(--bg);
+      color: var(--text);
+    }
+
+    .orb {
+      position: fixed;
+      width: 26rem;
+      height: 26rem;
+      border-radius: 50%;
+      filter: blur(6px);
+      opacity: 0.25;
+      mix-blend-mode: screen;
+      background: radial-gradient(circle, rgba(71,245,192,0.26) 0%, rgba(4,7,17,0) 70%);
+      animation: float 18s ease-in-out infinite;
+      pointer-events: none;
+    }
+    .orb-2 { top: -8rem; right: -8rem; width: 30rem; height: 30rem; animation-delay: -6s; background: radial-gradient(circle, rgba(124,247,255,0.2) 0%, rgba(4,7,17,0) 70%); }
+    .orb-3 { bottom: -10rem; left: -6rem; width: 28rem; height: 28rem; animation-delay: -12s; background: radial-gradient(circle, rgba(244,114,182,0.22) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes float {
+      0%, 100% { transform: translate3d(0,0,0); }
+      45% { transform: translate3d(24px, -16px, 0); }
+      75% { transform: translate3d(-18px, 12px, 0); }
+    }
+
+    header.stellar-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(4, 7, 17, 0.78);
+      backdrop-filter: blur(16px) saturate(170%);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .container {
+      width: min(1200px, 94vw);
+      margin: 0 auto;
+      padding: 0 1rem 3rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.2rem 0;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+    }
+
+    .brand-mark {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      background: linear-gradient(145deg, rgba(71,245,192,0.9), rgba(124,247,255,0.9));
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      color: #041221;
+      box-shadow: 0 12px 28px rgba(124,247,255,0.18);
+    }
+
+    .brand strong {
+      font-family: 'Space Grotesk', 'Inter', sans-serif;
+      font-size: 1.1rem;
+      letter-spacing: 0.01em;
+    }
+
+    .stellar-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.8rem;
+      border-radius: var(--radius-lg);
+      padding: 0.35rem;
+      background: rgba(8, 12, 24, 0.55);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06);
+    }
+
+    .stellar-nav a {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.65rem 1.05rem;
+      border-radius: 14px;
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--muted);
+      transition: color 0.3s ease, transform 0.3s ease, background 0.3s ease;
+    }
+
+    .stellar-nav a::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14));
+      opacity: 0;
+      transition: opacity 0.35s ease;
+      z-index: -1;
+    }
+
+    .stellar-nav a:hover {
+      color: var(--text);
+      transform: translateY(-2px);
+    }
+
+    .stellar-nav a:hover::after { opacity: 1; }
+
+    .stellar-nav a.active {
+      color: var(--text);
+    }
+
+    .stellar-nav a.active::after {
+      opacity: 1;
+      box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18);
+    }
+
+    .page-title {
+      margin: 2rem 0 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 1rem;
+    }
+
+    .page-title h1 {
+      margin: 0;
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      letter-spacing: 0.02em;
+    }
+
+    .page-title .hint {
+      color: var(--muted);
+      max-width: 700px;
+      line-height: 1.5;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 1.4rem;
+      align-items: start;
+    }
+
+    @media (max-width: 1024px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px) saturate(160%);
+    }
+
+    .card h2, .card h3 {
+      margin-top: 0;
+      margin-bottom: 0.6rem;
+      letter-spacing: 0.01em;
+    }
+
+    .subtle {
+      color: var(--muted);
+      margin: 0.2rem 0 0.8rem;
+      line-height: 1.5;
+    }
+
+    .calendar-wrapper {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .month-switcher {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: var(--glass-strong);
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+    }
+
+    .month-switcher button {
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(12, 16, 29, 0.9);
+      color: var(--text);
+      border-radius: 10px;
+      width: 34px;
+      height: 34px;
+      cursor: pointer;
+      box-shadow: inset 0 0 0 1px rgba(124,247,255,0.05);
+      transition: border 0.2s ease, transform 0.2s ease;
+    }
+
+    .month-switcher button:hover {
+      border-color: rgba(124, 247, 255, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      border: 1px solid rgba(124, 247, 255, 0.35);
+      color: #041221;
+      background: linear-gradient(145deg, rgba(124,247,255,0.9), rgba(71,245,192,0.92));
+      box-shadow: 0 12px 30px rgba(124, 247, 255, 0.14);
+    }
+
+    .legend {
+      display: flex;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .legend .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(71,245,192,0.14);
+    }
+
+    .weekday-row, .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 0.35rem;
+    }
+
+    .weekday {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+      padding: 0.35rem 0;
+    }
+
+    .day {
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(12, 16, 29, 0.45);
+      border-radius: var(--radius-md);
+      min-height: 100px;
+      padding: 0.75rem;
+      position: relative;
+      cursor: pointer;
+      transition: border 0.2s ease, transform 0.2s ease, background 0.2s ease;
+    }
+
+    .day:hover { transform: translateY(-2px); border-color: rgba(124, 247, 255, 0.45); }
+    .day.selected { border-color: rgba(124, 247, 255, 0.7); box-shadow: 0 12px 24px rgba(124, 247, 255, 0.14); }
+    .day.today::after {
+      content: "Aujourd'hui";
+      position: absolute;
+      top: 8px;
+      right: 10px;
+      font-size: 0.7rem;
+      color: var(--accent-strong);
+      background: rgba(124, 247, 255, 0.08);
+      border-radius: 999px;
+      padding: 0.2rem 0.55rem;
+      border: 1px solid rgba(124, 247, 255, 0.18);
+    }
+
+    .day-number {
+      font-weight: 700;
+      font-size: 1rem;
+    }
+
+    .day .empty {
+      opacity: 0.35;
+    }
+
+    .channel-chips {
+      display: flex;
+      gap: 0.3rem;
+      flex-wrap: wrap;
+      margin-top: 0.5rem;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.55rem;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #041221;
+    }
+
+    .chip.x { background: linear-gradient(135deg, #0f172a, #1f2937); color: #e2e8f0; border: 1px solid rgba(148,163,184,0.45); }
+    .chip.linkedin { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #e2e8f0; }
+    .chip.article { background: linear-gradient(135deg, #a855f7, #7c3aed); color: #f8fafc; }
+
+    .count {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(71,245,192,0.16);
+      border: 1px solid rgba(71,245,192,0.38);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 0.15rem 0.45rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .day.empty-cell {
+      opacity: 0.35;
+      cursor: default;
+    }
+
+    .panel {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .schedule-list {
+      display: grid;
+      gap: 0.6rem;
+    }
+
+    .schedule-item {
+      padding: 0.85rem 1rem;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(17, 22, 36, 0.8);
+      display: grid;
+      gap: 0.35rem;
+    }
+
+    .schedule-item .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .schedule-item strong {
+      font-size: 1rem;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 0.4rem;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    input[type="search"],
+    input[type="url"],
+    select,
+    input[type="time"] {
+      width: 100%;
+      background: rgba(12, 16, 29, 0.86);
+      color: var(--text);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 12px;
+      padding: 0.7rem 0.9rem;
+      font-size: 0.95rem;
+      transition: border 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: rgba(124, 247, 255, 0.6);
+      box-shadow: 0 0 0 3px rgba(124, 247, 255, 0.14);
+    }
+
+    .checkbox-group {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+
+    .checkbox-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.55rem 0.8rem;
+      border-radius: 12px;
+      background: rgba(12,16,29,0.86);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .checkbox-pill input {
+      accent-color: var(--accent);
+      width: 16px;
+      height: 16px;
+    }
+
+    button.primary {
+      margin-top: 0.6rem;
+      width: 100%;
+      border: none;
+      background: linear-gradient(145deg, rgba(124,247,255,0.9), rgba(71,245,192,0.92));
+      color: #041221;
+      border-radius: 14px;
+      padding: 0.85rem 1rem;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      box-shadow: 0 16px 40px rgba(124, 247, 255, 0.16);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    button.primary:hover { transform: translateY(-1px); box-shadow: 0 18px 40px rgba(124, 247, 255, 0.2); }
+
+    .status {
+      margin-top: 0.6rem;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    .status.error { color: var(--danger); }
+    .status.success { color: var(--accent); }
+
+    .empty-state {
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed rgba(148, 163, 184, 0.3);
+      padding: 1.1rem;
+      border-radius: 14px;
+      background: rgba(12, 16, 29, 0.6);
+    }
+
+    .time-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: rgba(124, 247, 255, 0.08);
+      border: 1px solid rgba(124, 247, 255, 0.25);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 0.3rem 0.7rem;
+      font-weight: 600;
+    }
+
+    .grid-two {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+
+    .secondary {
+      width: fit-content;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(12,16,29,0.85);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 0.65rem 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border 0.2s ease, transform 0.2s ease;
+    }
+
+    .secondary:hover { border-color: rgba(124, 247, 255, 0.35); transform: translateY(-1px); }
+    .secondary:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+    .actions-row {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+      margin-top: 0.6rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="orb"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <header class="stellar-header">
+    <div class="container">
+      <div class="top-bar">
+        <div class="brand">
+          <div class="brand-mark">EX</div>
+          <div>
+            <div style="font-weight: 700; letter-spacing: 0.01em;">ExBoot Scheduler</div>
+            <div style="color: var(--muted); font-size: 0.9rem;">Coordination sociale et éditoriale</div>
+          </div>
+        </div>
+      </div>
+      {% set active_page = 'schedule' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="page-title">
+      <div>
+        <h1>Planification multicanale</h1>
+        <p class="hint">Visualisez d'un coup d'œil les publications prévues sur LinkedIn, X (Twitter) et vos articles longs. Sélectionnez une date, définissez l'heure, choisissez le provider, la certification, le type de sujet et le lien de référence (test partagé Examboot ou URL personnalisée).</p>
+      </div>
+      <span class="pill">Calendrier mensuel piloté</span>
+    </div>
+
+    <div class="layout">
+      <section class="card calendar-wrapper">
+        <div class="calendar-header">
+          <div>
+            <h2 id="monthLabel">Calendrier</h2>
+            <p class="subtle">Les jours marqués indiquent des posts programmés. Cliquez sur une date pour voir ou compléter les actions planifiées.</p>
+          </div>
+          <div class="legend">
+            <span><span class="dot"></span> Action planifiée</span>
+            <span><span class="dot" style="background: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.18);"></span> LinkedIn</span>
+            <span><span class="dot" style="background: #0f172a; box-shadow: 0 0 0 3px rgba(15,23,42,0.25);"></span> X</span>
+            <span><span class="dot" style="background: #a855f7; box-shadow: 0 0 0 3px rgba(168,85,247,0.18);"></span> Article</span>
+          </div>
+          <div class="month-switcher">
+            <button type="button" id="prevMonth" aria-label="Mois précédent">◀</button>
+            <div id="currentMonthName" style="font-weight: 700; letter-spacing: 0.02em;"></div>
+            <button type="button" id="nextMonth" aria-label="Mois suivant">▶</button>
+          </div>
+        </div>
+        <div class="weekday-row">
+          <div class="weekday">Lun</div><div class="weekday">Mar</div><div class="weekday">Mer</div>
+          <div class="weekday">Jeu</div><div class="weekday">Ven</div><div class="weekday">Sam</div><div class="weekday">Dim</div>
+        </div>
+        <div class="calendar-grid" id="calendarGrid" aria-live="polite"></div>
+      </section>
+
+      <section class="panel">
+        <div class="card">
+          <h3 id="selectedDateTitle">Date sélectionnée</h3>
+          <p class="subtle" id="selectedDateSummary">Choisissez un jour dans le calendrier pour voir les actions programmées.</p>
+          <div class="schedule-list" id="scheduleList"></div>
+          <div class="actions-row">
+            <button id="executeDayBtn" class="secondary" type="button" disabled>Exécuter les actions du jour</button>
+            <div id="executeStatus" class="status" role="status"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Programmer une action</h3>
+          <p class="subtle">Définissez les critères obligatoires : provider, certification, type de sujet, lien Examboot ou personnalisé, canal ciblé et heure précise.</p>
+          <form id="scheduleForm" class="grid-two">
+            <div>
+              <label for="providerSearch">Recherche provider</label>
+              <input type="search" id="providerSearch" placeholder="Rechercher un provider">
+            </div>
+            <div>
+              <label for="providerSelect">Providers disponibles</label>
+              <select id="providerSelect">
+                <option value="">Choisir un provider…</option>
+              </select>
+            </div>
+            <div>
+              <label for="certSearch">Recherche certification</label>
+              <input type="search" id="certSearch" placeholder="Rechercher une certification" disabled>
+            </div>
+            <div>
+              <label for="certSelect">Certifications</label>
+              <select id="certSelect" disabled>
+                <option value="">Choisir une certification…</option>
+              </select>
+            </div>
+            <div>
+              <label for="topicType">Type de sujet</label>
+              <select id="topicType">
+                <option value="">Sélectionner…</option>
+                <option value="certification_presentation">Présentation de certification</option>
+                <option value="preparation_methodology">Méthodologie & préparation</option>
+                <option value="experience_testimony">Retour d'expérience</option>
+                <option value="career_impact">Impact carrière</option>
+                <option value="engagement_community">Engagement communauté</option>
+              </select>
+            </div>
+            <div>
+              <label for="contentType">Format de publication</label>
+              <select id="contentType">
+                <option value="post_social">Post court (social)</option>
+                <option value="article_long">Article long</option>
+                <option value="teasing">Teasing certification</option>
+                <option value="ressource">Partage de ressource/test</option>
+              </select>
+            </div>
+            <div>
+              <label for="linkInput">Lien de référence</label>
+              <input type="url" id="linkInput" placeholder="URL du test partagé Examboot ou lien personnalisé">
+            </div>
+            <div>
+              <label for="timeInput">Heure de diffusion</label>
+              <input type="time" id="timeInput" value="09:00">
+            </div>
+            <div class="checkbox-group">
+              <label class="checkbox-pill"><input type="checkbox" value="linkedin"> LinkedIn</label>
+              <label class="checkbox-pill"><input type="checkbox" value="x"> X (Twitter)</label>
+              <label class="checkbox-pill"><input type="checkbox" value="article"> Article long</label>
+            </div>
+            <div>
+              <label for="noteInput">Notes internes (optionnel)</label>
+              <input type="search" id="noteInput" placeholder="CTA, angle éditorial, visuel attendu…">
+            </div>
+            <div style="grid-column: 1 / -1;">
+              <button type="submit" class="primary">Planifier pour la date sélectionnée</button>
+              <div id="formStatus" class="status" role="status"></div>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const calendarGrid = document.getElementById('calendarGrid');
+    const selectedDateTitle = document.getElementById('selectedDateTitle');
+    const selectedDateSummary = document.getElementById('selectedDateSummary');
+    const scheduleList = document.getElementById('scheduleList');
+    const executeDayBtn = document.getElementById('executeDayBtn');
+    const executeStatus = document.getElementById('executeStatus');
+    const currentMonthName = document.getElementById('currentMonthName');
+    const monthLabel = document.getElementById('monthLabel');
+    const prevMonthBtn = document.getElementById('prevMonth');
+    const nextMonthBtn = document.getElementById('nextMonth');
+    const providerSearch = document.getElementById('providerSearch');
+    const providerSelect = document.getElementById('providerSelect');
+    const certSearch = document.getElementById('certSearch');
+    const certSelect = document.getElementById('certSelect');
+    const topicType = document.getElementById('topicType');
+    const contentType = document.getElementById('contentType');
+    const linkInput = document.getElementById('linkInput');
+    const timeInput = document.getElementById('timeInput');
+    const noteInput = document.getElementById('noteInput');
+    const formStatus = document.getElementById('formStatus');
+    const scheduleForm = document.getElementById('scheduleForm');
+
+    let providers = [];
+    let certifications = [];
+    let filteredCerts = [];
+    let planning = loadPlanning();
+
+    let viewDate = new Date();
+    let selectedDate = new Date();
+
+    const channelLabels = { linkedin: 'LinkedIn', x: 'X', article: 'Article' };
+
+    function formatDateKey(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function formatDateLabel(date) {
+      return date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    }
+
+    function loadPlanning() {
+      try {
+        const raw = localStorage.getItem('exboot-schedule');
+        return raw ? JSON.parse(raw) : {};
+      } catch (err) {
+        console.warn('Impossible de charger la planification locale', err);
+        return {};
+      }
+    }
+
+    function savePlanning() {
+      try {
+        localStorage.setItem('exboot-schedule', JSON.stringify(planning));
+      } catch (err) {
+        console.warn('Impossible de sauvegarder la planification locale', err);
+      }
+    }
+
+    function renderCalendar() {
+      calendarGrid.innerHTML = '';
+      const year = viewDate.getFullYear();
+      const month = viewDate.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const startDay = (firstDay.getDay() + 6) % 7; // start on Monday
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      currentMonthName.textContent = viewDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+      monthLabel.textContent = `Calendrier – ${currentMonthName.textContent}`;
+
+      // Empty slots before the first day
+      for (let i = 0; i < startDay; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'day empty-cell';
+        calendarGrid.appendChild(cell);
+      }
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const cellDate = new Date(year, month, day);
+        const cell = document.createElement('div');
+        cell.className = 'day';
+        const isToday = formatDateKey(cellDate) === formatDateKey(new Date());
+        const isSelected = formatDateKey(cellDate) === formatDateKey(selectedDate);
+        if (isToday) cell.classList.add('today');
+        if (isSelected) cell.classList.add('selected');
+
+        const dateKey = formatDateKey(cellDate);
+        const entries = planning[dateKey] || [];
+        if (entries.length) {
+          const count = document.createElement('div');
+          count.className = 'count';
+          count.textContent = `${entries.length} action${entries.length > 1 ? 's' : ''}`;
+          cell.appendChild(count);
+        }
+
+        const number = document.createElement('div');
+        number.className = 'day-number';
+        number.textContent = day;
+        cell.appendChild(number);
+
+        const channels = new Set();
+        entries.forEach(item => item.channels.forEach(ch => channels.add(ch)));
+        if (channels.size) {
+          const wrap = document.createElement('div');
+          wrap.className = 'channel-chips';
+          channels.forEach(ch => {
+            const chip = document.createElement('div');
+            chip.className = `chip ${ch}`;
+            chip.textContent = channelLabels[ch] || ch;
+            wrap.appendChild(chip);
+          });
+          cell.appendChild(wrap);
+        }
+
+        cell.addEventListener('click', () => {
+          selectedDate = cellDate;
+          renderCalendar();
+          renderDayDetails();
+        });
+
+        calendarGrid.appendChild(cell);
+      }
+    }
+
+    function renderDayDetails() {
+      const key = formatDateKey(selectedDate);
+      const entries = (planning[key] || []).slice().sort((a, b) => a.time.localeCompare(b.time));
+      selectedDateTitle.textContent = formatDateLabel(selectedDate);
+      selectedDateSummary.textContent = entries.length
+        ? `${entries.length} action${entries.length > 1 ? 's' : ''} planifiée${entries.length > 1 ? 's' : ''} pour cette date.`
+        : 'Aucune action planifiée pour cette date. Ajoutez une publication depuis le formulaire.';
+      executeDayBtn.disabled = entries.length === 0;
+      setExecuteStatus(entries.length ? 'Prêt à exécuter les actions du jour.' : 'Aucune action à exécuter.');
+
+      scheduleList.innerHTML = '';
+
+      if (!entries.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = 'Rien de planifié pour le moment.';
+        scheduleList.appendChild(empty);
+        return;
+      }
+
+      entries.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'schedule-item';
+
+        const header = document.createElement('div');
+        header.className = 'meta';
+        const time = document.createElement('span');
+        time.className = 'time-pill';
+        time.textContent = item.time || '—';
+        header.appendChild(time);
+
+        item.channels.forEach(ch => {
+          const chip = document.createElement('span');
+          chip.className = `chip ${ch}`;
+          chip.textContent = channelLabels[ch] || ch;
+          header.appendChild(chip);
+        });
+
+        const provider = document.createElement('div');
+        provider.innerHTML = `<strong>${item.providerName || 'Provider'}</strong> · ${item.certName || 'Certification'}`;
+
+        const topic = document.createElement('div');
+        topic.className = 'meta';
+        topic.textContent = `${item.subjectLabel || 'Sujet'} • ${item.contentTypeLabel}`;
+
+        const link = document.createElement('a');
+        link.href = item.link;
+        link.textContent = item.link || 'Lien';
+        link.target = "_blank";
+        link.style.color = 'var(--accent-strong)';
+
+        card.appendChild(header);
+        card.appendChild(provider);
+        card.appendChild(topic);
+        if (item.link) card.appendChild(link);
+        if (item.note) {
+          const note = document.createElement('div');
+          note.className = 'meta';
+          note.textContent = item.note;
+          card.appendChild(note);
+        }
+
+        scheduleList.appendChild(card);
+      });
+    }
+
+    function setStatus(message, type = '') {
+      formStatus.textContent = message;
+      formStatus.className = 'status';
+      if (type === 'error') formStatus.classList.add('error');
+      if (type === 'success') formStatus.classList.add('success');
+    }
+
+    function setExecuteStatus(message, type = '') {
+      executeStatus.textContent = message;
+      executeStatus.className = 'status';
+      if (type === 'error') executeStatus.classList.add('error');
+      if (type === 'success') executeStatus.classList.add('success');
+    }
+
+    async function fetchProviders() {
+      try {
+        const response = await fetch('/quest/api/providers');
+        if (!response.ok) throw new Error('Requête provider échouée');
+        providers = await response.json();
+      } catch (err) {
+        console.warn('Fallback providers', err);
+        providers = [
+          { id: 1, name: 'AWS' },
+          { id: 2, name: 'Microsoft Azure' },
+          { id: 3, name: 'Google Cloud' }
+        ];
+      }
+      renderProviders(providers);
+    }
+
+    async function fetchCertifications(providerId) {
+      if (!providerId) return;
+      try {
+        const response = await fetch(`/quest/api/certifications/${providerId}`);
+        if (!response.ok) throw new Error('Requête certification échouée');
+        certifications = await response.json();
+      } catch (err) {
+        console.warn('Fallback certifications', err);
+        certifications = [
+          { id: 100, name: 'Architecte Solutions' },
+          { id: 101, name: 'Admin Cloud' }
+        ];
+      }
+      renderCertifications(certifications);
+    }
+
+    function renderProviders(list) {
+      providerSelect.innerHTML = '<option value=\"\">Choisir un provider…</option>';
+      list.forEach(provider => {
+        const option = document.createElement('option');
+        option.value = provider.id;
+        option.textContent = provider.name;
+        providerSelect.appendChild(option);
+      });
+    }
+
+    function renderCertifications(list) {
+      certSelect.innerHTML = '<option value=\"\">Choisir une certification…</option>';
+      list.forEach(cert => {
+        const option = document.createElement('option');
+        option.value = cert.id;
+        option.textContent = cert.name;
+        certSelect.appendChild(option);
+      });
+      certSelect.disabled = !list.length;
+      certSearch.disabled = !list.length;
+    }
+
+    providerSearch.addEventListener('input', () => {
+      const query = providerSearch.value.toLowerCase();
+      const filtered = providers.filter(p => p.name.toLowerCase().includes(query));
+      renderProviders(filtered);
+    });
+
+    providerSelect.addEventListener('change', () => {
+      const providerId = providerSelect.value;
+      certSearch.value = '';
+      certSelect.value = '';
+      certifications = [];
+      certSelect.disabled = !providerId;
+      certSearch.disabled = !providerId;
+      if (providerId) fetchCertifications(providerId);
+    });
+
+    certSearch.addEventListener('input', () => {
+      const query = certSearch.value.toLowerCase();
+      filteredCerts = certifications.filter(c => c.name.toLowerCase().includes(query));
+      renderCertifications(filteredCerts);
+    });
+
+    executeDayBtn.addEventListener('click', async () => {
+      const key = formatDateKey(selectedDate);
+      const entries = planning[key] || [];
+      if (!entries.length) {
+        setExecuteStatus('Aucune action planifiée pour cette date.', 'error');
+        return;
+      }
+
+      setExecuteStatus('Envoi des actions planifiées…');
+      try {
+        const response = await fetch('/schedule/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: key, entries })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Exécution impossible');
+        setExecuteStatus(`Job ${data.job_id || 'planifié'} en cours (${data.mode || 'inline'}).`, 'success');
+      } catch (err) {
+        setExecuteStatus(`Erreur lors du lancement : ${err.message}`, 'error');
+      }
+    });
+
+    scheduleForm.addEventListener('submit', event => {
+      event.preventDefault();
+      const providerId = providerSelect.value;
+      const certId = certSelect.value;
+      const channelValues = Array.from(scheduleForm.querySelectorAll('input[type=\"checkbox\"]:checked')).map(c => c.value);
+      let link = (linkInput.value || '').trim();
+
+      if (!providerId || !certId || !topicType.value || !link || !channelValues.length) {
+        setStatus('Provider, certification, type de sujet, lien et au moins un canal sont obligatoires.', 'error');
+        return;
+      }
+
+      if (!/^https?:\/\//i.test(link)) {
+        link = `https://${link}`;
+      }
+
+      const providerName = providerSelect.options[providerSelect.selectedIndex].textContent;
+      const certName = certSelect.options[certSelect.selectedIndex].textContent;
+      const subjectLabel = topicType.options[topicType.selectedIndex].textContent;
+      const contentLabel = contentType.options[contentType.selectedIndex].textContent;
+      const dayKey = formatDateKey(selectedDate);
+
+      const entry = {
+        id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`,
+        providerId,
+        certId,
+        providerName,
+        certName,
+        subject: topicType.value,
+        subjectLabel,
+        contentType: contentType.value,
+        contentTypeLabel: contentLabel,
+        link,
+        time: timeInput.value || '09:00',
+        channels: channelValues,
+        note: (noteInput.value || '').trim()
+      };
+
+      planning[dayKey] = planning[dayKey] || [];
+      planning[dayKey].push(entry);
+      savePlanning();
+      renderCalendar();
+      renderDayDetails();
+      setStatus('Action planifiée avec succès pour la date sélectionnée.', 'success');
+    });
+
+    prevMonthBtn.addEventListener('click', () => {
+      viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1);
+      renderCalendar();
+    });
+
+    nextMonthBtn.addEventListener('click', () => {
+      viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1);
+      renderCalendar();
+    });
+
+    fetchProviders().then(() => renderCertifications([]));
+    renderCalendar();
+    renderDayDetails();
+  </script>
+</body>
+</html>
