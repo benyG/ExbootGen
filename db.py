@@ -36,6 +36,24 @@ def get_connection():
 def _dict_from_schedule_row(row):
     """Build a schedule entry dict from a database row."""
 
+    def _decode_schedule_note(raw_note):
+        add_image = True
+        if not raw_note:
+            return "", add_image
+        try:
+            parsed = json.loads(raw_note)
+        except (TypeError, json.JSONDecodeError):
+            return raw_note or "", add_image
+        if isinstance(parsed, dict):
+            text = parsed.get("text")
+            add_image = parsed.get("addImage", True)
+            return (text if isinstance(text, str) else "") or "", bool(add_image)
+        if isinstance(parsed, str):
+            return parsed, add_image
+        return str(parsed), add_image
+
+    note, add_image = _decode_schedule_note(row[13])
+
     return {
         "id": row[0],
         "day": row[1].isoformat(),
@@ -50,7 +68,8 @@ def _dict_from_schedule_row(row):
         "contentTypeLabel": row[10],
         "link": row[11],
         "channels": json.loads(row[12]) if row[12] else [],
-        "note": row[13] or "",
+        "note": note,
+        "addImage": add_image,
     }
 
 
