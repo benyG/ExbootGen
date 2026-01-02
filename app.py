@@ -4,6 +4,7 @@ import json
 import threading
 import time
 import uuid
+from textwrap import dedent
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Lock
@@ -110,6 +111,51 @@ app = Flask(
 )
 # Minimal secret key required for session-based authentication protecting the UI
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "exboot-secret-key")
+
+
+def _ensure_login_template() -> None:
+    """Guarantee that a login template exists even in truncated deployments."""
+
+    templates_dir = BASE_DIR / "templates"
+    templates_dir.mkdir(parents=True, exist_ok=True)
+    login_template = templates_dir / "login.html"
+    if login_template.exists():
+        return
+
+    login_template.write_text(
+        dedent(
+            """\
+            <!DOCTYPE html>
+            <html lang="fr">
+            <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Connexion · ExbootGen</title>
+            </head>
+            <body>
+              <h1>Connexion</h1>
+              <p>Page de connexion générée automatiquement : ajoutez le fichier templates/login.html pour personnaliser l'interface.</p>
+              <form method="post">
+                <label>Nom d'utilisateur <input name="username" type="text" required></label><br>
+                <label>Mot de passe <input name="password" type="password" required></label><br>
+                <button type="submit">Se connecter</button>
+                {% if error %}
+                  <div style="color: red;">{{ error }}</div>
+                {% endif %}
+              </form>
+            </body>
+            </html>
+            """
+        ),
+        encoding="utf-8",
+    )
+    app.logger.warning(
+        "Le fichier templates/login.html était manquant : un modèle par défaut a été généré dans %s",
+        login_template,
+    )
+
+
+_ensure_login_template()
 
 
 def _env_flag(name: str, default: str = "0") -> bool:
