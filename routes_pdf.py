@@ -2,6 +2,7 @@ import os
 import re
 import json
 import uuid
+from pathlib import Path
 from typing import Dict, Any, List
 
 import fitz  # PyMuPDF
@@ -14,8 +15,14 @@ from config import DB_CONFIG
 routes_pdf = Blueprint("routes_pdf", __name__)
 
 # Dossier d’upload partagé
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
+if UPLOAD_DIR.exists() and not UPLOAD_DIR.is_dir():
+    backup_path = UPLOAD_DIR.with_suffix(UPLOAD_DIR.suffix + ".bak")
+    backup_path.write_bytes(UPLOAD_DIR.read_bytes())
+    UPLOAD_DIR.unlink()
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+else:
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # ------------------------------- DB -------------------------------
 
