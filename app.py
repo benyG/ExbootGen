@@ -104,7 +104,7 @@ from reloc import reloc_bp
 from pdf_importer import pdf_bp
 from quest import quest_bp
 from edit_questions import edit_question_bp
-from articles import articles_bp, render_x_callback
+from articles import articles_bp, render_x_callback, run_scheduled_publication, SocialPostResult
 from handsonlab import hol_bp
 
 # Instanciation de l'application Flask
@@ -575,8 +575,8 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
 
     This job focuses on traceability: it logs each planned publication with its
     channels and metadata so operators can verify that the calendar has been
-    respected. The actual publication bridges can be plugged in later by
-    replacing the inline log statements with calls to the existing publishers.
+    respecté. Il déclenche désormais les mêmes logiques de génération et de
+    publication que l'Article Builder (AI) pour chaque canal demandé.
     """
 
     context.log(f"Planification du {date}: {len(entries)} action(s) détectée(s).")
@@ -592,6 +592,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         link = entry.get("link") or "Lien non fourni"
         time_of_day = entry.get("time") or "Heure non précisée"
         channels = entry.get("channels") or []
+        attach_image = bool(entry.get("addImage", True))
 
         context.log(
             f"[{index}/{len(entries)}] {provider_name} · {cert_name} "
@@ -605,15 +606,75 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         if note:
             context.log(f"Note interne : {note}")
 
-        # Placeholder for real publication logic.
         try:
-            # Simuler un traitement rapide et laisser place aux futurs appels API.
-            time.sleep(0.05)
-            counters["succeeded"] += 1
-            context.log("Action planifiée marquée comme exécutée.")
-        except Exception as exc:  # pragma: no cover - defensive logging only
+            provider_id = int(entry.get("providerId"))
+            cert_id = int(entry.get("certId"))
+        except (TypeError, ValueError):
             counters["failed"] += 1
-            context.log(f"Erreur lors de l'exécution de l'action : {exc}")
+            context.log("IDs provider/certification invalides : action ignorée.")
+            counters["processed"] += 1
+            context.update_counters(**counters, date=date)
+            continue
+
+        try:
+            result = run_scheduled_publication(
+                provider_id=provider_id,
+                certification_id=cert_id,
+                exam_url=link,
+                topic_type=str(entry.get("subject") or ""),
+                channels=channels,
+                attach_image=attach_image,
+            )
+        except Exception as exc:  # pragma: no cover - surfaced in job log
+            counters["failed"] += 1
+            context.log(f"Erreur lors du déclenchement des publications : {exc}")
+        else:
+            channel_outcomes: List[bool] = []
+
+            if "article" in channels:
+                article_payload = result.get("article")
+                article_error = result.get("article_error")
+                if article_payload:
+                    blog_id = result.get("blog_id")
+                    context.log(
+                        f"Article généré et enregistré"
+                        f"{f' (blog #{blog_id})' if blog_id else ''}."
+                    )
+                    channel_outcomes.append(True)
+                    if result.get("course_art") is not None:
+                        context.log("Fiche certification enregistrée.")
+                    if result.get("course_art_error"):
+                        context.log(f"Fiche certification non enregistrée : {result['course_art_error']}")
+                else:
+                    channel_outcomes.append(False)
+                    context.log(
+                        f"Article non généré : {article_error or 'raison inconnue'}"
+                    )
+
+            if "x" in channels:
+                tweet_result: SocialPostResult | None = result.get("tweet_result")
+                if tweet_result and tweet_result.published:
+                    context.log("Tweet publié avec succès.")
+                    channel_outcomes.append(True)
+                else:
+                    channel_outcomes.append(False)
+                    error = (tweet_result and tweet_result.error) or "Tweet non publié."
+                    context.log(error)
+
+            if "linkedin" in channels:
+                linkedin_result: SocialPostResult | None = result.get("linkedin_result")
+                if linkedin_result and linkedin_result.published:
+                    context.log("Post LinkedIn publié avec succès.")
+                    channel_outcomes.append(True)
+                else:
+                    channel_outcomes.append(False)
+                    error = (linkedin_result and linkedin_result.error) or "LinkedIn non publié."
+                    context.log(error)
+
+            if channel_outcomes and all(channel_outcomes):
+                counters["succeeded"] += 1
+            else:
+                counters["failed"] += 1
 
         counters["processed"] += 1
         context.update_counters(**counters, date=date)
