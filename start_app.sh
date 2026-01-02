@@ -92,6 +92,30 @@ fi
 sleep 2
 
 # ---------------------------------------------------------------------------
+#  Reverse proxy HTTPS via Caddy (Let’s Encrypt)
+# ---------------------------------------------------------------------------
+#  Pour activer HTTPS automatiquement :
+#    - Installez Caddy (https://caddyserver.com/docs/install).
+#    - Adaptez le fichier Caddyfile (par défaut ./Caddyfile) avec votre domaine
+#      et assurez-vous que les ports 80 et 443 sont accessibles.
+#    - Décommentez l’une des deux lignes ci-dessous pour lancer Caddy en même temps
+#      que l’application. Le Caddyfile doit exister avant le lancement.
+# ---------------------------------------------------------------------------
+# CADDYFILE_PATH="${CADDYFILE_PATH:-$(pwd)/Caddyfile}"
+# if command -v caddy >/dev/null 2>&1 && [[ -f "${CADDYFILE_PATH}" ]]; then
+#     echo "Lancement de Caddy avec ${CADDYFILE_PATH} (HTTPS auto via Let's Encrypt)..."
+#     if command -v setsid >/dev/null 2>&1; then
+#         setsid caddy run --config "${CADDYFILE_PATH}" > /tmp/caddy.log 2>&1 &
+#     elif command -v nohup >/dev/null 2>&1; then
+#         nohup caddy run --config "${CADDYFILE_PATH}" > /tmp/caddy.log 2>&1 &
+#     else
+#         echo "[AVERTISSEMENT] Impossible de démarrer Caddy en arrière-plan automatiquement." >&2
+#     fi
+# else
+#     echo "[INFO] Caddy n'est pas lancé automatiquement (binaire ou Caddyfile manquant)." >&2
+# fi
+
+# ---------------------------------------------------------------------------
 #  Lancement du serveur WSGI (Gunicorn si disponible, sinon Waitress)
 # ---------------------------------------------------------------------------
 if command -v gunicorn >/dev/null 2>&1; then
