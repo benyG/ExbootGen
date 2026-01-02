@@ -370,6 +370,118 @@ def home():
     return render_template("home.html")
 
 
+@app.route("/schedule")
+def schedule():
+    """Display the planning calendar for social posts and articles."""
+
+    return render_template("schedule.html")
+
+
+def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]) -> None:
+    """Iterate through planned actions and simulate their execution.
+
+    This job focuses on traceability: it logs each planned publication with its
+    channels and metadata so operators can verify that the calendar has been
+    respected. The actual publication bridges can be plugged in later by
+    replacing the inline log statements with calls to the existing publishers.
+    """
+
+    context.log(f"Planification du {date}: {len(entries)} action(s) détectée(s).")
+    counters = {"processed": 0, "succeeded": 0, "failed": 0}
+    context.update_counters(**counters, date=date)
+
+    for index, entry in enumerate(entries, start=1):
+        context.wait_if_paused()
+        provider_name = entry.get("providerName") or "Provider inconnu"
+        cert_name = entry.get("certName") or "Certification inconnue"
+        subject = entry.get("subjectLabel") or entry.get("subject") or "Sujet"
+        content_label = entry.get("contentTypeLabel") or entry.get("contentType") or "Contenu"
+        link = entry.get("link") or "Lien non fourni"
+        time_of_day = entry.get("time") or "Heure non précisée"
+        channels = entry.get("channels") or []
+
+        context.log(
+            f"[{index}/{len(entries)}] {provider_name} · {cert_name} "
+            f"({subject} – {content_label}) à {time_of_day}"
+        )
+        context.log(f"Canaux : {', '.join(channels) if channels else 'aucun canal spécifié'}")
+        context.log(f"Lien/source : {link}")
+
+        # Placeholder for real publication logic.
+        try:
+            # Simuler un traitement rapide et laisser place aux futurs appels API.
+            time.sleep(0.05)
+            counters["succeeded"] += 1
+            context.log("Action planifiée marquée comme exécutée.")
+        except Exception as exc:  # pragma: no cover - defensive logging only
+            counters["failed"] += 1
+            context.log(f"Erreur lors de l'exécution de l'action : {exc}")
+
+        counters["processed"] += 1
+        context.update_counters(**counters, date=date)
+
+    context.log(
+        f"Planification terminée : {counters['processed']} action(s) traitée(s), "
+        f"{counters['succeeded']} réussie(s), {counters['failed']} en échec."
+    )
+
+
+@celery_app.task(bind=True, name="schedule.execute")
+def execute_schedule_job(self, date: str, entries: List[dict]) -> None:
+    """Celery wrapper that processes scheduled actions."""
+
+    job_id = self.request.id
+    context = JobContext(job_store, job_id)
+
+    set_cached_status(job_id, "running")
+    initialise_job(
+        job_store,
+        job_id=job_id,
+        description="execute-planning",
+        metadata={"date": date, "count": len(entries)},
+    )
+    job_store.set_status(job_id, "running")
+
+    try:
+        _execute_planned_actions(context, date, entries)
+    except Exception as exc:  # pragma: no cover - surfaced to caller
+        context.set_status("failed", error=str(exc))
+        raise
+    else:
+        context.set_status("completed")
+
+
+def _start_execute_schedule_inline(job_id: str, date: str, entries: List[dict]):
+    """Launch execution of planned actions in a background thread."""
+
+    def _run_inline() -> None:
+        context = JobContext(job_store, job_id)
+        set_cached_status(job_id, "running")
+        initialise_job(
+            job_store,
+            job_id=job_id,
+            description="execute-planning",
+            metadata={"date": date, "count": len(entries)},
+        )
+        job_store.set_status(job_id, "running")
+
+        try:
+            _execute_planned_actions(context, date, entries)
+        except Exception as exc:  # pragma: no cover - defensive logging only
+            app.logger.exception("Execution planifiée échouée pour le %s", date)
+            context.set_status("failed", error=str(exc))
+        else:
+            context.set_status("completed")
+
+    threading.Thread(
+        target=_run_inline,
+        name=f"execute-planning-{job_id}",
+        daemon=True,
+    ).start()
+
+    return jsonify({"status": "queued", "job_id": job_id, "mode": "inline"})
+
+
 def _is_authenticated() -> bool:
     """Return True when the user is logged in."""
 
@@ -409,6 +521,28 @@ def login():
 def logout():
     session.pop("user", None)
     return redirect(url_for("login"))
+
+
+@app.route("/schedule/execute", methods=["POST"])
+def schedule_execute():
+    """Trigger the execution of planned actions for a given day."""
+
+    payload = request.get_json() or {}
+    date = (payload.get("date") or "").strip() or "date-inconnue"
+    entries = payload.get("entries") or []
+
+    if not isinstance(entries, list) or not entries:
+        return jsonify({"error": "Aucune action planifiée transmise."}), 400
+
+    job_id = initialise_job(
+        job_store,
+        job_id=uuid.uuid4().hex,
+        description="execute-planning",
+        metadata={"date": date, "count": len(entries)},
+    )
+
+    # Exécution inline pour les environnements sans worker Celery.
+    return _start_execute_schedule_inline(job_id, date, entries)
 
 
 @app.route("/reports")
