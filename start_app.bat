@@ -67,6 +67,25 @@ REM Laisser quelques secondes aux services Celery pour se connecter a Redis
 timeout /t 5 /nobreak >nul
 
 REM ---------------------------------------------------------------------------
+REM  Reverse proxy HTTPS via Caddy (Let's Encrypt)
+REM ---------------------------------------------------------------------------
+REM  Pour activer HTTPS automatiquement :
+REM    - Installez Caddy (https://caddyserver.com/docs/install).
+REM    - Adaptez le Caddyfile (par defaut %CD%\Caddyfile) avec votre domaine et
+REM      assurez-vous que les ports 80 et 443 sont accessibles.
+REM    - Decommentez le bloc ci-dessous pour lancer Caddy en meme temps
+REM      que l'application. Le Caddyfile doit exister avant le lancement.
+REM ---------------------------------------------------------------------------
+REM set "CADDYFILE=%CD%\Caddyfile"
+REM where caddy >nul 2>nul
+REM if %ERRORLEVEL%==0 if exist "%CADDYFILE%" (
+REM     echo Lancement de Caddy avec %CADDYFILE% (HTTPS auto via Let's Encrypt)...
+REM     start "Caddy HTTPS Proxy" cmd /k "caddy run --config \"%CADDYFILE%\""
+REM ) else (
+REM     echo [INFO] Caddy n'est pas lance automatiquement (binaire ou Caddyfile manquant).
+REM )
+
+REM ---------------------------------------------------------------------------
 REM  Choix du serveur WSGI multi-workers (Gunicorn via WSL ou Waitress natif)
 REM ---------------------------------------------------------------------------
 set "SERVER_CHOICE="
