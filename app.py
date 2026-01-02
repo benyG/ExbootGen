@@ -10,10 +10,12 @@ from pathlib import Path
 from threading import Lock
 from types import SimpleNamespace
 from typing import Dict, Iterable, List, Optional, Tuple
+from datetime import datetime, date, time as dt_time
 
 try:  # pragma: no cover - optional runtime dependency
     from celery import Celery  # type: ignore
     from celery.exceptions import CeleryError  # type: ignore
+    from celery.schedules import crontab  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover - fallback for environments without Celery
     class CeleryError(Exception):
         """Fallback CeleryError used when the dependency is unavailable."""
@@ -55,6 +57,9 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for environments with
 
         def conf_update(self, **kwargs):
             self.conf.update(**kwargs)
+
+    def crontab(*_, **__):  # type: ignore
+        return 60
 
 
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
@@ -242,6 +247,12 @@ def make_celery() -> Celery:
         broker_transport_options=broker_transport_options,
         result_backend_transport_options=result_transport_options,
     )
+    celery_app.conf.beat_schedule = {
+        "dispatch-due-schedules-every-minute": {
+            "task": "schedule.dispatch_due",
+            "schedule": crontab(),  # every minute
+        }
+    }
 
     if redis_max_connections is not None and redis_max_connections > 0:
         celery_app.conf.redis_max_connections = redis_max_connections
@@ -449,6 +460,23 @@ def schedule_list():
     return jsonify(entries)
 
 
+def _schedule_entry_datetime(entry: Dict[str, object]) -> datetime | None:
+    """Return the combined datetime of a schedule entry."""
+
+    day = entry.get("day")
+    time_of_day = entry.get("time")
+    if not isinstance(day, str) or not isinstance(time_of_day, str):
+        return None
+
+    try:
+        planned_day = date.fromisoformat(day)
+        planned_time = dt_time.fromisoformat(time_of_day)
+    except ValueError:
+        return None
+
+    return datetime.combine(planned_day, planned_time)
+
+
 @app.route("/schedule/api", methods=["POST"])
 def schedule_save():
     """Persist a schedule entry."""
@@ -488,6 +516,58 @@ def schedule_save():
         return jsonify({"error": str(exc)}), 500
 
     return jsonify({"status": "saved", "id": entry["id"]})
+
+
+def _launch_execute_schedule_inline(job_id: str, date: str, entries: List[dict]) -> str:
+    """Launch execution of planned actions in a background thread."""
+
+    def _run_inline() -> None:
+        context = JobContext(job_store, job_id)
+        set_cached_status(job_id, "running")
+        initialise_job(
+            job_store,
+            job_id=job_id,
+            description="execute-planning",
+            metadata={"date": date, "count": len(entries)},
+        )
+        job_store.set_status(job_id, "running")
+
+        try:
+            _execute_planned_actions(context, date, entries)
+        except Exception as exc:  # pragma: no cover - defensive logging only
+            app.logger.exception("Execution planifiée échouée pour le %s", date)
+            context.set_status("failed", error=str(exc))
+        else:
+            context.set_status("completed")
+
+    threading.Thread(
+        target=_run_inline,
+        name=f"execute-planning-{job_id}",
+        daemon=True,
+    ).start()
+    return job_id
+
+
+def _enqueue_schedule_job(date: str, entries: List[dict]) -> Dict[str, str]:
+    """Enqueue a schedule execution job using Celery or fallback to inline."""
+
+    job_id = uuid.uuid4().hex
+
+    if _is_task_queue_disabled():
+        _launch_execute_schedule_inline(job_id, date, entries)
+        return {"status": "queued", "job_id": job_id, "mode": "inline"}
+
+    try:
+        async_result = execute_schedule_job.apply_async(args=(date, entries), task_id=job_id)
+    except QUEUE_EXCEPTIONS as exc:
+        _disable_task_queue(exc)
+        _launch_execute_schedule_inline(job_id, date, entries)
+        return {"status": "queued", "job_id": job_id, "mode": "inline"}
+
+    if getattr(celery_app.conf, "task_always_eager", False):
+        return {"status": "queued", "job_id": job_id, "mode": "eager"}
+
+    return {"status": "queued", "job_id": async_result.id, "mode": "celery"}
 
 
 def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]) -> None:
@@ -569,35 +649,49 @@ def execute_schedule_job(self, date: str, entries: List[dict]) -> None:
         context.set_status("completed")
 
 
-def _start_execute_schedule_inline(job_id: str, date: str, entries: List[dict]):
-    """Launch execution of planned actions in a background thread."""
+@celery_app.task(name="schedule.dispatch_due")
+def dispatch_due_schedules() -> Dict[str, object]:
+    """Scan planned publications and enqueue those that are due."""
 
-    def _run_inline() -> None:
-        context = JobContext(job_store, job_id)
-        set_cached_status(job_id, "running")
-        initialise_job(
-            job_store,
-            job_id=job_id,
-            description="execute-planning",
-            metadata={"date": date, "count": len(entries)},
-        )
-        job_store.set_status(job_id, "running")
+    now = datetime.now()
+    try:
+        entries = db.get_schedule_entries()
+    except Exception as exc:  # pragma: no cover - defensive path
+        app.logger.exception("Impossible de charger les planifications à exécuter automatiquement.")
+        raise
 
-        try:
-            _execute_planned_actions(context, date, entries)
-        except Exception as exc:  # pragma: no cover - defensive logging only
-            app.logger.exception("Execution planifiée échouée pour le %s", date)
-            context.set_status("failed", error=str(exc))
-        else:
-            context.set_status("completed")
+    due_by_day: Dict[str, List[dict]] = {}
+    skipped_invalid: List[str] = []
+    for entry in entries:
+        scheduled_at = _schedule_entry_datetime(entry)
+        if scheduled_at is None:
+            skipped_invalid.append(str(entry.get("id", "?")))
+            continue
+        if scheduled_at <= now:
+            due_by_day.setdefault(entry["day"], []).append(entry)
 
-    threading.Thread(
-        target=_run_inline,
-        name=f"execute-planning-{job_id}",
-        daemon=True,
-    ).start()
+    dispatched: List[Dict[str, object]] = []
+    for day, day_entries in sorted(due_by_day.items()):
+        dispatch = _enqueue_schedule_job(day, day_entries)
+        dispatch["date"] = day
+        dispatch["count"] = len(day_entries)
+        dispatched.append(dispatch)
+        for entry in day_entries:
+            try:
+                db.delete_schedule_entry(entry["id"])
+            except Exception as exc:  # pragma: no cover - defensive logging only
+                app.logger.exception(
+                    "Impossible de supprimer la planification %s après envoi en file.",
+                    entry.get("id"),
+                )
 
-    return jsonify({"status": "queued", "job_id": job_id, "mode": "inline"})
+    summary: Dict[str, object] = {
+        "dispatched_batches": len(dispatched),
+        "dispatched_entries": sum(item["count"] for item in dispatched) if dispatched else 0,
+    }
+    if skipped_invalid:
+        summary["skipped_invalid"] = skipped_invalid
+    return summary
 
 
 def _is_authenticated() -> bool:
@@ -652,15 +746,7 @@ def schedule_execute():
     if not isinstance(entries, list) or not entries:
         return jsonify({"error": "Aucune action planifiée transmise."}), 400
 
-    job_id = initialise_job(
-        job_store,
-        job_id=uuid.uuid4().hex,
-        description="execute-planning",
-        metadata={"date": date, "count": len(entries)},
-    )
-
-    # Exécution inline pour les environnements sans worker Celery.
-    return _start_execute_schedule_inline(job_id, date, entries)
+    return jsonify(_enqueue_schedule_job(date, entries))
 
 
 @app.route("/reports")
