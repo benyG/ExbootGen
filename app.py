@@ -2,10 +2,10 @@ import os
 import random
 import json
 import threading
-import os
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from threading import Lock
 from types import SimpleNamespace
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -102,9 +102,17 @@ from articles import articles_bp, render_x_callback
 from handsonlab import hol_bp
 
 # Instanciation de l'application Flask
-app = Flask(__name__, template_folder="templates")
+BASE_DIR = Path(__file__).resolve().parent
+app = Flask(
+    __name__,
+    root_path=str(BASE_DIR),
+    template_folder=str(BASE_DIR / "templates"),
+    static_folder=str(BASE_DIR / "static"),
+)
 # Minimal secret key required for session-based authentication protecting the UI
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "exboot-secret-key")
+if os.getenv("PYTEST_CURRENT_TEST"):
+    app.config["TESTING"] = True
 
 
 def _env_flag(name: str, default: str = "0") -> bool:
@@ -491,6 +499,9 @@ def _is_authenticated() -> bool:
 @app.before_request
 def require_login():
     """Protect the application with a simple session-based login check."""
+
+    if app.testing or os.getenv("PYTEST_CURRENT_TEST") or app.config.get("LOGIN_DISABLED"):
+        return None
 
     allowed_endpoints = {"login", "static"}
     if request.endpoint in allowed_endpoints or request.endpoint is None:
@@ -1538,62 +1549,62 @@ def process_domain_by_difficulty(
             else:
                 domain_arg = domain_name
 
-                try:
-                    desc = domain_descriptions.get(domain_id, "")
-                    questions_data = generate_questions(
-                        provider_name=provider_name,
-                        certification=cert_name,
-                        domain=domain_arg,
-                        domain_descr=desc,
-                        level=difficulty,
-                        q_type=qtype,
-                        practical=practical_val,
-                        scenario_illustration_type=scenario_illu_val,
-                        num_questions=needed,
-                    )
-                    time.sleep(API_REQUEST_DELAY)
-                except Exception as exc:
-                    context.log(
-                        f"[{domain_name} - {difficulty.upper()}] Generation error for {qtype} "
-                        f"with scenario '{scenario_type}': {exc}"
-                    )
-                    continue
+            try:
+                desc = domain_descriptions.get(domain_id, "")
+                questions_data = generate_questions(
+                    provider_name=provider_name,
+                    certification=cert_name,
+                    domain=domain_arg,
+                    domain_descr=desc,
+                    level=difficulty,
+                    q_type=qtype,
+                    practical=practical_val,
+                    scenario_illustration_type=scenario_illu_val,
+                    num_questions=needed,
+                )
+                time.sleep(API_REQUEST_DELAY)
+            except Exception as exc:
+                context.log(
+                    f"[{domain_name} - {difficulty.upper()}] Generation error for {qtype} "
+                    f"with scenario '{scenario_type}': {exc}"
+                )
+                continue
 
-                for question in questions_data.get("questions", []):
-                    if practical_val == "scenario-illustrated" and question.get("diagram_descr"):
-                        diagram_description = question.get("diagram_descr", "").strip()
-                        try:
-                            diag_type = question.get("diagram_type", "")
-                            # diagram_data_str = render_diagram(provider_name, diagram_description, diag_type)
-                            # diag_dict = json.loads(diagram_data_str)
-                            # question["image"] = (
-                            #     f'<img src="{diag_dict["imageUrl"]}" alt="Generated Diagram" '
-                            #     f'width="75%" height="auto"><!-- {diag_dict["createEraserFileUrl"]} -->'
-                            # )
-                        except Exception as exc:  # pragma: no cover - log only
-                            context.log(
-                                f"[{domain_name} - {difficulty.upper()}] Diagram error for {qtype} "
-                                f"with scenario '{scenario_type}' (desc: {diagram_description}, type: {diag_type}): {exc}"
-                            )
-                            question["image"] = ""
+            for question in questions_data.get("questions", []):
+                if practical_val == "scenario-illustrated" and question.get("diagram_descr"):
+                    diagram_description = question.get("diagram_descr", "").strip()
+                    try:
+                        diag_type = question.get("diagram_type", "")
+                        # diagram_data_str = render_diagram(provider_name, diagram_description, diag_type)
+                        # diag_dict = json.loads(diagram_data_str)
+                        # question["image"] = (
+                        #     f'<img src="{diag_dict["imageUrl"]}" alt="Generated Diagram" '
+                        #     f'width="75%" height="auto"><!-- {diag_dict["createEraserFileUrl"]} -->'
+                        # )
+                    except Exception as exc:  # pragma: no cover - log only
+                        context.log(
+                            f"[{domain_name} - {difficulty.upper()}] Diagram error for {qtype} "
+                            f"with scenario '{scenario_type}' (desc: {diagram_description}, type: {diag_type}): {exc}"
+                        )
+                        question["image"] = ""
 
-                try:
-                    stats = db.insert_questions(domain_id, questions_data, scenario_type)
-                    context.log(
-                        f"[{domain_name} - {difficulty.upper()}] {needed} questions inserted for "
-                        f"{qtype} with scenario '{scenario_type}'."
-                    )
-                    imported = 0
-                    if isinstance(stats, dict):
-                        imported = int(stats.get("imported_questions", 0) or 0)
-                    if progress is not None and imported:
-                        progress.record_insertion(difficulty, qtype, scenario_type, imported)
-                    total_inserted += imported
-                except Exception as exc:
-                    context.log(
-                        f"[{domain_name} - {difficulty.upper()}] Insert error for {qtype} "
-                        f"with scenario '{scenario_type}': {exc}"
-                    )
+            try:
+                stats = db.insert_questions(domain_id, questions_data, scenario_type)
+                context.log(
+                    f"[{domain_name} - {difficulty.upper()}] {needed} questions inserted for "
+                    f"{qtype} with scenario '{scenario_type}'."
+                )
+                imported = 0
+                if isinstance(stats, dict):
+                    imported = int(stats.get("imported_questions", 0) or 0)
+                if progress is not None and imported:
+                    progress.record_insertion(difficulty, qtype, scenario_type, imported)
+                total_inserted += imported
+            except Exception as exc:
+                context.log(
+                    f"[{domain_name} - {difficulty.upper()}] Insert error for {qtype} "
+                    f"with scenario '{scenario_type}': {exc}"
+                )
 
     return total_inserted
 

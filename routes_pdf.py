@@ -15,6 +15,10 @@ routes_pdf = Blueprint("routes_pdf", __name__)
 
 # Dossier d’upload partagé
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+# En cas de collision avec un fichier existant (notamment en environnements de test),
+# supprime le fichier pour recréer le dossier attendu par le reste de l'application.
+if os.path.isfile(UPLOAD_DIR):
+    os.remove(UPLOAD_DIR)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # ------------------------------- DB -------------------------------
