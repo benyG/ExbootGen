@@ -2,10 +2,10 @@ import os
 import random
 import json
 import threading
-import os
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from threading import Lock
 from types import SimpleNamespace
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -102,7 +102,12 @@ from articles import articles_bp, render_x_callback
 from handsonlab import hol_bp
 
 # Instanciation de l'application Flask
-app = Flask(__name__, template_folder="templates")
+BASE_DIR = Path(__file__).resolve().parent
+app = Flask(
+    __name__,
+    template_folder=str(BASE_DIR / "templates"),
+    static_folder=str(BASE_DIR / "static"),
+)
 # Minimal secret key required for session-based authentication protecting the UI
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "exboot-secret-key")
 
