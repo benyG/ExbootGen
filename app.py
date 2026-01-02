@@ -428,6 +428,15 @@ def schedule():
     return render_template("schedule.html")
 
 
+def _serialise_schedule_note(note_text: str, add_image: bool) -> str:
+    """Serialize schedule note content along with media toggle metadata."""
+
+    try:
+        return json.dumps({"text": note_text, "addImage": add_image})
+    except TypeError:
+        return note_text
+
+
 @app.route("/schedule/api", methods=["GET"])
 def schedule_list():
     """Return all persisted schedule entries."""
@@ -448,6 +457,12 @@ def schedule_save():
     entry.setdefault("id", uuid.uuid4().hex)
     entry.setdefault("channels", [])
     entry.setdefault("note", "")
+    entry.setdefault("addImage", True)
+
+    add_image = bool(entry.get("addImage", True))
+    note_text = entry.get("note") or ""
+    entry["addImage"] = add_image
+    entry["note"] = _serialise_schedule_note(note_text, add_image)
 
     required_fields = [
         "day",
@@ -504,6 +519,11 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         )
         context.log(f"Canaux : {', '.join(channels) if channels else 'aucun canal spécifié'}")
         context.log(f"Lien/source : {link}")
+        include_image = entry.get("addImage", True)
+        context.log(f"Visuel : {'avec image' if include_image else 'sans image'}")
+        note = entry.get("note")
+        if note:
+            context.log(f"Note interne : {note}")
 
         # Placeholder for real publication logic.
         try:

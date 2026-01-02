@@ -521,6 +521,24 @@
       gap: 1rem;
     }
 
+    .input-with-action {
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .input-with-action input {
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .inline-hint {
+      margin: 0.35rem 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
     .secondary {
       width: fit-content;
       border: 1px solid rgba(148, 163, 184, 0.35);
@@ -533,6 +551,11 @@
       transition: border 0.2s ease, transform 0.2s ease;
     }
 
+    .secondary.is-loading {
+      opacity: 0.65;
+      pointer-events: none;
+    }
+
     .secondary:hover { border-color: rgba(124, 247, 255, 0.35); transform: translateY(-1px); }
     .secondary:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
 
@@ -542,6 +565,28 @@
       gap: 0.8rem;
       flex-wrap: wrap;
       margin-top: 0.6rem;
+    }
+
+    .option-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .option-row .image-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .option-row input[type="checkbox"] {
+      accent-color: var(--accent);
+      width: 1.05rem;
+      height: 1.05rem;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -658,16 +703,26 @@
             </div>
             <div>
               <label for="linkInput">Lien de référence</label>
-              <input type="url" id="linkInput" placeholder="URL du test partagé Examboot ou lien personnalisé">
+              <div class="input-with-action">
+                <input type="url" id="linkInput" placeholder="URL du test partagé Examboot ou lien personnalisé">
+                <button type="button" class="secondary" id="generateExamBtn" disabled>Générer un test</button>
+              </div>
+              <p class="inline-hint">Utilise la certification sélectionnée pour générer et préremplir le lien Examboot.</p>
             </div>
             <div>
               <label for="timeInput">Heure de diffusion</label>
               <input type="time" id="timeInput" value="09:00">
             </div>
             <div class="checkbox-group">
-              <label class="checkbox-pill"><input type="checkbox" value="linkedin"> LinkedIn</label>
-              <label class="checkbox-pill"><input type="checkbox" value="x"> X (Twitter)</label>
-              <label class="checkbox-pill"><input type="checkbox" value="article"> Article long</label>
+              <label class="checkbox-pill"><input type="checkbox" value="linkedin" class="channel-checkbox"> LinkedIn</label>
+              <label class="checkbox-pill"><input type="checkbox" value="x" class="channel-checkbox"> X (Twitter)</label>
+              <label class="checkbox-pill"><input type="checkbox" value="article" class="channel-checkbox"> Article long</label>
+            </div>
+            <div class="option-row">
+              <label class="image-toggle">
+                <input type="checkbox" id="addImageToggle" checked>
+                <span>Ajouter une image à la publication</span>
+              </label>
             </div>
             <div>
               <label for="noteInput">Notes internes (optionnel)</label>
@@ -703,13 +758,15 @@
     const linkInput = document.getElementById('linkInput');
     const timeInput = document.getElementById('timeInput');
     const noteInput = document.getElementById('noteInput');
+    const addImageToggle = document.getElementById('addImageToggle');
+    const generateExamBtn = document.getElementById('generateExamBtn');
     const formStatus = document.getElementById('formStatus');
     const scheduleForm = document.getElementById('scheduleForm');
 
     let providers = [];
     let certifications = [];
     let filteredCerts = [];
-    let planning = loadPlanning();
+    let planning = normalisePlanning(loadPlanning());
 
     let viewDate = new Date();
     let selectedDate = new Date();
@@ -750,13 +807,31 @@
         const dayKey = entry.day;
         planning[dayKey] = planning[dayKey] || [];
         const existingIndex = planning[dayKey].findIndex(item => item.id === entry.id);
+        const normalizedEntry = normaliseEntry(entry);
         if (existingIndex >= 0) {
-          planning[dayKey][existingIndex] = entry;
+          planning[dayKey][existingIndex] = { ...planning[dayKey][existingIndex], ...normalizedEntry };
         } else {
-          planning[dayKey].push(entry);
+          planning[dayKey].push(normalizedEntry);
         }
       });
       savePlanning();
+    }
+
+    function normaliseEntry(entry) {
+      if (!entry) return {};
+      return {
+        ...entry,
+        addImage: entry.addImage !== false
+      };
+    }
+
+    function normalisePlanning(raw) {
+      if (!raw || typeof raw !== 'object') return {};
+      const normalised = {};
+      Object.entries(raw).forEach(([day, entries]) => {
+        normalised[day] = Array.isArray(entries) ? entries.map(normaliseEntry) : [];
+      });
+      return normalised;
     }
 
     async function fetchServerPlanning() {
@@ -897,6 +972,8 @@
         topic.className = 'meta';
         topic.textContent = `${item.subjectLabel || 'Sujet'} • ${item.contentTypeLabel}`;
 
+        const addImage = item.addImage !== false;
+
         const link = document.createElement('a');
         link.href = item.link;
         link.textContent = item.link || 'Lien';
@@ -906,11 +983,16 @@
         card.appendChild(header);
         card.appendChild(provider);
         card.appendChild(topic);
+        const mediaInfo = document.createElement('div');
+        mediaInfo.className = 'meta';
+        mediaInfo.textContent = addImage ? 'Visuel inclus' : 'Sans image';
+        card.appendChild(mediaInfo);
         if (item.link) card.appendChild(link);
-        if (item.note) {
+        const noteText = typeof item.note === 'string' ? item.note : '';
+        if (noteText) {
           const note = document.createElement('div');
           note.className = 'meta';
-          note.textContent = item.note;
+          note.textContent = noteText;
           card.appendChild(note);
         }
 
@@ -972,6 +1054,7 @@
         option.textContent = provider.name;
         providerSelect.appendChild(option);
       });
+      updateActionsAvailability();
     }
 
     function renderCertifications(list) {
@@ -984,6 +1067,33 @@
       });
       certSelect.disabled = !list.length;
       certSearch.disabled = !list.length;
+      updateActionsAvailability();
+    }
+
+    function updateActionsAvailability() {
+      const hasSelection = Boolean(providerSelect.value && certSelect.value);
+      if (generateExamBtn) {
+        generateExamBtn.disabled = !hasSelection;
+      }
+    }
+
+    function setButtonLoading(button, isLoading, loadingText = '') {
+      if (!button) return;
+      if (isLoading) {
+        button.dataset.originalLabel = button.textContent;
+        if (loadingText) {
+          button.textContent = loadingText;
+        }
+        button.disabled = true;
+        button.classList.add('is-loading');
+      } else {
+        if (button.dataset.originalLabel) {
+          button.textContent = button.dataset.originalLabel;
+          delete button.dataset.originalLabel;
+        }
+        button.classList.remove('is-loading');
+        updateActionsAvailability();
+      }
     }
 
     providerSearch.addEventListener('input', () => {
@@ -997,8 +1107,10 @@
       certSearch.value = '';
       certSelect.value = '';
       certifications = [];
+      renderCertifications([]);
       certSelect.disabled = !providerId;
       certSearch.disabled = !providerId;
+      updateActionsAvailability();
       if (providerId) fetchCertifications(providerId);
     });
 
@@ -1006,6 +1118,43 @@
       const query = certSearch.value.toLowerCase();
       filteredCerts = certifications.filter(c => c.name.toLowerCase().includes(query));
       renderCertifications(filteredCerts);
+    });
+
+    certSelect.addEventListener('change', () => {
+      updateActionsAvailability();
+    });
+
+    generateExamBtn.addEventListener('click', async () => {
+      const providerId = providerSelect.value;
+      const certId = certSelect.value;
+      if (!providerId || !certId) {
+        setStatus('Sélectionnez un provider et une certification avant de générer un test.', 'error');
+        return;
+      }
+      try {
+        setButtonLoading(generateExamBtn, true, 'Génération…');
+        setStatus('Génération du test Examboot en cours…');
+        const response = await fetch('/articles/generate-exam-test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider_id: providerId, certification_id: certId })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la génération du test Examboot');
+        }
+        if (!payload.url) {
+          throw new Error('URL du test Examboot introuvable.');
+        }
+        linkInput.value = payload.url;
+        linkInput.dispatchEvent(new Event('input'));
+        setStatus('Lien prérempli avec le test Examboot généré.', 'success');
+      } catch (err) {
+        const message = err && err.message ? err.message : 'Erreur lors de la génération du test Examboot';
+        setStatus(message, 'error');
+      } finally {
+        setButtonLoading(generateExamBtn, false);
+      }
     });
 
     executeDayBtn.addEventListener('click', async () => {
@@ -1035,7 +1184,7 @@
       event.preventDefault();
       const providerId = providerSelect.value;
       const certId = certSelect.value;
-      const channelValues = Array.from(scheduleForm.querySelectorAll('input[type=\"checkbox\"]:checked')).map(c => c.value);
+      const channelValues = Array.from(scheduleForm.querySelectorAll('.channel-checkbox:checked')).map(c => c.value);
       let link = (linkInput.value || '').trim();
 
       if (!providerId || !certId || !topicType.value || !link || !channelValues.length) {
@@ -1067,7 +1216,8 @@
         link,
         time: timeInput.value || '09:00',
         channels: channelValues,
-        note: (noteInput.value || '').trim()
+        note: (noteInput.value || '').trim(),
+        addImage: addImageToggle.checked
       };
 
       planning[dayKey] = planning[dayKey] || [];
@@ -1089,7 +1239,10 @@
       renderCalendar();
     });
 
-    fetchProviders().then(() => renderCertifications([]));
+    fetchProviders().then(() => {
+      renderCertifications([]);
+      updateActionsAvailability();
+    });
     renderCalendar();
     renderDayDetails();
     fetchServerPlanning();
