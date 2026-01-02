@@ -745,6 +745,49 @@
       }
     }
 
+    function mergeServerPlanning(entries) {
+      entries.forEach(entry => {
+        const dayKey = entry.day;
+        planning[dayKey] = planning[dayKey] || [];
+        const existingIndex = planning[dayKey].findIndex(item => item.id === entry.id);
+        if (existingIndex >= 0) {
+          planning[dayKey][existingIndex] = entry;
+        } else {
+          planning[dayKey].push(entry);
+        }
+      });
+      savePlanning();
+    }
+
+    async function fetchServerPlanning() {
+      try {
+        const response = await fetch('/schedule/api');
+        if (!response.ok) throw new Error('Réponse serveur invalide');
+        const entries = await response.json();
+        mergeServerPlanning(entries || []);
+        renderCalendar();
+        renderDayDetails();
+      } catch (err) {
+        console.warn('Impossible de synchroniser la planification serveur', err);
+      }
+    }
+
+    async function persistEntryToServer(entry) {
+      try {
+        const response = await fetch('/schedule/api', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entry)
+        });
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error || 'Erreur inconnue');
+        }
+      } catch (err) {
+        setStatus(`Action sauvegardée en local mais non synchronisée : ${err.message}`, 'error');
+      }
+    }
+
     function renderCalendar() {
       calendarGrid.innerHTML = '';
       const year = viewDate.getFullYear();
@@ -1012,6 +1055,7 @@
 
       const entry = {
         id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`,
+        day: dayKey,
         providerId,
         certId,
         providerName,
@@ -1029,6 +1073,7 @@
       planning[dayKey] = planning[dayKey] || [];
       planning[dayKey].push(entry);
       savePlanning();
+      persistEntryToServer({ ...entry, day: dayKey });
       renderCalendar();
       renderDayDetails();
       setStatus('Action planifiée avec succès pour la date sélectionnée.', 'success');
@@ -1047,6 +1092,7 @@
     fetchProviders().then(() => renderCertifications([]));
     renderCalendar();
     renderDayDetails();
+    fetchServerPlanning();
   </script>
 </body>
 </html>

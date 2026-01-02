@@ -428,6 +428,53 @@ def schedule():
     return render_template("schedule.html")
 
 
+@app.route("/schedule/api", methods=["GET"])
+def schedule_list():
+    """Return all persisted schedule entries."""
+
+    try:
+        entries = db.get_schedule_entries()
+    except Exception as exc:  # pragma: no cover - defensive path
+        app.logger.exception("Impossible de charger les planifications")
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(entries)
+
+
+@app.route("/schedule/api", methods=["POST"])
+def schedule_save():
+    """Persist a schedule entry."""
+
+    entry = request.get_json() or {}
+    entry.setdefault("id", uuid.uuid4().hex)
+    entry.setdefault("channels", [])
+    entry.setdefault("note", "")
+
+    required_fields = [
+        "day",
+        "time",
+        "providerId",
+        "providerName",
+        "certId",
+        "certName",
+        "subject",
+        "subjectLabel",
+        "contentType",
+        "contentTypeLabel",
+        "link",
+    ]
+    missing = [field for field in required_fields if not entry.get(field)]
+    if missing:
+        return jsonify({"error": f"Champs manquants: {', '.join(missing)}"}), 400
+
+    try:
+        db.upsert_schedule_entry(entry)
+    except Exception as exc:  # pragma: no cover - defensive path
+        app.logger.exception("Echec de sauvegarde d'une planification")
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"status": "saved", "id": entry["id"]})
+
+
 def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]) -> None:
     """Iterate through planned actions and simulate their execution.
 
