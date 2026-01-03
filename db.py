@@ -19,6 +19,7 @@ reverse_nature_mapping = {value: key for key, value in nature_mapping.items()}
 reverse_ty_mapping = {value: key for key, value in ty_mapping.items()}
 
 executor = ThreadPoolExecutor(max_workers=8)
+_SCHEDULE_COLUMNS: set[str] | None = None
 
 
 def execute_async(func, *args, **kwargs):
@@ -35,7 +36,7 @@ def get_connection():
     )
 
 
-def _dict_from_schedule_row(row):
+def _dict_from_schedule_row(row, columns):
     """Build a schedule entry dict from a database row."""
 
     def _decode_schedule_note(raw_note):
@@ -54,40 +55,87 @@ def _dict_from_schedule_row(row):
             return parsed, add_image
         return str(parsed), add_image
 
-    note, add_image = _decode_schedule_note(row[13])
+    data = {columns[index]: value for index, value in enumerate(row)}
+    note, add_image = _decode_schedule_note(data.get("note"))
+    last_run_at = data.get("last_run_at") or data.get("lastRunAt")
+    job_id = data.get("job_id") or data.get("jobId")
+    result_summary = data.get("result_summary") or data.get("summary")
 
     return {
-        "id": row[0],
-        "day": row[1].isoformat(),
-        "time": row[2].isoformat(timespec="minutes"),
-        "providerId": row[3],
-        "providerName": row[4],
-        "certId": row[5],
-        "certName": row[6],
-        "subject": row[7],
-        "subjectLabel": row[8],
-        "contentType": row[9],
-        "contentTypeLabel": row[10],
-        "link": row[11],
-        "channels": json.loads(row[12]) if row[12] else [],
+        "id": data.get("id"),
+        "day": data.get("day").isoformat() if data.get("day") else None,
+        "time": data.get("time_of_day").isoformat(timespec="minutes") if data.get("time_of_day") else None,
+        "providerId": data.get("provider_id"),
+        "providerName": data.get("provider_name"),
+        "certId": data.get("cert_id"),
+        "certName": data.get("cert_name"),
+        "subject": data.get("subject"),
+        "subjectLabel": data.get("subject_label"),
+        "contentType": data.get("content_type"),
+        "contentTypeLabel": data.get("content_label"),
+        "link": data.get("link"),
+        "channels": json.loads(data.get("channels")) if data.get("channels") else [],
         "note": note,
         "addImage": add_image,
-        "status": row[14] or "queued",
-        "lastRunAt": row[15].isoformat() if row[15] else None,
+        "status": data.get("status") or "queued",
+        "lastRunAt": last_run_at.isoformat() if isinstance(last_run_at, datetime) else None,
+        "jobId": job_id,
+        "resultSummary": result_summary,
     }
+
+
+def _load_schedule_columns() -> set[str]:
+    """Return available columns for the ``schedule_entries`` table."""
+
+    global _SCHEDULE_COLUMNS
+    if _SCHEDULE_COLUMNS is not None:
+        return _SCHEDULE_COLUMNS
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SHOW COLUMNS FROM schedule_entries")
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    _SCHEDULE_COLUMNS = {row[0] for row in rows}
+    return _SCHEDULE_COLUMNS
 
 
 def get_schedule_entries():
     """Fetch all stored schedule entries."""
 
+    optional_columns = []
+    available_columns = _load_schedule_columns()
+    if "job_id" in available_columns:
+        optional_columns.append("job_id")
+    if "result_summary" in available_columns:
+        optional_columns.append("result_summary")
+
+    columns = [
+        "id",
+        "day",
+        "time_of_day",
+        "provider_id",
+        "provider_name",
+        "cert_id",
+        "cert_name",
+        "subject",
+        "subject_label",
+        "content_type",
+        "content_label",
+        "link",
+        "channels",
+        "note",
+        "status",
+        "last_run_at",
+        *optional_columns,
+    ]
+
     conn = get_connection()
     cursor = conn.cursor()
-    query = """
+    query = f"""
         SELECT
-            id, day, time_of_day, provider_id, provider_name,
-            cert_id, cert_name, subject, subject_label,
-            content_type, content_label, link, channels, note,
-            status, last_run_at
+            {', '.join(columns)}
         FROM schedule_entries
         ORDER BY day, time_of_day
     """
@@ -95,7 +143,7 @@ def get_schedule_entries():
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
-    return [_dict_from_schedule_row(row) for row in rows]
+    return [_dict_from_schedule_row(row, columns) for row in rows]
 
 
 def upsert_schedule_entry(entry):
