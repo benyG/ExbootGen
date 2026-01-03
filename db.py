@@ -2,7 +2,7 @@ import mysql.connector
 import logging
 import json
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, date, time, timedelta
 from typing import Iterable, Optional, Union
 from config import DB_CONFIG
 
@@ -55,6 +55,22 @@ def _dict_from_schedule_row(row, columns):
             return parsed, add_image
         return str(parsed), add_image
 
+    def _format_timestamp(value):
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if isinstance(value, (date,)):
+            return value.isoformat()
+        if isinstance(value, time):
+            return value.isoformat(timespec="seconds")
+        if isinstance(value, timedelta):
+            return (datetime.min + value).isoformat()
+        try:
+            return value.isoformat()  # type: ignore[attr-defined]
+        except Exception:
+            return str(value)
+
     data = {columns[index]: value for index, value in enumerate(row)}
     note, add_image = _decode_schedule_note(data.get("note"))
     last_run_at = data.get("last_run_at") or data.get("lastRunAt")
@@ -78,7 +94,7 @@ def _dict_from_schedule_row(row, columns):
         "note": note,
         "addImage": add_image,
         "status": data.get("status") or "queued",
-        "lastRunAt": last_run_at.isoformat() if isinstance(last_run_at, datetime) else None,
+        "lastRunAt": _format_timestamp(last_run_at),
         "jobId": job_id,
         "resultSummary": result_summary,
     }
