@@ -2,6 +2,8 @@ import mysql.connector
 import logging
 import json
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from typing import Iterable, Optional, Union
 from config import DB_CONFIG
 
 # Valeurs de niveau : easy→0, medium→1, hard→2
@@ -70,6 +72,8 @@ def _dict_from_schedule_row(row):
         "channels": json.loads(row[12]) if row[12] else [],
         "note": note,
         "addImage": add_image,
+        "status": row[14] or "queued",
+        "lastRunAt": row[15].isoformat() if row[15] else None,
     }
 
 
@@ -82,7 +86,8 @@ def get_schedule_entries():
         SELECT
             id, day, time_of_day, provider_id, provider_name,
             cert_id, cert_name, subject, subject_label,
-            content_type, content_label, link, channels, note
+            content_type, content_label, link, channels, note,
+            status, last_run_at
         FROM schedule_entries
         ORDER BY day, time_of_day
     """
@@ -102,11 +107,13 @@ def upsert_schedule_entry(entry):
         INSERT INTO schedule_entries (
             id, day, time_of_day, provider_id, provider_name,
             cert_id, cert_name, subject, subject_label,
-            content_type, content_label, link, channels, note
+            content_type, content_label, link, channels, note,
+            status, last_run_at
         ) VALUES (
             %(id)s, %(day)s, %(time)s, %(providerId)s, %(providerName)s,
             %(certId)s, %(certName)s, %(subject)s, %(subjectLabel)s,
-            %(contentType)s, %(contentTypeLabel)s, %(link)s, %(channels)s, %(note)s
+            %(contentType)s, %(contentTypeLabel)s, %(link)s, %(channels)s, %(note)s,
+            %(status)s, %(last_run_at)s
         )
         ON DUPLICATE KEY UPDATE
             day = VALUES(day),
@@ -121,11 +128,26 @@ def upsert_schedule_entry(entry):
             content_label = VALUES(content_label),
             link = VALUES(link),
             channels = VALUES(channels),
-            note = VALUES(note)
+            note = VALUES(note),
+            status = VALUES(status),
+            last_run_at = VALUES(last_run_at)
     """
+
+    def _normalize_timestamp(value: Optional[Union[str, datetime]]) -> Optional[datetime]:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            return datetime.fromisoformat(str(value))
+        except ValueError:
+            return None
+
     payload = {
         **entry,
         "channels": json.dumps(entry.get("channels") or []),
+        "status": entry.get("status") or "queued",
+        "last_run_at": _normalize_timestamp(entry.get("lastRunAt") or entry.get("last_run_at")),
     }
     cursor.execute(query, payload)
     conn.commit()
@@ -139,6 +161,34 @@ def delete_schedule_entry(entry_id: str):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM schedule_entries WHERE id = %s", (entry_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def update_schedule_status(
+    entry_ids: Iterable[str], status: str, *, last_run_at: Optional[datetime] = None
+) -> None:
+    """Update the status (and optionally timestamp) of schedule entries."""
+
+    ids = list(entry_ids)
+    if not ids:
+        return
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    payloads = [
+        {"status": status, "last_run_at": last_run_at, "id": entry_id}
+        for entry_id in ids
+    ]
+    cursor.executemany(
+        """
+        UPDATE schedule_entries
+        SET status = %(status)s, last_run_at = %(last_run_at)s
+        WHERE id = %(id)s
+        """,
+        payloads,
+    )
     conn.commit()
     cursor.close()
     conn.close()

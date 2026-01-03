@@ -554,10 +554,10 @@ def _launch_execute_schedule_inline(job_id: str, date: str, entries: List[dict])
     return job_id
 
 
-def _enqueue_schedule_job(date: str, entries: List[dict]) -> Dict[str, str]:
+def _enqueue_schedule_job(date: str, entries: List[dict], *, job_id: str | None = None) -> Dict[str, str]:
     """Enqueue a schedule execution job using Celery or fallback to inline."""
 
-    job_id = uuid.uuid4().hex
+    job_id = job_id or uuid.uuid4().hex
 
     if _is_task_queue_disabled():
         _launch_execute_schedule_inline(job_id, date, entries)
@@ -594,6 +594,21 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
     counters: Dict[str, int] = {"processed": 0, "succeeded": 0, "failed": 0}
     context.update_counters(**counters, date=date)
 
+    def _update_entry_status(entry_id: str | None, status: str, *, stamp: bool = False) -> None:
+        if not entry_id:
+            return
+        try:
+            db.update_schedule_status(
+                [entry_id],
+                status,
+                last_run_at=datetime.now() if stamp else None,
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging only
+            context.log(
+                f"[{context.job_id}] Impossible de mettre à jour le statut '{status}' pour la planification "
+                f"{entry_id}: {exc}"
+            )
+
     for index, entry in enumerate(entries, start=1):
         context.wait_if_paused()
         provider_name = entry.get("providerName") or "Provider inconnu"
@@ -604,6 +619,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         time_of_day = entry.get("time") or "Heure non précisée"
         channels = entry.get("channels") or []
         attach_image = bool(entry.get("addImage", True))
+        entry_id = entry.get("id")
 
         context.log(
             f"[{index}/{len(entries)}] {provider_name} · {cert_name} "
@@ -622,11 +638,13 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
             cert_id = int(entry.get("certId"))
         except (TypeError, ValueError):
             counters["failed"] += 1
+            _update_entry_status(entry_id, "failed", stamp=True)
             context.log("IDs provider/certification invalides : action ignorée.")
             counters["processed"] += 1
             context.update_counters(**counters, date=date)
             continue
 
+        _update_entry_status(entry_id, "running", stamp=True)
         try:
             result = run_scheduled_publication(
                 provider_id=provider_id,
@@ -638,6 +656,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
             )
         except Exception as exc:  # pragma: no cover - surfaced in job log
             counters["failed"] += 1
+            _update_entry_status(entry_id, "failed", stamp=True)
             context.log(f"Erreur lors du déclenchement des publications : {exc}")
         else:
             channel_outcomes: List[bool] = []
@@ -703,8 +722,10 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
 
             if channel_outcomes and all(channel_outcomes):
                 counters["succeeded"] += 1
+                _update_entry_status(entry_id, "succeeded", stamp=True)
             else:
                 counters["failed"] += 1
+                _update_entry_status(entry_id, "failed", stamp=True)
 
         counters["processed"] += 1
         context.update_counters(**counters, date=date)
@@ -774,13 +795,14 @@ def dispatch_due_schedules() -> Dict[str, object]:
         dispatch["date"] = day
         dispatch["count"] = len(day_entries)
         dispatched.append(dispatch)
-        for entry in day_entries:
+        entry_ids = [entry.get("id") for entry in day_entries if entry.get("id")]
+        if entry_ids:
             try:
-                db.delete_schedule_entry(entry["id"])
+                db.update_schedule_status(entry_ids, "queued")
             except Exception as exc:  # pragma: no cover - defensive logging only
                 app.logger.exception(
-                    "Impossible de supprimer la planification %s après envoi en file.",
-                    entry.get("id"),
+                    "Impossible de marquer les planifications %s comme en file d'attente.",
+                    entry_ids,
                 )
 
     summary: Dict[str, object] = {
