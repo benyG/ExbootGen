@@ -26,6 +26,9 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 PDF_SEARCH_ROOT = Path(os.environ.get("PDF_SEARCH_ROOT", UPLOAD_DIR)).resolve()
 os.makedirs(PDF_SEARCH_ROOT, exist_ok=True)
 
+# Répertoire par défaut pour le champ "Dossier PDF" côté UI
+DEFAULT_PDF_DIRECTORY = os.environ.get("DEFAULT_PDF_DIR", r"C:\\dumps\\dumps")
+
 # Mémoire légère (session d’analyse)
 # Chaque session stocke l'identifiant du module/domaine sous la clé
 # ``domain_id`` (nouveau flux) ou ``module_id`` (ancien flux /upload-pdf).
@@ -422,7 +425,7 @@ def api_sync_code_cert():
 
 @pdf_bp.route("/")
 def index():
-    return render_template("upload.html")
+    return render_template("upload.html", default_pdf_dir=DEFAULT_PDF_DIRECTORY)
 
 
 @pdf_bp.route("/export")
