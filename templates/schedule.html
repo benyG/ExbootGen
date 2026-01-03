@@ -559,6 +559,33 @@
     .secondary:hover { border-color: rgba(124, 247, 255, 0.35); transform: translateY(-1px); }
     .secondary:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
 
+    .secondary.small {
+      padding: 0.5rem 0.85rem;
+      font-size: 0.92rem;
+    }
+
+    .danger {
+      width: fit-content;
+      border: 1px solid rgba(248, 113, 113, 0.35);
+      background: rgba(127, 29, 29, 0.6);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 0.5rem 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: border 0.2s ease, transform 0.2s ease, background 0.2s ease;
+    }
+
+    .danger:hover { border-color: rgba(248, 113, 113, 0.55); transform: translateY(-1px); background: rgba(127, 29, 29, 0.75); }
+    .danger:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+    .item-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.8rem;
+    }
+
     .actions-row {
       display: flex;
       align-items: center;
@@ -996,6 +1023,25 @@
           card.appendChild(note);
         }
 
+        const actions = document.createElement('div');
+        actions.className = 'item-actions';
+
+        const retryBtn = document.createElement('button');
+        retryBtn.type = 'button';
+        retryBtn.className = 'secondary small';
+        retryBtn.textContent = 'Relancer';
+        retryBtn.addEventListener('click', () => retryEntry(item, retryBtn));
+        actions.appendChild(retryBtn);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'danger';
+        deleteBtn.textContent = 'Supprimer';
+        deleteBtn.addEventListener('click', () => deleteEntry(item, deleteBtn));
+        actions.appendChild(deleteBtn);
+
+        card.appendChild(actions);
+
         scheduleList.appendChild(card);
       });
     }
@@ -1012,6 +1058,49 @@
       executeStatus.className = 'status';
       if (type === 'error') executeStatus.classList.add('error');
       if (type === 'success') executeStatus.classList.add('success');
+    }
+
+    async function deleteEntry(item, button) {
+      if (!item || !item.id) return;
+      const dayKey = item.day || formatDateKey(selectedDate);
+      setExecuteStatus('Suppression de la planification…');
+      setButtonLoading(button, true, 'Suppression…');
+      try {
+        const response = await fetch(`/schedule/api/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Suppression impossible');
+        const dayEntries = planning[dayKey] || [];
+        planning[dayKey] = dayEntries.filter(entry => entry.id !== item.id);
+        if (planning[dayKey] && planning[dayKey].length === 0) {
+          delete planning[dayKey];
+        }
+        savePlanning();
+        renderCalendar();
+        renderDayDetails();
+        setExecuteStatus('Planification supprimée.', 'success');
+      } catch (err) {
+        setExecuteStatus(`Erreur de suppression : ${err.message}`, 'error');
+      } finally {
+        setButtonLoading(button, false);
+      }
+    }
+
+    async function retryEntry(item, button) {
+      if (!item || !item.id) return;
+      setExecuteStatus('Réenfilement de la planification…');
+      setButtonLoading(button, true, 'Relance…');
+      try {
+        const response = await fetch(`/schedule/retry/${encodeURIComponent(item.id)}`, { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Réenfilement impossible');
+        const mode = data.mode || 'inline';
+        const jobId = data.job_id || data.id || 'planifié';
+        setExecuteStatus(`Job ${jobId} relancé (${mode}).`, 'success');
+      } catch (err) {
+        setExecuteStatus(`Erreur lors de la relance : ${err.message}`, 'error');
+      } finally {
+        setButtonLoading(button, false);
+      }
     }
 
     async function fetchProviders() {
