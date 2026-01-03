@@ -63,19 +63,19 @@ Integrate how ExamBoot.net features like qustions bank, AI coach, performances a
 Format with headings, bullet points, and a motivational tone.
 Explicitly include the link to start a free ExamBoot test: {exam_url}.
 RULES:
-- Format your response in Markdown.
+- Format your response in HTML.
 - Title and content must be SEO optimized.
 - Formulates complete, non-robotic sentences
 - Target length: 1,000–1500 words.
 """,
     "experience_testimony": """
-Write a SEO optimized, clear, actionable and up-to-date third-person or storytelling-style blog post testimony on how to pass the certification exam: {certification} from {vendor}.
-Structure: presentation, motivation, challenges, strategy, results.
+Using a realistic, third-person fictional character, write a clear, actionable, storytelling-style blog post in the form of a testimonial, testifying to how the character passed with the help of ExamBoot the certification exam: {certification} from {vendor}.
+Structure: Context, motivation, challenges, strategy, results.
 Make it inspiring and motivating.
 Include realistic study milestones, use of ExamBoot.net, and takeaways for other candidates.
 End with a call to action containing the link to start a free test: {exam_url}.
 RULES:
-- Format your response in Markdown.
+- Format your response in HTML.
 - Title and content must be SEO optimized.
 - Formulates complete, non-robotic sentences
 - Target length: 1,000–1500 words.
@@ -85,7 +85,7 @@ Write a data-driven blog post on how the certification exam: {certification} fro
 Include statistics (average salaries, job titles, demand trends), examples of companies hiring certified professionals, and how ExamBoot.net helps candidates stand out.
 Conclude with a call to action featuring the link to start a free ExamBoot test: {exam_url}.
 RULES:
-- Format your response in Markdown.
+- Format your response in HTML.
 - Title and content must be SEO optimized.
 - Formulates complete, non-robotic sentences
 - Target length: 1,000–1500 words.
@@ -96,7 +96,7 @@ Include 5–10 sample questions with answers and explanations.
 Add a section inviting readers to try the full simulation on ExamBoot.net and share their scores online.
 Insert a call to action with the link to start a free ExamBoot test: {exam_url}.
 RULES:
-- Format your response in Markdown.
+- Format your response in HTML.
 - Title and content must be SEO optimized.
 - Formulates complete, non-robotic sentences
 - Target length: 1,000–1500 words.
@@ -178,7 +178,8 @@ Use emojis but with moderation.
 Include 3 relevant hashtags and no additional commentary.
 """,
     "experience_testimony": """
-Create a personal and authentic LinkedIn post narrating how someone succeeded in the certification exam: {certification} from {vendor}.
+Using a realistic, third-person fictional character, write a clear, actionable, storytelling-style blog post in the form of a testimonial, testifying to how the character passed with the help of ExamBoot the certification exam: {certification} from {vendor}.
+Make it inspiring and motivating (Context, motivation, challenges, strategy, results).
 Use a storytelling tone, mention ExamBoot.net as part of the preparation journey, and end with encouragement for others to start.
 A call to action with a link to start a free test: {exam_url}.
 Use emojis but with moderation.
@@ -186,15 +187,16 @@ Include 3 relevant hashtags and return only the post text.
 """,
     "career_impact": """
 Draft a professional LinkedIn post highlighting the career benefits of the certification exam: {certification} from {vendor}.
-Mention salary increases, job roles, and industry demand.
+Include statistics (average salaries, job titles, demand trends), examples of companies hiring certified professionals, and how ExamBoot.net helps candidates stand out.
 Use clear bullet points and finish with “Start your certification journey with ExamBoot.net.”
+A call to action with a link to start a free test: {exam_url}.
 Include 3 relevant hashtags.
 Use emojis but with moderation.
-Return only the LinkedIn post body.
+Return only the LinkedIn post body text.
 """,
     "engagement_community": """
-Create an engaging LinkedIn post inviting readers to take a quick {certification} from {vendor} quiz.
-Example intro: “Think you know [field topic]? Test yourself with our 5-question {certification} from {vendor} quiz!”
+Create an engaging LinkedIn post inviting readers to take a quick quiz for the certification exam: {certification} from {vendor}.
+Example intro: “Think you know [field topic]? Test yourself with our simulated test for {certification} from {vendor}!”
 Add a link {exam_url} to the shareable test and encourage users to share their results.
 Use emojis but with moderation.
 Include 3 relevant hashtags and no additional commentary.
