@@ -518,6 +518,57 @@ def schedule_save():
     return jsonify({"status": "saved", "id": entry["id"]})
 
 
+@app.route("/schedule/api/<entry_id>", methods=["DELETE"])
+def schedule_delete(entry_id: str):
+    """Delete a persisted schedule entry."""
+
+    if not entry_id:
+        return jsonify({"error": "Identifiant de planification manquant."}), 400
+
+    try:
+        db.delete_schedule_entry(entry_id)
+    except Exception as exc:  # pragma: no cover - defensive path
+        app.logger.exception("Echec de suppression d'une planification")
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"status": "deleted", "id": entry_id})
+
+
+@app.route("/schedule/retry/<entry_id>", methods=["POST"])
+def schedule_retry(entry_id: str):
+    """Retry execution of a scheduled entry by enqueuing its day batch."""
+
+    if not entry_id:
+        return jsonify({"error": "Identifiant de planification manquant."}), 400
+
+    try:
+        entries = db.get_schedule_entries()
+    except Exception as exc:  # pragma: no cover - defensive path
+        app.logger.exception("Impossible de charger les planifications pour relance")
+        return jsonify({"error": str(exc)}), 500
+
+    target = next((entry for entry in entries if str(entry.get("id")) == entry_id), None)
+    if not target:
+        return jsonify({"error": "Planification introuvable."}), 404
+
+    day = target.get("day")
+    if not isinstance(day, str) or not day:
+        return jsonify({"error": "Date de planification invalide."}), 400
+
+    day_entries = [entry for entry in entries if entry.get("day") == day]
+    if not day_entries:
+        return jsonify({"error": "Aucune action planifiée pour cette date."}), 404
+
+    try:
+        dispatch = _enqueue_schedule_job(day, day_entries)
+    except Exception as exc:  # pragma: no cover - defensive path
+        app.logger.exception("Echec de réenfilement de la planification %s", entry_id)
+        return jsonify({"error": str(exc)}), 500
+
+    dispatch.update({"date": day, "count": len(day_entries)})
+    return jsonify(dispatch)
+
+
 def _launch_execute_schedule_inline(job_id: str, date: str, entries: List[dict]) -> str:
     """Launch execution of planned actions in a background thread."""
 
