@@ -448,15 +448,34 @@ def _serialise_schedule_note(note_text: str, add_image: bool) -> str:
         return note_text
 
 
+def _record_schedule_result(entry_id: str | None, day: str, status: str, job_id: str, summary: str = ""):
+    """Persist the execution status for a single scheduled entry."""
+
+    if not entry_id:
+        return
+    try:
+        db.upsert_schedule_result(entry_id, day, status, job_id, summary)
+    except Exception:  # pragma: no cover - defensive logging only
+        app.logger.exception("Impossible d'enregistrer le statut du planning %s", entry_id)
+
+
 @app.route("/schedule/api", methods=["GET"])
 def schedule_list():
     """Return all persisted schedule entries."""
 
+    include_reports = request.args.get("reports") not in {None, "", "0", "false"}
+    report_day = request.args.get("day")
     try:
         entries = db.get_schedule_entries()
+        reports = db.get_schedule_reports(report_day) if include_reports else []
     except Exception as exc:  # pragma: no cover - defensive path
         app.logger.exception("Impossible de charger les planifications")
         return jsonify({"error": str(exc)}), 500
+    payload: Dict[str, object] = {"entries": entries}
+    if include_reports:
+        payload["reports"] = reports
+    if include_reports:
+        return jsonify(payload)
     return jsonify(entries)
 
 
@@ -559,6 +578,9 @@ def _enqueue_schedule_job(date: str, entries: List[dict]) -> Dict[str, str]:
 
     job_id = uuid.uuid4().hex
 
+    for entry in entries:
+        _record_schedule_result(entry.get("id"), date, "queued", job_id, "Planifiée pour exécution.")
+
     if _is_task_queue_disabled():
         _launch_execute_schedule_inline(job_id, date, entries)
         return {"status": "queued", "job_id": job_id, "mode": "inline"}
@@ -596,6 +618,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
 
     for index, entry in enumerate(entries, start=1):
         context.wait_if_paused()
+        entry_id = str(entry.get("id") or "")
         provider_name = entry.get("providerName") or "Provider inconnu"
         cert_name = entry.get("certName") or "Certification inconnue"
         subject = entry.get("subjectLabel") or entry.get("subject") or "Sujet"
@@ -617,14 +640,22 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         if note:
             context.log(f"Note interne : {note}")
 
+        descriptor = f"{provider_name} · {cert_name} ({subject} – {content_label})"
+        _record_schedule_result(entry_id, date, "running", context.job_id, f"Exécution en cours : {descriptor}")
+
+        error_message: str | None = None
+        succeeded = False
+
         try:
             provider_id = int(entry.get("providerId"))
             cert_id = int(entry.get("certId"))
         except (TypeError, ValueError):
             counters["failed"] += 1
+            error_message = "IDs provider/certification invalides : action ignorée."
             context.log("IDs provider/certification invalides : action ignorée.")
             counters["processed"] += 1
             context.update_counters(**counters, date=date)
+            _record_schedule_result(entry_id, date, "failed", context.job_id, error_message)
             continue
 
         try:
@@ -638,6 +669,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
             )
         except Exception as exc:  # pragma: no cover - surfaced in job log
             counters["failed"] += 1
+            error_message = f"Erreur lors du déclenchement des publications : {exc}"
             context.log(f"Erreur lors du déclenchement des publications : {exc}")
         else:
             channel_outcomes: List[bool] = []
@@ -703,11 +735,22 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
 
             if channel_outcomes and all(channel_outcomes):
                 counters["succeeded"] += 1
+                succeeded = True
             else:
                 counters["failed"] += 1
+                if error_message is None:
+                    error_message = "Au moins un canal n'a pas abouti."
 
         counters["processed"] += 1
         context.update_counters(**counters, date=date)
+
+        final_status = "success" if succeeded else "failed"
+        summary = (
+            "Envoi réussi sur tous les canaux."
+            if succeeded
+            else error_message or "Echec lors de l'envoi."
+        )
+        _record_schedule_result(entry_id, date, final_status, context.job_id, f"{descriptor} · {summary}")
 
     context.log(
         f"Planification terminée : {counters['processed']} action(s) traitée(s), "
@@ -1274,6 +1317,16 @@ def _load_job_status(job_id: str):
 
 @app.route("/fix/status/<job_id>", methods=["GET"])
 def fix_status(job_id):
+    data, error_response, status = _load_job_status(job_id)
+    if error_response is not None:
+        return error_response, status
+    return jsonify(data)
+
+
+@app.route("/jobs/status/<job_id>", methods=["GET"])
+def job_status(job_id):
+    """Generic job status endpoint (used for schedule executions)."""
+
     data, error_response, status = _load_job_status(job_id)
     if error_response is not None:
         return error_response, status

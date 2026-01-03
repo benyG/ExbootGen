@@ -494,6 +494,51 @@
     .status.error { color: var(--danger); }
     .status.success { color: var(--accent); }
 
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.28rem 0.65rem;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      letter-spacing: 0.01em;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(8, 12, 24, 0.55);
+    }
+
+    .status-badge .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.12);
+    }
+
+    .status-badge.success {
+      color: #22c55e;
+      border-color: rgba(34, 197, 94, 0.25);
+      background: rgba(34, 197, 94, 0.08);
+    }
+
+    .status-badge.success .dot { background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2); }
+
+    .status-badge.error {
+      color: #f87171;
+      border-color: rgba(248, 113, 113, 0.3);
+      background: rgba(248, 113, 113, 0.08);
+    }
+
+    .status-badge.error .dot { background: #f87171; box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.22); }
+
+    .status-badge.pending {
+      color: #f59e0b;
+      border-color: rgba(245, 158, 11, 0.3);
+      background: rgba(245, 158, 11, 0.08);
+    }
+
+    .status-badge.pending .dot { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.22); }
+
     .empty-state {
       text-align: center;
       color: var(--muted);
@@ -588,6 +633,58 @@
       height: 1.05rem;
       cursor: pointer;
     }
+
+    .reports-wrapper {
+      display: grid;
+      gap: 0.8rem;
+    }
+
+    .report-list {
+      display: grid;
+      gap: 0.6rem;
+    }
+
+    .report-item {
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(17, 22, 36, 0.8);
+      padding: 0.85rem 1rem;
+      border-radius: 14px;
+      display: grid;
+      gap: 0.35rem;
+    }
+
+    .report-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .report-meta {
+      color: var(--muted);
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .report-summary {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .report-actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .report-totals {
+      color: var(--muted);
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -655,6 +752,21 @@
             <button id="executeDayBtn" class="secondary" type="button" disabled>Exécuter les actions du jour</button>
             <div id="executeStatus" class="status" role="status"></div>
           </div>
+        </div>
+
+        <div class="card">
+          <div class="report-header">
+            <div>
+              <h3>Rapport du jour</h3>
+              <p class="subtle">Historique synthétique des exécutions (succès / échecs) avec accès direct aux logs.</p>
+            </div>
+            <div>
+              <label for="reportDate" style="display:block; color: var(--muted); font-weight: 600; margin-bottom: 0.25rem;">Filtrer par date</label>
+              <input type="date" id="reportDate" style="background: rgba(12,16,29,0.86); color: var(--text); border: 1px solid rgba(148,163,184,0.28); border-radius: 12px; padding: 0.55rem 0.75rem;">
+            </div>
+          </div>
+          <div class="report-totals" id="reportTotals"></div>
+          <div class="report-list" id="reportList"></div>
         </div>
 
         <div class="card">
@@ -762,16 +874,26 @@
     const generateExamBtn = document.getElementById('generateExamBtn');
     const formStatus = document.getElementById('formStatus');
     const scheduleForm = document.getElementById('scheduleForm');
+    const reportDateInput = document.getElementById('reportDate');
+    const reportList = document.getElementById('reportList');
+    const reportTotals = document.getElementById('reportTotals');
 
     let providers = [];
     let certifications = [];
     let filteredCerts = [];
     let planning = normalisePlanning(loadPlanning());
+    let reports = [];
 
     let viewDate = new Date();
     let selectedDate = new Date();
+    let reportDateFilter = formatDateKey(selectedDate);
 
     const channelLabels = { linkedin: 'LinkedIn', x: 'X', article: 'Article' };
+    const statusLabels = { success: 'Succès', completed: 'Succès', failed: 'Échec', error: 'Échec', running: 'En cours', queued: 'En attente' };
+
+    if (reportDateInput) {
+      reportDateInput.value = reportDateFilter;
+    }
 
     function formatDateKey(date) {
       const y = date.getFullYear();
@@ -782,6 +904,20 @@
 
     function formatDateLabel(date) {
       return date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    }
+
+    function statusClass(status) {
+      if (!status) return 'pending';
+      const normalized = status.toLowerCase();
+      if (['success', 'completed'].includes(normalized)) return 'success';
+      if (['failed', 'error'].includes(normalized)) return 'error';
+      return 'pending';
+    }
+
+    function statusLabel(status) {
+      if (!status) return 'En attente';
+      const normalized = status.toLowerCase();
+      return statusLabels[normalized] || status;
     }
 
     function loadPlanning() {
@@ -821,7 +957,11 @@
       if (!entry) return {};
       return {
         ...entry,
-        addImage: entry.addImage !== false
+        addImage: entry.addImage !== false,
+        status: entry.status || '',
+        jobId: entry.jobId || entry.job_id || '',
+        resultSummary: entry.resultSummary || entry.summary || '',
+        statusUpdatedAt: entry.statusUpdatedAt || entry.updatedAt || ''
       };
     }
 
@@ -836,12 +976,18 @@
 
     async function fetchServerPlanning() {
       try {
-        const response = await fetch('/schedule/api');
+        const url = new URL('/schedule/api', window.location.origin);
+        url.searchParams.set('reports', '1');
+        if (reportDateFilter) url.searchParams.set('day', reportDateFilter);
+        const response = await fetch(url);
         if (!response.ok) throw new Error('Réponse serveur invalide');
-        const entries = await response.json();
+        const payload = await response.json();
+        const entries = Array.isArray(payload) ? payload : (payload.entries || []);
+        reports = Array.isArray(payload) ? [] : (payload.reports || []);
         mergeServerPlanning(entries || []);
         renderCalendar();
         renderDayDetails();
+        renderReports();
       } catch (err) {
         console.warn('Impossible de synchroniser la planification serveur', err);
       }
@@ -919,8 +1065,13 @@
 
         cell.addEventListener('click', () => {
           selectedDate = cellDate;
+          reportDateFilter = formatDateKey(selectedDate);
+          if (reportDateInput) {
+            reportDateInput.value = reportDateFilter;
+          }
           renderCalendar();
           renderDayDetails();
+          fetchServerPlanning();
         });
 
         calendarGrid.appendChild(cell);
@@ -965,6 +1116,13 @@
           header.appendChild(chip);
         });
 
+        if (item.status) {
+          const badge = document.createElement('span');
+          badge.className = `status-badge ${statusClass(item.status)}`;
+          badge.innerHTML = `<span class="dot"></span>${statusLabel(item.status)}`;
+          header.appendChild(badge);
+        }
+
         const provider = document.createElement('div');
         provider.innerHTML = `<strong>${item.providerName || 'Provider'}</strong> · ${item.certName || 'Certification'}`;
 
@@ -996,7 +1154,108 @@
           card.appendChild(note);
         }
 
+        if (item.resultSummary) {
+          const summary = document.createElement('div');
+          summary.className = 'meta';
+          summary.textContent = item.resultSummary;
+          card.appendChild(summary);
+        }
+
+        if (item.jobId) {
+          const logLink = document.createElement('a');
+          logLink.href = `/jobs/status/${item.jobId}`;
+          logLink.textContent = `Voir le log du job ${item.jobId}`;
+          logLink.target = "_blank";
+          logLink.style.color = 'var(--accent-strong)';
+          card.appendChild(logLink);
+        }
+
         scheduleList.appendChild(card);
+      });
+    }
+
+    function renderReports() {
+      if (!reportList || !reportTotals) return;
+      reportList.innerHTML = '';
+
+      const total = reports.length;
+      const successCount = reports.filter(r => statusClass(r.status) === 'success').length;
+      const errorCount = reports.filter(r => statusClass(r.status) === 'error').length;
+
+      reportTotals.textContent = total
+        ? `${successCount} succès · ${errorCount} échec${errorCount > 1 ? 's' : ''} sur ${total} action${total > 1 ? 's' : ''}.`
+        : 'Aucun rapport pour cette date.';
+
+      if (!total) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = 'Aucune exécution enregistrée pour cette date.';
+        reportList.appendChild(empty);
+        return;
+      }
+
+      reports.forEach(report => {
+        const card = document.createElement('div');
+        card.className = 'report-item';
+
+        const header = document.createElement('div');
+        header.className = 'report-header';
+
+        const info = document.createElement('div');
+        const title = document.createElement('div');
+        title.className = 'report-summary';
+        title.textContent = `${report.providerName || 'Provider'} · ${report.certName || 'Certification'}`;
+        info.appendChild(title);
+
+        const meta = document.createElement('div');
+        meta.className = 'report-meta';
+        if (report.time) {
+          meta.textContent = `${report.subjectLabel || 'Sujet'} • ${report.contentTypeLabel || 'Format'} • ${report.time}`;
+        } else {
+          meta.textContent = `${report.subjectLabel || 'Sujet'} • ${report.contentTypeLabel || 'Format'}`;
+        }
+        info.appendChild(meta);
+
+        header.appendChild(info);
+
+        if (report.status) {
+          const badge = document.createElement('span');
+          badge.className = `status-badge ${statusClass(report.status)}`;
+          badge.innerHTML = `<span class="dot"></span>${statusLabel(report.status)}`;
+          header.appendChild(badge);
+        }
+
+        card.appendChild(header);
+
+        const summary = document.createElement('div');
+        summary.className = 'report-meta';
+        summary.textContent = report.resultSummary || 'Résumé non disponible.';
+        card.appendChild(summary);
+
+        const actions = document.createElement('div');
+        actions.className = 'report-actions';
+        const day = report.day || reportDateFilter;
+        const when = document.createElement('span');
+        when.textContent = `Jour : ${day}`;
+        actions.appendChild(when);
+
+        if (report.jobId) {
+          const link = document.createElement('a');
+          link.href = `/jobs/status/${report.jobId}`;
+          link.target = "_blank";
+          link.textContent = `Log du job ${report.jobId}`;
+          link.style.color = 'var(--accent-strong)';
+          actions.appendChild(link);
+        }
+
+        if (report.statusUpdatedAt) {
+          const updated = document.createElement('span');
+          updated.textContent = `Mis à jour : ${new Date(report.statusUpdatedAt).toLocaleString('fr-FR')}`;
+          actions.appendChild(updated);
+        }
+
+        card.appendChild(actions);
+        reportList.appendChild(card);
       });
     }
 
@@ -1124,6 +1383,13 @@
       updateActionsAvailability();
     });
 
+    if (reportDateInput) {
+      reportDateInput.addEventListener('change', () => {
+        reportDateFilter = reportDateInput.value || formatDateKey(selectedDate);
+        fetchServerPlanning();
+      });
+    }
+
     generateExamBtn.addEventListener('click', async () => {
       const providerId = providerSelect.value;
       const certId = certSelect.value;
@@ -1245,6 +1511,7 @@
     });
     renderCalendar();
     renderDayDetails();
+    renderReports();
     fetchServerPlanning();
   </script>
 </body>

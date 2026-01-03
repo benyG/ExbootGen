@@ -33,6 +33,24 @@ def get_connection():
     )
 
 
+def _ensure_schedule_reports_table(cursor) -> None:
+    """Create the schedule_reports table if it does not already exist."""
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schedule_reports (
+            entry_id VARCHAR(64) PRIMARY KEY,
+            day DATE NOT NULL,
+            status VARCHAR(32) NOT NULL,
+            job_id VARCHAR(64),
+            summary TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+
 def _dict_from_schedule_row(row):
     """Build a schedule entry dict from a database row."""
 
@@ -78,6 +96,10 @@ def get_schedule_entries():
 
     conn = get_connection()
     cursor = conn.cursor()
+    try:
+        _ensure_schedule_reports_table(cursor)
+    except Exception:
+        logging.exception("Impossible de préparer la table des rapports de planification.")
     query = """
         SELECT
             id, day, time_of_day, provider_id, provider_name,
@@ -90,7 +112,20 @@ def get_schedule_entries():
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
-    return [_dict_from_schedule_row(row) for row in rows]
+    entries = [_dict_from_schedule_row(row) for row in rows]
+
+    try:
+        status_map = get_schedule_status_map()
+    except Exception:
+        logging.exception("Impossible de charger les statuts des planifications.")
+        return entries
+
+    for entry in entries:
+        status_info = status_map.get(entry["id"])
+        if status_info:
+            entry.update(status_info)
+
+    return entries
 
 
 def upsert_schedule_entry(entry):
@@ -142,6 +177,102 @@ def delete_schedule_entry(entry_id: str):
     conn.commit()
     cursor.close()
     conn.close()
+
+
+def upsert_schedule_result(entry_id: str, day: str, status: str, job_id: str | None, summary: str | None):
+    """Insert or update the latest execution status for a schedule entry."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    _ensure_schedule_reports_table(cursor)
+    query = """
+        INSERT INTO schedule_reports (entry_id, day, status, job_id, summary)
+        VALUES (%s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            status = VALUES(status),
+            job_id = VALUES(job_id),
+            summary = VALUES(summary),
+            updated_at = CURRENT_TIMESTAMP
+    """
+    cursor.execute(query, (entry_id, day, status, job_id, summary))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def get_schedule_status_map():
+    """Return a mapping of entry id to its latest known status/summary."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    _ensure_schedule_reports_table(cursor)
+    cursor.execute(
+        """
+        SELECT entry_id, status, job_id, summary, updated_at
+        FROM schedule_reports
+        """
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    mapping = {}
+    for row in rows:
+        mapping[row[0]] = {
+            "status": row[1],
+            "jobId": row[2],
+            "resultSummary": row[3],
+            "statusUpdatedAt": row[4].isoformat() if row[4] else None,
+        }
+    return mapping
+
+
+def get_schedule_reports(day: str | None = None):
+    """Return execution reports for schedule entries, optionally filtered by day."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    _ensure_schedule_reports_table(cursor)
+    params = []
+    where_clause = ""
+    if day:
+        where_clause = "WHERE r.day = %s"
+        params.append(day)
+
+    query = f"""
+        SELECT
+            r.entry_id, r.day, r.status, r.job_id, r.summary, r.updated_at,
+            e.provider_name, e.cert_name, e.subject_label, e.content_label, e.time_of_day
+        FROM schedule_reports r
+        LEFT JOIN schedule_entries e ON e.id = r.entry_id
+        {where_clause}
+        ORDER BY r.day DESC, r.updated_at DESC
+    """
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    reports = []
+    for row in rows:
+        reports.append(
+            {
+                "entryId": row[0],
+                "day": row[1].isoformat() if row[1] else None,
+                "status": row[2],
+                "jobId": row[3],
+                "resultSummary": row[4],
+                "updatedAt": row[5].isoformat() if row[5] else None,
+                "statusUpdatedAt": row[5].isoformat() if row[5] else None,
+                "providerName": row[6],
+                "certName": row[7],
+                "subjectLabel": row[8],
+                "contentTypeLabel": row[9],
+                "time": row[10].isoformat(timespec="minutes") if row[10] else None,
+            }
+        )
+
+    return reports
 
 
 def get_providers():
