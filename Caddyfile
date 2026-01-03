@@ -1,14 +1,4 @@
-# Exemple de configuration Caddy pour HTTPS automatique via Let's Encrypt.
-# Remplacez "votre-domaine.com" par votre domaine et assurez-vous que les
-# ports 80 et 443 pointent vers cette machine. Caddy gère automatiquement
-# l'obtention et le renouvellement des certificats.
-#
-# Pour adapter l'email de contact ACME (recommandé) :
-# {
-#     email admin@example.com
-# }
+factory.cisspbootcamp.online
 
-votre-domaine.com {
-    encode gzip
-    reverse_proxy 127.0.0.1:8000
-}
+reverse_proxy :8000
+
