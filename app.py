@@ -308,6 +308,9 @@ def _reset_task_queue_state_for_testing() -> None:  # pragma: no cover - test he
 
 
 job_store = create_job_store()
+_schedule_reports_lock = Lock()
+_schedule_reports: Dict[str, Dict[str, object]] = {}
+_schedule_entry_jobs: Dict[str, str] = {}
 
 QUEUE_EXCEPTIONS = (CeleryError, OperationalError, ConnectionError, OSError, RedisError)
 
@@ -439,6 +442,181 @@ def schedule():
     return render_template("schedule.html")
 
 
+def _normalise_schedule_status(status: str | None) -> str:
+    if not status:
+        return "queued"
+    status = str(status).lower()
+    if status in {"success", "succeeded", "completed"}:
+        return "succeeded"
+    if status in {"failed", "error"}:
+        return "failed"
+    if status in {"running", "in_progress"}:
+        return "running"
+    return status
+
+
+def _summarise_schedule_entry(entry: Dict[str, object]) -> str:
+    provider = entry.get("providerName") or "Provider"
+    cert = entry.get("certName") or "Certification"
+    subject = entry.get("subjectLabel") or entry.get("subject") or "Sujet"
+    content = entry.get("contentTypeLabel") or entry.get("contentType") or "Contenu"
+    time_of_day = entry.get("time") or "Heure non précisée"
+    return f"{time_of_day} • {provider} · {cert} ({subject} – {content})"
+
+
+def _register_schedule_job(date: str, job_id: str, entries: List[dict]) -> None:
+    """Track the latest job id and queued entries for a given day."""
+
+    with _schedule_reports_lock:
+        for entry in entries:
+            entry_id = entry.get("id")
+            if entry_id:
+                _schedule_entry_jobs[str(entry_id)] = job_id
+
+        _schedule_reports[date] = {
+            "job_id": job_id,
+            "status": "queued",
+            "entries": [
+                {
+                    "id": entry.get("id"),
+                    "status": _normalise_schedule_status(entry.get("status")),
+                    "message": _summarise_schedule_entry(entry),
+                    "channels": entry.get("channels") or [],
+                }
+                for entry in entries
+            ],
+            "updated_at": datetime.now().isoformat(),
+        }
+
+
+def _update_schedule_report(
+    date: str, entry: Dict[str, object], status: str, *, message: str | None = None
+) -> None:
+    """Update cached report data for a specific entry within a day."""
+
+    with _schedule_reports_lock:
+        report = _schedule_reports.setdefault(date, {"entries": [], "status": "running"})
+        entry_id = entry.get("id")
+        message = message or _summarise_schedule_entry(entry)
+        found = False
+        for item in report["entries"]:
+            if entry_id and item.get("id") == entry_id:
+                item.update(
+                    {
+                        "status": _normalise_schedule_status(status),
+                        "message": message,
+                        "channels": entry.get("channels") or [],
+                        "job_id": _schedule_entry_jobs.get(str(entry_id)),
+                    }
+                )
+                found = True
+                break
+        if not found:
+            report["entries"].append(
+                {
+                    "id": entry_id,
+                    "status": _normalise_schedule_status(status),
+                    "message": message,
+                    "channels": entry.get("channels") or [],
+                    "job_id": _schedule_entry_jobs.get(str(entry_id)),
+                }
+            )
+        report["status"] = _normalise_schedule_status(status)
+        report["updated_at"] = datetime.now().isoformat()
+
+
+def _finalise_schedule_report(date: str, status: str, counters: Dict[str, int]) -> None:
+    """Record the final status of a schedule job."""
+
+    with _schedule_reports_lock:
+        report = _schedule_reports.setdefault(date, {"entries": []})
+        report["status"] = _normalise_schedule_status(status)
+        report["summary"] = {
+            "processed": counters.get("processed", 0),
+            "succeeded": counters.get("succeeded", 0),
+            "failed": counters.get("failed", 0),
+        }
+        report["updated_at"] = datetime.now().isoformat()
+
+
+def _attach_job_metadata(entries: List[dict]) -> List[dict]:
+    """Attach cached job information to entries."""
+
+    with _schedule_reports_lock:
+        for entry in entries:
+            entry_id = entry.get("id")
+            if entry_id and str(entry_id) in _schedule_entry_jobs:
+                entry["jobId"] = _schedule_entry_jobs[str(entry_id)]
+    return entries
+
+
+def _build_schedule_reports(entries: List[dict]) -> Dict[str, Dict[str, object]]:
+    """Combine cached report data with the current state of schedule entries."""
+
+    grouped: Dict[str, List[dict]] = {}
+    for entry in entries:
+        day = entry.get("day")
+        if not isinstance(day, str):
+            continue
+        grouped.setdefault(day, []).append(entry)
+
+    with _schedule_reports_lock:
+        reports: Dict[str, Dict[str, object]] = {
+            day: dict(report) for day, report in _schedule_reports.items()
+        }
+
+    for day, day_entries in grouped.items():
+        current = reports.get(day, {"entries": []})
+        entries_payload = []
+        summary = {"succeeded": 0, "failed": 0, "pending": 0, "running": 0}
+
+        for entry in day_entries:
+            status = _normalise_schedule_status(entry.get("status"))
+            job_id = entry.get("jobId") or entry.get("job_id")
+            message = _summarise_schedule_entry(entry)
+            existing_entry = next(
+                (item for item in current.get("entries", []) if item.get("id") == entry.get("id")), None
+            )
+            if existing_entry:
+                message = existing_entry.get("message") or message
+                job_id = job_id or existing_entry.get("job_id")
+            entries_payload.append(
+                {
+                    "id": entry.get("id"),
+                    "status": status,
+                    "message": message,
+                    "job_id": job_id,
+                    "channels": entry.get("channels") or [],
+                    "last_run_at": entry.get("lastRunAt"),
+                }
+            )
+            if status == "succeeded":
+                summary["succeeded"] += 1
+            elif status == "failed":
+                summary["failed"] += 1
+            elif status == "running":
+                summary["running"] += 1
+            else:
+                summary["pending"] += 1
+
+        overall_status = "succeeded"
+        if summary["failed"] > 0:
+            overall_status = "failed"
+        elif summary["running"] > 0:
+            overall_status = "running"
+        elif summary["pending"] == len(entries_payload):
+            overall_status = "queued"
+
+        reports[day] = {
+            **current,
+            "entries": entries_payload,
+            "summary": summary,
+            "status": overall_status,
+        }
+
+    return reports
+
+
 def _serialise_schedule_note(note_text: str, add_image: bool) -> str:
     """Serialize schedule note content along with media toggle metadata."""
 
@@ -457,7 +635,9 @@ def schedule_list():
     except Exception as exc:  # pragma: no cover - defensive path
         app.logger.exception("Impossible de charger les planifications")
         return jsonify({"error": str(exc)}), 500
-    return jsonify(entries)
+    enriched = _attach_job_metadata(entries)
+    reports = _build_schedule_reports(enriched)
+    return jsonify({"entries": enriched, "reports": reports})
 
 
 def _schedule_entry_datetime(entry: Dict[str, object]) -> datetime | None:
@@ -579,7 +759,7 @@ def _launch_execute_schedule_inline(job_id: str, date: str, entries: List[dict])
             job_store,
             job_id=job_id,
             description="execute-planning",
-            metadata={"date": date, "count": len(entries)},
+            metadata={"date": date, "count": len(entries), "entry_ids": [entry.get("id") for entry in entries]},
         )
         job_store.set_status(job_id, "running")
 
@@ -609,6 +789,7 @@ def _enqueue_schedule_job(date: str, entries: List[dict], *, job_id: str | None 
     """Enqueue a schedule execution job using Celery or fallback to inline."""
 
     job_id = job_id or uuid.uuid4().hex
+    _register_schedule_job(date, job_id, entries)
 
     if _is_task_queue_disabled():
         _launch_execute_schedule_inline(job_id, date, entries)
@@ -684,6 +865,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         if note:
             context.log(f"Note interne : {note}")
 
+        _update_schedule_report(date, entry, "running", message="Action en cours d'exécution.")
         try:
             provider_id = int(entry.get("providerId"))
             cert_id = int(entry.get("certId"))
@@ -691,6 +873,12 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
             counters["failed"] += 1
             _update_entry_status(entry_id, "failed", stamp=True)
             context.log("IDs provider/certification invalides : action ignorée.")
+            _update_schedule_report(
+                date,
+                entry,
+                "failed",
+                message="IDs provider/certification invalides : action ignorée.",
+            )
             counters["processed"] += 1
             context.update_counters(**counters, date=date)
             continue
@@ -709,6 +897,12 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
             counters["failed"] += 1
             _update_entry_status(entry_id, "failed", stamp=True)
             context.log(f"Erreur lors du déclenchement des publications : {exc}")
+            _update_schedule_report(
+                date,
+                entry,
+                "failed",
+                message=f"Erreur lors du déclenchement des publications : {exc}",
+            )
         else:
             channel_outcomes: List[bool] = []
 
@@ -774,9 +968,21 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
             if channel_outcomes and all(channel_outcomes):
                 counters["succeeded"] += 1
                 _update_entry_status(entry_id, "succeeded", stamp=True)
+                _update_schedule_report(
+                    date,
+                    entry,
+                    "succeeded",
+                    message="Publication envoyée sur tous les canaux sélectionnés.",
+                )
             else:
                 counters["failed"] += 1
                 _update_entry_status(entry_id, "failed", stamp=True)
+                _update_schedule_report(
+                    date,
+                    entry,
+                    "failed",
+                    message="Échec sur au moins un canal, voir logs du job.",
+                )
 
         counters["processed"] += 1
         context.update_counters(**counters, date=date)
@@ -785,6 +991,8 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         f"Planification terminée : {counters['processed']} action(s) traitée(s), "
         f"{counters['succeeded']} réussie(s), {counters['failed']} en échec."
     )
+    overall_status = "failed" if counters.get("failed") else "succeeded"
+    _finalise_schedule_report(date, overall_status, counters)
     return counters
 
 
@@ -800,7 +1008,7 @@ def execute_schedule_job(self, date: str, entries: List[dict]) -> None:
         job_store,
         job_id=job_id,
         description="execute-planning",
-        metadata={"date": date, "count": len(entries)},
+        metadata={"date": date, "count": len(entries), "entry_ids": [entry.get("id") for entry in entries]},
     )
     job_store.set_status(job_id, "running")
 
@@ -1343,6 +1551,14 @@ def _load_job_status(job_id: str):
     cache_job_snapshot(job_id, data)
 
     return data, None, None
+
+
+@app.route("/schedule/status/<job_id>", methods=["GET"])
+def schedule_status(job_id):
+    data, error_response, status = _load_job_status(job_id)
+    if error_response is not None:
+        return error_response, status
+    return jsonify(data)
 
 
 @app.route("/fix/status/<job_id>", methods=["GET"])
