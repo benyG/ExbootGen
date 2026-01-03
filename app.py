@@ -533,12 +533,18 @@ def _launch_execute_schedule_inline(job_id: str, date: str, entries: List[dict])
         job_store.set_status(job_id, "running")
 
         try:
-            _execute_planned_actions(context, date, entries)
+            counters = _execute_planned_actions(context, date, entries)
         except Exception as exc:  # pragma: no cover - defensive logging only
             app.logger.exception("Execution planifiée échouée pour le %s", date)
             context.set_status("failed", error=str(exc))
         else:
-            context.set_status("completed")
+            if counters.get("failed"):
+                context.set_status(
+                    "failed",
+                    error="Certaines actions planifiées ont échoué.",
+                )
+            else:
+                context.set_status("completed")
 
     threading.Thread(
         target=_run_inline,
@@ -570,17 +576,22 @@ def _enqueue_schedule_job(date: str, entries: List[dict]) -> Dict[str, str]:
     return {"status": "queued", "job_id": async_result.id, "mode": "celery"}
 
 
-def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]) -> None:
-    """Iterate through planned actions and simulate their execution.
+def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]) -> Dict[str, int]:
+    """Iterate through planned actions and execute all required publications.
 
-    This job focuses on traceability: it logs each planned publication with its
-    channels and metadata so operators can verify that the calendar has been
-    respecté. Il déclenche désormais les mêmes logiques de génération et de
-    publication que l'Article Builder (AI) pour chaque canal demandé.
+    The function logs enough context to audit which pieces of content were sent
+    (or failed to send) and returns the final counters so the caller can decide
+    whether the overall job succeeded.
     """
 
+    def _shorten(text: str, limit: int = 180) -> str:
+        cleaned = " ".join((text or "").split())
+        if len(cleaned) <= limit:
+            return cleaned
+        return cleaned[: limit - 1] + "…"
+
     context.log(f"Planification du {date}: {len(entries)} action(s) détectée(s).")
-    counters = {"processed": 0, "succeeded": 0, "failed": 0}
+    counters: Dict[str, int] = {"processed": 0, "succeeded": 0, "failed": 0}
     context.update_counters(**counters, date=date)
 
     for index, entry in enumerate(entries, start=1):
@@ -640,6 +651,11 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
                         f"Article généré et enregistré"
                         f"{f' (blog #{blog_id})' if blog_id else ''}."
                     )
+                    title = result.get("title") or "Article généré"
+                    context.log(f"Titre : {_shorten(str(title), limit=120)}")
+                    summary = result.get("summary") or ""
+                    if summary:
+                        context.log(f"Résumé : {_shorten(str(summary), limit=200)}")
                     channel_outcomes.append(True)
                     if result.get("course_art") is not None:
                         context.log("Fiche certification enregistrée.")
@@ -653,23 +669,37 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
 
             if "x" in channels:
                 tweet_result: SocialPostResult | None = result.get("tweet_result")
+                tweet_text = (tweet_result.text if tweet_result else None) or result.get("tweet") or ""
                 if tweet_result and tweet_result.published:
-                    context.log("Tweet publié avec succès.")
                     channel_outcomes.append(True)
+                    if tweet_text:
+                        context.log(f"Tweet envoyé : {_shorten(str(tweet_text))}")
+                    else:
+                        context.log("Tweet publié avec succès.")
                 else:
                     channel_outcomes.append(False)
                     error = (tweet_result and tweet_result.error) or "Tweet non publié."
                     context.log(error)
+                    if tweet_text:
+                        context.log(f"Contenu du tweet : {_shorten(str(tweet_text))}")
 
             if "linkedin" in channels:
                 linkedin_result: SocialPostResult | None = result.get("linkedin_result")
+                linkedin_text = (
+                    linkedin_result.text if linkedin_result else None
+                ) or result.get("linkedin_post") or ""
                 if linkedin_result and linkedin_result.published:
-                    context.log("Post LinkedIn publié avec succès.")
                     channel_outcomes.append(True)
+                    if linkedin_text:
+                        context.log(f"Post LinkedIn envoyé : {_shorten(str(linkedin_text))}")
+                    else:
+                        context.log("Post LinkedIn publié avec succès.")
                 else:
                     channel_outcomes.append(False)
                     error = (linkedin_result and linkedin_result.error) or "LinkedIn non publié."
                     context.log(error)
+                    if linkedin_text:
+                        context.log(f"Contenu LinkedIn : {_shorten(str(linkedin_text))}")
 
             if channel_outcomes and all(channel_outcomes):
                 counters["succeeded"] += 1
@@ -683,6 +713,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         f"Planification terminée : {counters['processed']} action(s) traitée(s), "
         f"{counters['succeeded']} réussie(s), {counters['failed']} en échec."
     )
+    return counters
 
 
 @celery_app.task(bind=True, name="schedule.execute")
@@ -702,12 +733,18 @@ def execute_schedule_job(self, date: str, entries: List[dict]) -> None:
     job_store.set_status(job_id, "running")
 
     try:
-        _execute_planned_actions(context, date, entries)
+        counters = _execute_planned_actions(context, date, entries)
     except Exception as exc:  # pragma: no cover - surfaced to caller
         context.set_status("failed", error=str(exc))
         raise
     else:
-        context.set_status("completed")
+        if counters.get("failed"):
+            context.set_status(
+                "failed",
+                error="Certaines actions planifiées ont échoué.",
+            )
+        else:
+            context.set_status("completed")
 
 
 @celery_app.task(name="schedule.dispatch_due")
