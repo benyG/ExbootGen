@@ -185,6 +185,67 @@ def _env_int(name: str, default: int, *, minimum: int = 1, maximum: Optional[int
     return value
 
 
+def _env_float(name: str) -> float | None:
+    """Return a floating point value from the environment when defined."""
+
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return None
+    try:
+        return float(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"{name} doit être un nombre") from exc
+
+
+def _redis_socket_options_from_env() -> Dict[str, object]:
+    """Build a mapping of Redis socket options sourced from environment variables."""
+
+    options: Dict[str, object] = {}
+
+    keepalive_env = os.getenv("CELERY_REDIS_SOCKET_KEEPALIVE")
+    if keepalive_env is not None:
+        options["socket_keepalive"] = _is_truthy(keepalive_env)
+
+    socket_timeout = _env_float("CELERY_REDIS_SOCKET_TIMEOUT")
+    if socket_timeout is not None:
+        options["socket_timeout"] = socket_timeout
+
+    socket_connect_timeout = _env_float("CELERY_REDIS_SOCKET_CONNECT_TIMEOUT")
+    if socket_connect_timeout is not None:
+        options["socket_connect_timeout"] = socket_connect_timeout
+
+    health_check_env = os.getenv("CELERY_REDIS_HEALTH_CHECK_INTERVAL")
+    if health_check_env is not None:
+        options["health_check_interval"] = _env_int(
+            "CELERY_REDIS_HEALTH_CHECK_INTERVAL",
+            0,
+            minimum=0,
+        )
+
+    return options
+
+
+def _redis_pool_metrics(client: object) -> Dict[str, object]:
+    """Return basic connection pool metrics for a redis-py client."""
+
+    pool = getattr(client, "connection_pool", None)
+    if pool is None:
+        return {}
+
+    in_use = getattr(pool, "_in_use_connections", None)
+    created = getattr(pool, "_created_connections", None)
+    available = len(getattr(pool, "_available_connections", []) or [])
+    metrics: Dict[str, object] = {
+        "max_connections": getattr(pool, "max_connections", None),
+        "available": available,
+    }
+    if in_use is not None:
+        metrics["in_use"] = in_use
+    if created is not None:
+        metrics["created"] = created
+    return metrics
+
+
 def _default_parallelism(maximum: int = 8) -> int:
     cpu_count = os.cpu_count() or 1
     return max(1, min(cpu_count, maximum))
@@ -223,9 +284,12 @@ def make_celery() -> Celery:
     if redis_max_connections_setting:
         redis_max_connections = max(int(redis_max_connections_setting), 0)
 
+    redis_socket_options = _redis_socket_options_from_env()
+
     if broker_url and broker_url.startswith("redis://"):
         broker_max_connections = int(os.getenv("CELERY_MAX_CONNECTIONS", str(pool_limit)))
         broker_transport_options["max_connections"] = broker_max_connections
+        broker_transport_options.update(redis_socket_options)
         if redis_max_connections is None:
             redis_max_connections = max(broker_max_connections, 0)
         else:
@@ -234,6 +298,7 @@ def make_celery() -> Celery:
     if result_backend and result_backend.startswith("redis://"):
         result_max_connections = int(os.getenv("CELERY_RESULT_MAX_CONNECTIONS", str(pool_limit)))
         result_transport_options["max_connections"] = result_max_connections
+        result_transport_options.update(redis_socket_options)
         if redis_max_connections is None:
             redis_max_connections = max(result_max_connections, 0)
         else:
@@ -251,7 +316,11 @@ def make_celery() -> Celery:
         "dispatch-due-schedules-every-minute": {
             "task": "schedule.dispatch_due",
             "schedule": crontab(),  # every minute
-        }
+        },
+        "redis-healthcheck-every-minute": {
+            "task": "tasks.redis_healthcheck",
+            "schedule": 60,
+        },
     }
 
     if redis_max_connections is not None and redis_max_connections > 0:
@@ -272,6 +341,8 @@ _INITIAL_TASK_EAGER_PROPAGATES = bool(
 
 _TASK_QUEUE_LOCK = Lock()
 _TASK_QUEUE_DISABLED = False
+_REDIS_HEALTH_FAILURES = 0
+_REDIS_HEALTH_LOCK = Lock()
 
 
 def _is_task_queue_disabled() -> bool:
@@ -294,6 +365,21 @@ def _disable_task_queue(reason: str | Exception) -> None:
         "Task queue disabled after failure (%s). Background jobs will now run locally until the application is restarted.",
         reason,
     )
+
+
+def _record_redis_health_failure(reason: str) -> int:
+    """Track consecutive Redis healthcheck failures."""
+
+    global _REDIS_HEALTH_FAILURES
+    with _REDIS_HEALTH_LOCK:
+        _REDIS_HEALTH_FAILURES += 1
+        return _REDIS_HEALTH_FAILURES
+
+
+def _reset_redis_health_failures() -> None:
+    global _REDIS_HEALTH_FAILURES
+    with _REDIS_HEALTH_LOCK:
+        _REDIS_HEALTH_FAILURES = 0
 
 
 def _reset_task_queue_state_for_testing() -> None:  # pragma: no cover - test helper
@@ -806,6 +892,79 @@ def _enqueue_schedule_job(date: str, entries: List[dict], *, job_id: str | None 
         return {"status": "queued", "job_id": job_id, "mode": "eager"}
 
     return {"status": "queued", "job_id": async_result.id, "mode": "celery"}
+
+
+def _redis_healthcheck_targets() -> Dict[str, List[str]]:
+    targets: Dict[str, List[str]] = {}
+    broker_url = getattr(celery_app.conf, "broker_url", None)
+    result_backend = getattr(celery_app.conf, "result_backend", None)
+    for label, url in (("broker", broker_url), ("result_backend", result_backend)):
+        if isinstance(url, str) and url.startswith("redis://"):
+            targets.setdefault(url, []).append(label)
+    return targets
+
+
+@celery_app.task(name="tasks.redis_healthcheck")
+def redis_healthcheck() -> Dict[str, object]:
+    """Ping Redis targets used by Celery and record pool metrics."""
+
+    targets = _redis_healthcheck_targets()
+    if not targets:
+        return {"checked": 0, "healthy": 0, "status": "skipped"}
+
+    try:
+        import redis
+    except ImportError:  # pragma: no cover - optional dependency
+        app.logger.debug("Redis healthcheck skipped: redis package not installed.")
+        return {"checked": 0, "healthy": 0, "status": "skipped"}
+
+    socket_options = _redis_socket_options_from_env()
+    socket_options.setdefault("socket_keepalive", True)
+    socket_options.setdefault(
+        "health_check_interval",
+        _env_int("CELERY_REDIS_HEALTH_CHECK_INTERVAL", 30, minimum=0),
+    )
+    socket_timeout = _env_float("CELERY_REDIS_SOCKET_TIMEOUT")
+    if socket_timeout is not None:
+        socket_options.setdefault("socket_timeout", socket_timeout)
+    socket_connect_timeout = _env_float("CELERY_REDIS_SOCKET_CONNECT_TIMEOUT")
+    if socket_connect_timeout is not None:
+        socket_options.setdefault("socket_connect_timeout", socket_connect_timeout)
+
+    healthy = 0
+    failures = 0
+    for url, labels in targets.items():
+        label = "/".join(sorted(labels))
+        try:
+            client = redis.Redis.from_url(url, decode_responses=True, **socket_options)
+            client.ping()
+        except redis.exceptions.RedisError as exc:  # pragma: no cover - runtime path
+            failures += 1
+            failure_count = _record_redis_health_failure(str(exc))
+            app.logger.warning(
+                "Redis healthcheck failed (%s): %s (failure #%s)",
+                label,
+                exc,
+                failure_count,
+            )
+            if failure_count >= 3 and not _is_task_queue_disabled():
+                _disable_task_queue(str(exc))
+        except Exception as exc:  # pragma: no cover - defensive
+            failures += 1
+            failure_count = _record_redis_health_failure(str(exc))
+            app.logger.warning(
+                "Redis healthcheck unexpected error (%s): %s (failure #%s)",
+                label,
+                exc,
+                failure_count,
+            )
+        else:
+            healthy += 1
+            _reset_redis_health_failures()
+            metrics = _redis_pool_metrics(client)
+            app.logger.info("Redis healthcheck OK (%s): %s", label, metrics or "{}")
+
+    return {"checked": len(targets), "healthy": healthy, "failed": failures}
 
 
 def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]) -> Dict[str, int]:
