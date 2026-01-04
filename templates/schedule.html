@@ -964,17 +964,35 @@
     }
 
     function mergeServerPlanning(entries) {
+      const idToDay = {};
+      Object.entries(planning).forEach(([day, items]) => {
+        items.forEach(item => {
+          if (item.id) idToDay[item.id] = day;
+        });
+      });
+
+      const nextPlanning = { ...planning };
       entries.forEach(entry => {
         const dayKey = entry.day;
-        planning[dayKey] = planning[dayKey] || [];
-        const existingIndex = planning[dayKey].findIndex(item => item.id === entry.id);
         const normalizedEntry = normaliseEntry(entry);
-        if (existingIndex >= 0) {
-          planning[dayKey][existingIndex] = { ...planning[dayKey][existingIndex], ...normalizedEntry };
-        } else {
-          planning[dayKey].push(normalizedEntry);
+        if (!normalizedEntry.id || !dayKey) return;
+
+        const previousDay = idToDay[normalizedEntry.id];
+        if (previousDay && previousDay !== dayKey && nextPlanning[previousDay]) {
+          nextPlanning[previousDay] = nextPlanning[previousDay].filter(item => item.id !== normalizedEntry.id);
+          if (!nextPlanning[previousDay].length) delete nextPlanning[previousDay];
         }
+
+        const dayEntries = nextPlanning[dayKey] ? [...nextPlanning[dayKey]] : [];
+        const existingIndex = dayEntries.findIndex(item => item.id === normalizedEntry.id);
+        if (existingIndex >= 0) {
+          dayEntries[existingIndex] = normalizedEntry;
+        } else {
+          dayEntries.push(normalizedEntry);
+        }
+        nextPlanning[dayKey] = dayEntries;
       });
+      planning = nextPlanning;
       savePlanning();
     }
 
@@ -1064,12 +1082,13 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(entry)
         });
+        const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
-          throw new Error(data.error || 'Erreur inconnue');
+          throw new Error(payload.error || 'Erreur inconnue');
         }
+        return { ...entry, id: payload.id || entry.id };
       } catch (err) {
-        setStatus(`Action sauvegardée en local mais non synchronisée : ${err.message}`, 'error');
+        throw err;
       }
     }
 
@@ -1611,7 +1630,7 @@
       }
     });
 
-    scheduleForm.addEventListener('submit', event => {
+    scheduleForm.addEventListener('submit', async event => {
       event.preventDefault();
       const providerId = providerSelect.value;
       const certId = certSelect.value;
@@ -1652,14 +1671,25 @@
         status: 'queued'
       };
 
-      planning[dayKey] = planning[dayKey] || [];
-      planning[dayKey].push(entry);
-      savePlanning();
-      refreshReportForDay(dayKey);
-      persistEntryToServer({ ...entry, day: dayKey });
-      renderCalendar();
-      renderDayDetails();
-      setStatus('Action planifiée avec succès pour la date sélectionnée.', 'success');
+      try {
+        setStatus('Sauvegarde de la planification en cours…');
+        const savedEntry = await persistEntryToServer({ ...entry, day: dayKey });
+        const normalizedEntry = normaliseEntry(savedEntry);
+        planning[dayKey] = planning[dayKey] || [];
+        const existingIndex = planning[dayKey].findIndex(item => item.id === normalizedEntry.id);
+        if (existingIndex >= 0) {
+          planning[dayKey][existingIndex] = normalizedEntry;
+        } else {
+          planning[dayKey].push(normalizedEntry);
+        }
+        savePlanning();
+        refreshReportForDay(dayKey);
+        renderCalendar();
+        renderDayDetails();
+        setStatus('Action planifiée avec succès pour la date sélectionnée.', 'success');
+      } catch (err) {
+        setStatus(`Erreur lors de la sauvegarde : ${err.message}`, 'error');
+      }
     });
 
     prevMonthBtn.addEventListener('click', () => {
