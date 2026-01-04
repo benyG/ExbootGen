@@ -28,6 +28,33 @@ LOGGER = logging.getLogger(__name__)
 MAX_LOG_ENTRIES = 5000
 
 
+def _env_flag(name: str, default: str = "0") -> bool:
+    value = os.getenv(name, default)
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int, *, minimum: int = 0) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        value = default
+    else:
+        try:
+            value = int(raw_value)
+        except ValueError as exc:
+            raise ValueError(f"{name} doit être un entier") from exc
+    return max(value, minimum)
+
+
+def _env_float(name: str) -> Optional[float]:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return None
+    try:
+        return float(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"{name} doit être un nombre") from exc
+
+
 class JobStatusCache:
     """Keep job metadata cached locally and optionally on disk for resilience."""
 
@@ -389,6 +416,21 @@ class RedisJobStore(BaseJobStore):
                 ) from exc
             if max_connections > 0:
                 connection_kwargs["max_connections"] = max_connections
+
+        connection_kwargs["socket_keepalive"] = _env_flag("REDIS_SOCKET_KEEPALIVE", "1")
+        health_check_interval = _env_int("REDIS_HEALTH_CHECK_INTERVAL", 30, minimum=0)
+        if health_check_interval:
+            connection_kwargs["health_check_interval"] = health_check_interval
+
+        socket_timeout = _env_float("REDIS_SOCKET_TIMEOUT")
+        if socket_timeout is None:
+            socket_timeout = 10.0
+        connection_kwargs["socket_timeout"] = socket_timeout
+
+        socket_connect_timeout = _env_float("REDIS_SOCKET_CONNECT_TIMEOUT")
+        if socket_connect_timeout is None:
+            socket_connect_timeout = 5.0
+        connection_kwargs["socket_connect_timeout"] = socket_connect_timeout
 
         self._redis = redis.Redis.from_url(url, **connection_kwargs)
         self._ns = namespace
@@ -909,4 +951,3 @@ __all__ = [
     "create_job_store",
     "initialise_job",
 ]
-
