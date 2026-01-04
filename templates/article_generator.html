@@ -440,7 +440,7 @@
     <header>
       <div>
         <h1>Article de certification piloté par IA</h1>
-        <p style="margin:0;color:var(--text-muted);max-width:38rem">Composez un article complet en sélectionnant un provider, une certification et le lien du test partagé Examboot. L'intelligence artificielle rédige automatiquement le contenu prêt à être publié.</p>
+        <p style="margin:0;color:var(--text-muted);max-width:38rem">Composez un article complet en sélectionnant un provider, une certification et, si disponible, le lien du test partagé Examboot. Si le lien est vide, il sera généré automatiquement avant la rédaction et la publication.</p>
       </div>
       <a href="{{ url_for('home') }}">← Retour</a>
     </header>
@@ -475,7 +475,7 @@
         </div>
         <div class="field-group">
           <label for="examUrl">Lien du test partagé Examboot</label>
-          <input type="url" id="examUrl" placeholder="http://examboot.net" value="http://examboot.net" autocomplete="off">
+          <input type="url" id="examUrl" placeholder="http://examboot.net" autocomplete="off">
           <button type="button" class="secondary generate-exam-btn" id="generateExamBtn">Générer un test Examboot</button>
         </div>
       </div>
@@ -552,6 +552,7 @@
     const COURSE_ART_TOPIC = 'certification_presentation';
 
     const DEFAULT_EXAM_URL = 'http://examboot.net';
+    const SELECTION_REQUIRED_MESSAGE = 'Veuillez sélectionner un provider, une certification et un type de sujet.';
 
     const providerSearch = document.getElementById('providerSearch');
     const providerSelect = document.getElementById('providerSelect');
@@ -757,7 +758,7 @@
     function getSelectionPayload() {
       const providerId = providerSelect.value;
       const certificationId = certSelect.value;
-      const examUrl = examUrlInput.value.trim() || DEFAULT_EXAM_URL;
+      const examUrl = examUrlInput.value.trim();
       const topicType = topicTypeSelect.value;
 
       if (!providerId || !certificationId || !topicType) {
@@ -943,7 +944,7 @@
       const selection = getSelectionPayload();
 
       if (!selection) {
-        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
         return;
       }
 
@@ -969,6 +970,7 @@
         currentArticle = payload.article || '';
         articleOutput.textContent = currentArticle || 'Aucun contenu généré.';
         setStatus('Article généré avec succès.');
+        updateExamUrlIfPresent(payload);
 
       } catch (error) {
         setStatus(error.message, true);
@@ -984,7 +986,7 @@
       const selection = getSelectionPayload();
 
       if (!selection) {
-        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
         return;
       }
 
@@ -1012,6 +1014,7 @@
         }
         currentBlogId = payload.blog_id || null;
         setStatus(`Article publié avec succès (ID ${payload.blog_id}).`);
+        updateExamUrlIfPresent(payload);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setStatus(message, true);
@@ -1025,7 +1028,7 @@
       const selection = getSelectionPayload();
 
       if (!selection) {
-        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
         return;
       }
 
@@ -1052,6 +1055,7 @@
           null
         );
         setStatus('Tweet généré avec succès.');
+        updateExamUrlIfPresent(payload);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         currentTweetDraft = '';
@@ -1075,7 +1079,7 @@
       const selection = getSelectionPayload();
 
       if (!selection) {
-        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
         return;
       }
 
@@ -1102,6 +1106,7 @@
           null
         );
         setStatus('Post LinkedIn généré avec succès.');
+        updateExamUrlIfPresent(payload);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         currentLinkedinDraft = '';
@@ -1125,7 +1130,7 @@
       const selection = getSelectionPayload();
 
       if (!selection) {
-        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
         return;
       }
 
@@ -1170,7 +1175,7 @@
       const selection = getSelectionPayload();
 
       if (!selection) {
-        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
         return;
       }
 
@@ -1211,7 +1216,7 @@
     runPlaybookBtn.addEventListener('click', async () => {
       const selection = getSelectionPayload();
       if (!selection) {
-        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
         return;
       }
       selection.add_image = addImageCheckbox.checked;
@@ -1338,7 +1343,7 @@
     publishTweetBtn.addEventListener('click', async () => {
       const selection = getSelectionPayload();
       if (!selection) {
-        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
         return;
       }
       if (!currentTweetDraft) {
@@ -1376,6 +1381,7 @@
         } else {
           setStatus('Tweet généré mais non publié.', true);
         }
+        updateExamUrlIfPresent(payload);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setStatus(message, true);
@@ -1388,7 +1394,7 @@
     publishLinkedinBtn.addEventListener('click', async () => {
       const selection = getSelectionPayload();
       if (!selection) {
-        setStatus('Veuillez sélectionner un provider, une certification, un type de sujet et saisir le lien du test.', true);
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
         return;
       }
       if (!currentLinkedinDraft) {
@@ -1426,6 +1432,7 @@
         } else {
           setStatus('Post LinkedIn généré mais non publié.', true);
         }
+        updateExamUrlIfPresent(payload);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setStatus(message, true);
@@ -1470,7 +1477,13 @@
       statusArea.style.color = isError ? '#f87171' : 'var(--text-muted)';
     }
 
-    examUrlInput.value = examUrlInput.value || DEFAULT_EXAM_URL;
+    function updateExamUrlIfPresent(payload) {
+      if (payload && payload.exam_url) {
+        examUrlInput.value = payload.exam_url;
+      }
+    }
+
+    examUrlInput.value = examUrlInput.value || '';
     updateCourseArtSection();
     fetchProviders();
     updateActionAvailability();

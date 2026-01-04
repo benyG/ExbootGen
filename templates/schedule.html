@@ -832,7 +832,7 @@
     <div class="page-title">
       <div>
         <h1>Planification multicanale</h1>
-        <p class="hint">Visualisez d'un coup d'œil les publications prévues sur LinkedIn, X (Twitter) et vos articles longs. Sélectionnez une date, définissez l'heure, choisissez le provider, la certification, le type de sujet et le lien de référence (test partagé Examboot ou URL personnalisée).</p>
+        <p class="hint">Visualisez d'un coup d'œil les publications prévues sur LinkedIn, X (Twitter) et vos articles longs. Sélectionnez une date, définissez l'heure, choisissez le provider, la certification, le type de sujet et, si vous l'avez déjà, le lien de référence (test partagé Examboot ou URL personnalisée). Si le lien est laissé vide, il sera généré automatiquement au moment de la publication.</p>
       </div>
       <span class="pill">Calendrier mensuel piloté</span>
     </div>
@@ -1852,12 +1852,12 @@
       const channelValues = Array.from(scheduleForm.querySelectorAll('.channel-checkbox:checked')).map(c => c.value);
       let link = (linkInput.value || '').trim();
 
-      if (!providerId || !certId || !topicType.value || !link || !channelValues.length) {
-        setStatus('Provider, certification, type de sujet, lien et au moins un canal sont obligatoires.', 'error');
+      if (!providerId || !certId || !topicType.value || !channelValues.length) {
+        setStatus('Provider, certification, type de sujet et au moins un canal sont obligatoires.', 'error');
         return;
       }
 
-      if (!/^https?:\/\//i.test(link)) {
+      if (link && !/^https?:\/\//i.test(link)) {
         link = `https://${link}`;
       }
 
