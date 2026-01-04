@@ -1009,6 +1009,49 @@
       return `${time} • ${provider} · ${cert} (${subject} – ${content})`;
     }
 
+    const statusLabels = {
+      succeeded: 'succès',
+      success: 'succès',
+      failed: 'échec',
+      error: 'échec',
+      running: 'en cours',
+      queued: 'en attente',
+      pending: 'en attente'
+    };
+
+    function normaliseStatus(raw) {
+      if (!raw) return 'queued';
+      const value = raw.toString().toLowerCase();
+      if (['success', 'succeeded', 'completed'].includes(value)) return 'succeeded';
+      if (['failed', 'error'].includes(value)) return 'failed';
+      if (['running', 'in_progress'].includes(value)) return 'running';
+      if (value === 'pending') return 'pending';
+      return value;
+    }
+
+    function statusClass(status) {
+      switch (normaliseStatus(status)) {
+        case 'succeeded': return 'success';
+        case 'failed': return 'error';
+        case 'running': return 'running';
+        default: return 'pending';
+      }
+    }
+
+    function statusLabel(status) {
+      const normalized = normaliseStatus(status);
+      return statusLabels[normalized] || normalized;
+    }
+
+    function summariseEntry(entry) {
+      const provider = entry.providerName || 'Provider';
+      const cert = entry.certName || 'Certification';
+      const subject = entry.subjectLabel || entry.subject || 'Sujet';
+      const content = entry.contentTypeLabel || entry.contentType || 'Contenu';
+      const time = entry.time || 'Heure non précisée';
+      return `${time} • ${provider} · ${cert} (${subject} – ${content})`;
+    }
+
     async function fetchServerPlanning() {
       try {
         const response = await fetch('/schedule/api');
@@ -1365,6 +1408,14 @@
         if (!response.ok) throw new Error(data.error || 'Réenfilement impossible');
         const mode = data.mode || 'inline';
         const jobId = data.job_id || data.id || 'planifié';
+        const dayKey = item.day || formatDateKey(selectedDate);
+        const dayEntries = planning[dayKey] || [];
+        dayEntries.forEach(entry => {
+          entry.jobId = jobId;
+          entry.status = 'queued';
+        });
+        scheduleReports[dayKey] = buildReportFromEntries(dayKey, dayEntries);
+        savePlanning();
         setExecuteStatus(`Job ${jobId} relancé (${mode}).`, 'success');
         await fetchServerPlanning();
       } catch (err) {
