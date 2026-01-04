@@ -208,6 +208,47 @@
       letter-spacing: 0.01em;
     }
 
+    .card-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(4,7,17,0.75);
+      backdrop-filter: blur(8px) saturate(130%);
+      z-index: 50;
+      padding: 1rem;
+    }
+
+    .modal-backdrop.is-open { display: flex; }
+
+    .modal {
+      background: var(--glass-strong);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      width: min(900px, 100%);
+      max-height: 90vh;
+      overflow: auto;
+      padding: 1.5rem;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
     .subtle {
       color: var(--muted);
       margin: 0.2rem 0 0.8rem;
@@ -680,6 +721,19 @@
       font-size: 0.92rem;
     }
 
+    .ghost {
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: transparent;
+      color: var(--text);
+      border-radius: 12px;
+      padding: 0.4rem 0.7rem;
+      cursor: pointer;
+      font-weight: 700;
+      transition: border 0.2s ease, transform 0.2s ease;
+    }
+
+    .ghost:hover { border-color: rgba(124, 247, 255, 0.5); transform: translateY(-1px); }
+
     .danger {
       width: fit-content;
       border: 1px solid rgba(248, 113, 113, 0.35);
@@ -815,83 +869,102 @@
         </div>
 
         <div class="card">
-          <h3>Programmer une action</h3>
-          <p class="subtle">Définissez les critères obligatoires : provider, certification, type de sujet, lien Examboot ou personnalisé, canal ciblé et heure précise.</p>
-          <form id="scheduleForm" class="grid-two">
+          <div class="card-header-row">
             <div>
-              <label for="providerSearch">Recherche provider</label>
-              <input type="search" id="providerSearch" placeholder="Rechercher un provider">
+              <h3>Programmer une action</h3>
+              <p class="subtle">Définissez les critères obligatoires : provider, certification, type de sujet, lien Examboot ou personnalisé, canal ciblé et heure précise.</p>
             </div>
-            <div>
-              <label for="providerSelect">Providers disponibles</label>
-              <select id="providerSelect">
-                <option value="">Choisir un provider…</option>
-              </select>
-            </div>
-            <div>
-              <label for="certSearch">Recherche certification</label>
-              <input type="search" id="certSearch" placeholder="Rechercher une certification" disabled>
-            </div>
-            <div>
-              <label for="certSelect">Certifications</label>
-              <select id="certSelect" disabled>
-                <option value="">Choisir une certification…</option>
-              </select>
-            </div>
-            <div>
-              <label for="topicType">Type de sujet</label>
-              <select id="topicType">
-                <option value="">Sélectionner…</option>
-                <option value="certification_presentation">Présentation de certification</option>
-                <option value="preparation_methodology">Méthodologie & préparation</option>
-                <option value="experience_testimony">Retour d'expérience</option>
-                <option value="career_impact">Impact carrière</option>
-                <option value="engagement_community">Engagement communauté</option>
-              </select>
-            </div>
-            <div>
-              <label for="contentType">Format de publication</label>
-              <select id="contentType">
-                <option value="post_social">Post court (social)</option>
-                <option value="article_long">Article long</option>
-                <option value="teasing">Teasing certification</option>
-                <option value="ressource">Partage de ressource/test</option>
-              </select>
-            </div>
-            <div>
-              <label for="linkInput">Lien de référence</label>
-              <div class="input-with-action">
-                <input type="url" id="linkInput" placeholder="URL du test partagé Examboot ou lien personnalisé">
-                <button type="button" class="secondary" id="generateExamBtn" disabled>Générer un test</button>
-              </div>
-              <p class="inline-hint">Utilise la certification sélectionnée pour générer et préremplir le lien Examboot.</p>
-            </div>
-            <div>
-              <label for="timeInput">Heure de diffusion</label>
-              <input type="time" id="timeInput" value="09:00">
-            </div>
-            <div class="checkbox-group">
-              <label class="checkbox-pill"><input type="checkbox" value="linkedin" class="channel-checkbox"> LinkedIn</label>
-              <label class="checkbox-pill"><input type="checkbox" value="x" class="channel-checkbox"> X (Twitter)</label>
-              <label class="checkbox-pill"><input type="checkbox" value="article" class="channel-checkbox"> Article long</label>
-            </div>
-            <div class="option-row">
-              <label class="image-toggle">
-                <input type="checkbox" id="addImageToggle" checked>
-                <span>Ajouter une image à la publication</span>
-              </label>
-            </div>
-            <div>
-              <label for="noteInput">Notes internes (optionnel)</label>
-              <input type="search" id="noteInput" placeholder="CTA, angle éditorial, visuel attendu…">
-            </div>
-            <div style="grid-column: 1 / -1;">
-              <button type="submit" class="primary">Planifier pour la date sélectionnée</button>
-              <div id="formStatus" class="status" role="status"></div>
-            </div>
-          </form>
+            <button type="button" class="primary" id="openScheduleModal">Ajouter</button>
+          </div>
+          <p class="subtle" style="margin-top: 0.5rem;">Sélectionnez un jour dans le calendrier puis cliquez sur « Ajouter » pour ouvrir le formulaire dans une fenêtre dédiée.</p>
         </div>
       </section>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="scheduleModal" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="scheduleModalTitle">
+      <div class="modal-header">
+        <div>
+          <p class="pill" style="margin:0;">Planifier une action</p>
+          <h3 id="scheduleModalTitle" style="margin:0.2rem 0 0;">Configurer la publication pour la date sélectionnée</h3>
+          <p class="subtle" id="modalDateLabel" style="margin:0;">Date sélectionnée : <strong id="modalDateValue"></strong></p>
+        </div>
+        <button type="button" class="ghost" id="closeScheduleModal" aria-label="Fermer la fenêtre">✕</button>
+      </div>
+      <form id="scheduleForm" class="grid-two">
+        <div>
+          <label for="providerSearch">Recherche provider</label>
+          <input type="search" id="providerSearch" placeholder="Rechercher un provider">
+        </div>
+        <div>
+          <label for="providerSelect">Providers disponibles</label>
+          <select id="providerSelect">
+            <option value="">Choisir un provider…</option>
+          </select>
+        </div>
+        <div>
+          <label for="certSearch">Recherche certification</label>
+          <input type="search" id="certSearch" placeholder="Rechercher une certification" disabled>
+        </div>
+        <div>
+          <label for="certSelect">Certifications</label>
+          <select id="certSelect" disabled>
+            <option value="">Choisir une certification…</option>
+          </select>
+        </div>
+        <div>
+          <label for="topicType">Type de sujet</label>
+          <select id="topicType">
+            <option value="">Sélectionner…</option>
+            <option value="certification_presentation">Présentation de certification</option>
+            <option value="preparation_methodology">Méthodologie & préparation</option>
+            <option value="experience_testimony">Retour d'expérience</option>
+            <option value="career_impact">Impact carrière</option>
+            <option value="engagement_community">Engagement communauté</option>
+          </select>
+        </div>
+        <div>
+          <label for="contentType">Format de publication</label>
+          <select id="contentType">
+            <option value="post_social">Post court (social)</option>
+            <option value="article_long">Article long</option>
+            <option value="teasing">Teasing certification</option>
+            <option value="ressource">Partage de ressource/test</option>
+          </select>
+        </div>
+        <div>
+          <label for="linkInput">Lien de référence</label>
+          <div class="input-with-action">
+            <input type="url" id="linkInput" placeholder="URL du test partagé Examboot ou lien personnalisé">
+            <button type="button" class="secondary" id="generateExamBtn" disabled>Générer un test</button>
+          </div>
+          <p class="inline-hint">Utilise la certification sélectionnée pour générer et préremplir le lien Examboot.</p>
+        </div>
+        <div>
+          <label for="timeInput">Heure de diffusion</label>
+          <input type="time" id="timeInput" value="09:00">
+        </div>
+        <div class="checkbox-group">
+          <label class="checkbox-pill"><input type="checkbox" value="linkedin" class="channel-checkbox"> LinkedIn</label>
+          <label class="checkbox-pill"><input type="checkbox" value="x" class="channel-checkbox"> X (Twitter)</label>
+          <label class="checkbox-pill"><input type="checkbox" value="article" class="channel-checkbox"> Article long</label>
+        </div>
+        <div class="option-row">
+          <label class="image-toggle">
+            <input type="checkbox" id="addImageToggle" checked>
+            <span>Ajouter une image à la publication</span>
+          </label>
+        </div>
+        <div>
+          <label for="noteInput">Notes internes (optionnel)</label>
+          <input type="search" id="noteInput" placeholder="CTA, angle éditorial, visuel attendu…">
+        </div>
+        <div style="grid-column: 1 / -1;">
+          <button type="submit" class="primary">Planifier pour la date sélectionnée</button>
+          <div id="formStatus" class="status" role="status"></div>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -922,6 +995,10 @@
     const generateExamBtn = document.getElementById('generateExamBtn');
     const formStatus = document.getElementById('formStatus');
     const scheduleForm = document.getElementById('scheduleForm');
+    const scheduleModal = document.getElementById('scheduleModal');
+    const openScheduleModalBtn = document.getElementById('openScheduleModal');
+    const closeScheduleModalBtn = document.getElementById('closeScheduleModal');
+    const modalDateValue = document.getElementById('modalDateValue');
 
     let providers = [];
     let certifications = [];
@@ -1536,6 +1613,46 @@
       }
     }
 
+    function updateModalDateLabel() {
+      if (!modalDateValue) return;
+      modalDateValue.textContent = formatDateLabel(selectedDate);
+    }
+
+    function toggleScheduleModal(open = true) {
+      if (!scheduleModal) return;
+      if (open) {
+        updateModalDateLabel();
+        scheduleModal.classList.add('is-open');
+        scheduleModal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        if (providerSearch) providerSearch.focus();
+      } else {
+        scheduleModal.classList.remove('is-open');
+        scheduleModal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+      }
+    }
+
+    if (openScheduleModalBtn) {
+      openScheduleModalBtn.addEventListener('click', () => toggleScheduleModal(true));
+    }
+
+    if (closeScheduleModalBtn) {
+      closeScheduleModalBtn.addEventListener('click', () => toggleScheduleModal(false));
+    }
+
+    if (scheduleModal) {
+      scheduleModal.addEventListener('click', event => {
+        if (event.target === scheduleModal) toggleScheduleModal(false);
+      });
+    }
+
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && scheduleModal && scheduleModal.classList.contains('is-open')) {
+        toggleScheduleModal(false);
+      }
+    });
+
     providerSearch.addEventListener('input', () => {
       const query = providerSearch.value.toLowerCase();
       const filtered = providers.filter(p => p.name.toLowerCase().includes(query));
@@ -1686,6 +1803,14 @@
         refreshReportForDay(dayKey);
         renderCalendar();
         renderDayDetails();
+        scheduleForm.reset();
+        addImageToggle.checked = true;
+        certifications = [];
+        renderCertifications([]);
+        certSearch.disabled = true;
+        generateExamBtn.disabled = true;
+        updateActionsAvailability();
+        toggleScheduleModal(false);
         setStatus('Action planifiée avec succès pour la date sélectionnée.', 'success');
       } catch (err) {
         setStatus(`Erreur lors de la sauvegarde : ${err.message}`, 'error');
