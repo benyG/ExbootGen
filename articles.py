@@ -730,8 +730,6 @@ def _extract_selection_payload(data: dict) -> Tuple[int, int, str, str]:
     provider_id = data.get("provider_id")
     certification_id = data.get("certification_id")
     exam_url = (data.get("exam_url") or "").strip()
-    if not exam_url:
-        exam_url = "http://examboot.net"
     topic_type = (data.get("topic_type") or "").strip()
 
     if not provider_id or not certification_id or not topic_type:
@@ -767,6 +765,20 @@ def _extract_provider_certification(data: dict) -> Tuple[int, int]:
         raise ValueError("Identifiants invalides.") from exc
 
     return provider_id, certification_id
+
+
+def ensure_exam_url(certification_id: int, exam_url: str) -> Tuple[str, bool]:
+    """Return a usable Examboot link, generating it when missing.
+
+    Returns a tuple of (url, generated) so callers can update state or logs
+    when a new link was created.
+    """
+
+    cleaned = (exam_url or "").strip()
+    if cleaned:
+        return cleaned, False
+
+    return _create_shareable_examboot_test(certification_id), True
 
 
 def _create_shareable_examboot_test(certification_id: int) -> str:
@@ -835,6 +847,11 @@ def generate_article():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
+    try:
+        exam_url, _ = ensure_exam_url(certification_id, exam_url)
+    except ExambootTestGenerationError as exc:
+        return jsonify({"error": str(exc)}), 502
+
     if topic_type == COURSE_ART_TOPIC:
         existing_blog_id = _get_existing_presentation_blog_id(certification_id)
         if existing_blog_id:
@@ -866,6 +883,7 @@ def generate_article():
             "article": article,
             "provider_name": selection.provider_name,
             "certification_name": selection.certification_name,
+            "exam_url": exam_url,
         }
     )
 
@@ -889,6 +907,11 @@ def publish_article():
         selection = _fetch_selection(provider_id, certification_id)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+
+    try:
+        exam_url, _ = ensure_exam_url(certification_id, exam_url)
+    except ExambootTestGenerationError as exc:
+        return jsonify({"error": str(exc)}), 502
 
     if topic_type == COURSE_ART_TOPIC:
         existing_blog_id = _get_existing_presentation_blog_id(certification_id)
@@ -947,6 +970,7 @@ def publish_article():
             "topic_type": topic_type,
             "provider_name": selection.provider_name,
             "certification_name": selection.certification_name,
+            "exam_url": exam_url,
         }
     )
 
@@ -991,6 +1015,11 @@ def run_playbook():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
+    try:
+        exam_url, generated_link = ensure_exam_url(certification_id, exam_url)
+    except ExambootTestGenerationError as exc:
+        return jsonify({"error": str(exc)}), 502
+
     if topic_type == COURSE_ART_TOPIC:
         existing_blog_id = _get_existing_presentation_blog_id(certification_id)
         if existing_blog_id:
@@ -1010,14 +1039,8 @@ def run_playbook():
     attach_image = bool(data.get("add_image"))
 
     exam_error: Optional[str] = None
-    exam_generated = False
-    try:
-        new_exam_url = _create_shareable_examboot_test(certification_id)
-    except ExambootTestGenerationError as exc:
-        exam_error = str(exc)
-    else:
-        exam_url = new_exam_url
-        exam_generated = True
+    exam_auto_generated = generated_link
+    exam_generated = True
 
     article_payload: Optional[dict] = None
     article_error: Optional[str] = None
@@ -1099,6 +1122,7 @@ def run_playbook():
         "certification_name": selection.certification_name,
         "exam_url": exam_url,
         "exam_generated": exam_generated,
+        "exam_auto_generated": exam_auto_generated,
         "exam_error": exam_error,
         "tweet": tweet_text,
         "tweet_response": tweet_result.response,
@@ -1134,13 +1158,9 @@ def run_playbook():
             "label": "Test Examboot",
             "success": exam_generated,
             "message": (
-                "Test Examboot généré"
-                if exam_generated
-                else (
-                    "Test Examboot non généré"
-                    if not exam_error
-                    else f"Test Examboot non généré : {exam_error}"
-                )
+                "Test Examboot généré automatiquement"
+                if exam_auto_generated
+                else "Lien Examboot existant utilisé"
             ),
         }
     )
@@ -1258,6 +1278,8 @@ def run_scheduled_publication(
     channels_set = {channel for channel in channels if channel}
     if not channels_set:
         raise ValueError("Aucun canal sélectionné pour la publication.")
+
+    exam_url, _ = ensure_exam_url(certification_id, exam_url)
 
     selection = _fetch_selection(provider_id, certification_id)
 
@@ -1637,6 +1659,11 @@ def generate_tweet():
         return jsonify({"error": str(exc)}), 400
 
     try:
+        exam_url, _ = ensure_exam_url(certification_id, exam_url)
+    except ExambootTestGenerationError as exc:
+        return jsonify({"error": str(exc)}), 502
+
+    try:
         selection = _fetch_selection(provider_id, certification_id)
         tweet_text = generate_certification_tweet(
             selection.certification_name,
@@ -1647,7 +1674,7 @@ def generate_tweet():
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
-    return jsonify({"tweet": tweet_text})
+    return jsonify({"tweet": tweet_text, "exam_url": exam_url})
 
 
 @articles_bp.route("/generate-linkedin", methods=["POST"])
@@ -1662,6 +1689,11 @@ def generate_linkedin():
         return jsonify({"error": str(exc)}), 400
 
     try:
+        exam_url, _ = ensure_exam_url(certification_id, exam_url)
+    except ExambootTestGenerationError as exc:
+        return jsonify({"error": str(exc)}), 502
+
+    try:
         selection = _fetch_selection(provider_id, certification_id)
         linkedin_post = generate_certification_linkedin_post(
             selection.certification_name,
@@ -1672,7 +1704,7 @@ def generate_linkedin():
     except Exception as exc:  # pragma: no cover - propagated to client for visibility
         return jsonify({"error": str(exc)}), 500
 
-    return jsonify({"linkedin_post": linkedin_post})
+    return jsonify({"linkedin_post": linkedin_post, "exam_url": exam_url})
 
 
 @articles_bp.route("/generate-course-art", methods=["POST"])
@@ -1720,6 +1752,11 @@ def publish_tweet():
         return jsonify({"error": str(exc)}), 400
 
     try:
+        exam_url, _ = ensure_exam_url(certification_id, exam_url)
+    except ExambootTestGenerationError as exc:
+        return jsonify({"error": str(exc)}), 502
+
+    try:
         selection = _fetch_selection(provider_id, certification_id)
         tweet_result = _run_tweet_workflow(
             selection,
@@ -1736,6 +1773,7 @@ def publish_tweet():
         "tweet_response": tweet_result.response,
         "tweet_published": tweet_result.published,
         "tweet_status_code": tweet_result.status_code,
+        "exam_url": exam_url,
     }
     if tweet_result.media_filename:
         payload["tweet_image"] = tweet_result.media_filename
@@ -1757,6 +1795,11 @@ def publish_linkedin():
         return jsonify({"error": str(exc)}), 400
 
     try:
+        exam_url, _ = ensure_exam_url(certification_id, exam_url)
+    except ExambootTestGenerationError as exc:
+        return jsonify({"error": str(exc)}), 502
+
+    try:
         selection = _fetch_selection(provider_id, certification_id)
         linkedin_result = _run_linkedin_workflow(
             selection,
@@ -1773,6 +1816,7 @@ def publish_linkedin():
         "linkedin_response": linkedin_result.response,
         "linkedin_published": linkedin_result.published,
         "linkedin_status_code": linkedin_result.status_code,
+        "exam_url": exam_url,
     }
     if linkedin_result.media_filename:
         payload["linkedin_image"] = linkedin_result.media_filename

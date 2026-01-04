@@ -104,7 +104,14 @@ from reloc import reloc_bp
 from pdf_importer import pdf_bp
 from quest import quest_bp
 from edit_questions import edit_question_bp
-from articles import articles_bp, render_x_callback, run_scheduled_publication, SocialPostResult
+from articles import (
+    articles_bp,
+    render_x_callback,
+    run_scheduled_publication,
+    SocialPostResult,
+    ensure_exam_url,
+    ExambootTestGenerationError,
+)
 from handsonlab import hol_bp
 
 # Instanciation de l'application Flask
@@ -769,7 +776,6 @@ def schedule_save():
         "subjectLabel",
         "contentType",
         "contentTypeLabel",
-        "link",
     ]
     missing = [field for field in required_fields if not entry.get(field)]
     if missing:
@@ -985,6 +991,20 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
     counters: Dict[str, int] = {"processed": 0, "succeeded": 0, "failed": 0}
     context.update_counters(**counters, date=date)
 
+    def _persist_generated_link(entry_data: dict, link_value: str) -> None:
+        payload = {
+            **entry_data,
+            "link": link_value,
+            "note": _serialise_schedule_note(entry_data.get("note") or "", bool(entry_data.get("addImage", True))),
+        }
+        try:
+            db.upsert_schedule_entry(payload)
+        except Exception as exc:  # pragma: no cover - defensive logging only
+            context.log(
+                f"[{context.job_id}] Impossible de mettre à jour le lien généré pour la planification "
+                f"{entry_data.get('id')}: {exc}"
+            )
+
     def _update_entry_status(entry_id: str | None, status: str, *, stamp: bool = False) -> None:
         if not entry_id:
             return
@@ -1006,7 +1026,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         cert_name = entry.get("certName") or "Certification inconnue"
         subject = entry.get("subjectLabel") or entry.get("subject") or "Sujet"
         content_label = entry.get("contentTypeLabel") or entry.get("contentType") or "Contenu"
-        link = entry.get("link") or "Lien non fourni"
+        link = (entry.get("link") or "").strip()
         time_of_day = entry.get("time") or "Heure non précisée"
         channels = entry.get("channels") or []
         attach_image = bool(entry.get("addImage", True))
@@ -1017,7 +1037,6 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
             f"({subject} – {content_label}) à {time_of_day}"
         )
         context.log(f"Canaux : {', '.join(channels) if channels else 'aucun canal spécifié'}")
-        context.log(f"Lien/source : {link}")
         include_image = entry.get("addImage", True)
         context.log(f"Visuel : {'avec image' if include_image else 'sans image'}")
         note = entry.get("note")
@@ -1041,6 +1060,31 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
             counters["processed"] += 1
             context.update_counters(**counters, date=date)
             continue
+
+        generated_link = False
+        try:
+            link, generated_link = ensure_exam_url(cert_id, link)
+        except ExambootTestGenerationError as exc:
+            counters["failed"] += 1
+            _update_entry_status(entry_id, "failed", stamp=True)
+            context.log(f"Impossible de générer le lien de test : {exc}")
+            _update_schedule_report(
+                date,
+                entry,
+                "failed",
+                message="Lien du test introuvable ou non générable.",
+            )
+            counters["processed"] += 1
+            context.update_counters(**counters, date=date)
+            continue
+
+        entry["link"] = link
+        if generated_link:
+            _persist_generated_link(entry, link)
+            context.log(f"Lien de test généré automatiquement : {link}")
+
+        display_link = link or "Lien non fourni"
+        context.log(f"Lien/source : {display_link}")
 
         _update_entry_status(entry_id, "running", stamp=True)
         try:
