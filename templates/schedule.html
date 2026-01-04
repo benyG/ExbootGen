@@ -345,6 +345,14 @@
       gap: 0.35rem;
     }
 
+    .auto-plan-row {
+      margin-top: 1rem;
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
     .weekday {
       text-align: center;
       color: var(--muted);
@@ -864,6 +872,10 @@
           <div class="weekday">Jeu</div><div class="weekday">Ven</div><div class="weekday">Sam</div><div class="weekday">Dim</div>
         </div>
         <div class="calendar-grid" id="calendarGrid" aria-live="polite"></div>
+        <div class="auto-plan-row">
+          <button type="button" class="secondary inline" id="autoPlanMonth">Planifier automatiquement le mois</button>
+          <div id="autoPlanStatus" class="status" role="status"></div>
+        </div>
       </section>
 
       <section class="panel">
@@ -1097,6 +1109,8 @@
     const openScheduleModalBtn = document.getElementById('openScheduleModal');
     const closeScheduleModalBtn = document.getElementById('closeScheduleModal');
     const modalDateValue = document.getElementById('modalDateValue');
+    const autoPlanBtn = document.getElementById('autoPlanMonth');
+    const autoPlanStatus = document.getElementById('autoPlanStatus');
 
     let providers = [];
     let certifications = [];
@@ -1575,6 +1589,14 @@
       if (type === 'success') executeStatus.classList.add('success');
     }
 
+    function setAutoPlanStatus(message, type = '') {
+      if (!autoPlanStatus) return;
+      autoPlanStatus.textContent = message;
+      autoPlanStatus.className = 'status';
+      if (type === 'error') autoPlanStatus.classList.add('error');
+      if (type === 'success') autoPlanStatus.classList.add('success');
+    }
+
     async function deleteEntry(item, button) {
       if (!item || !item.id) return;
       const dayKey = item.day || formatDateKey(selectedDate);
@@ -1844,6 +1866,24 @@
         setExecuteStatus(`Erreur lors du lancement : ${err.message}`, 'error');
       }
     });
+
+    if (autoPlanBtn) {
+      autoPlanBtn.addEventListener('click', async () => {
+        setAutoPlanStatus('Génération du planning en cours…');
+        setButtonLoading(autoPlanBtn, true, 'Planification…');
+        try {
+          const response = await fetch('/schedule/auto-plan', { method: 'POST' });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.error || 'Impossible de générer le planning');
+          await fetchServerPlanning();
+          setAutoPlanStatus(`Planning généré (${payload.count || 0} entrées).`, 'success');
+        } catch (err) {
+          setAutoPlanStatus(`Erreur : ${err.message}`, 'error');
+        } finally {
+          setButtonLoading(autoPlanBtn, false);
+        }
+      });
+    }
 
     scheduleForm.addEventListener('submit', async event => {
       event.preventDefault();
