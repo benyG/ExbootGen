@@ -267,6 +267,7 @@ def make_celery() -> Celery:
     broker_url = os.getenv("CELERY_BROKER_URL")
     result_backend = os.getenv("CELERY_RESULT_BACKEND")
     pool_limit_env = os.getenv("CELERY_POOL_LIMIT")
+    pool_limit_cap = _env_int("CELERY_POOL_LIMIT_CAP", 20, minimum=1)
     if pool_limit_env is not None:
         try:
             pool_limit = max(int(pool_limit_env), 1)
@@ -274,6 +275,7 @@ def make_celery() -> Celery:
             raise ValueError("CELERY_POOL_LIMIT doit être un entier positif") from None
     else:
         pool_limit = _default_parallelism(maximum=8)
+    pool_limit = min(pool_limit, pool_limit_cap)
 
     if eager:
         broker_url = broker_url or "memory://"
@@ -290,27 +292,34 @@ def make_celery() -> Celery:
     redis_max_connections_setting = os.getenv("CELERY_REDIS_MAX_CONNECTIONS")
     redis_max_connections: int | None = None
     if redis_max_connections_setting:
-        redis_max_connections = max(int(redis_max_connections_setting), 0)
+        redis_max_connections = max(min(int(redis_max_connections_setting), pool_limit_cap), 0)
 
     redis_socket_options = _redis_socket_options_from_env()
 
     if broker_url and broker_url.startswith("redis://"):
         broker_max_connections = int(os.getenv("CELERY_MAX_CONNECTIONS", str(pool_limit)))
+        broker_max_connections = max(min(broker_max_connections, pool_limit_cap), 1)
         broker_transport_options["max_connections"] = broker_max_connections
         broker_transport_options.update(redis_socket_options)
         if redis_max_connections is None:
             redis_max_connections = max(broker_max_connections, 0)
         else:
-            redis_max_connections = max(redis_max_connections, broker_max_connections)
+            redis_max_connections = max(min(redis_max_connections, pool_limit_cap), broker_max_connections)
 
     if result_backend and result_backend.startswith("redis://"):
         result_max_connections = int(os.getenv("CELERY_RESULT_MAX_CONNECTIONS", str(pool_limit)))
+        result_max_connections = max(min(result_max_connections, pool_limit_cap), 1)
         result_transport_options["max_connections"] = result_max_connections
         result_transport_options.update(redis_socket_options)
         if redis_max_connections is None:
             redis_max_connections = max(result_max_connections, 0)
         else:
-            redis_max_connections = max(redis_max_connections, result_max_connections)
+            redis_max_connections = max(min(redis_max_connections, pool_limit_cap), result_max_connections)
+
+    redis_healthcheck_period = _env_int("CELERY_REDIS_HEALTHCHECK_PERIOD", 60, minimum=60)
+    task_ignore_result = _env_flag("CELERY_TASK_IGNORE_RESULT", "1")
+    broker_retry_on_startup = _env_flag("CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP", "1")
+
     celery_app.conf.update(
         task_track_started=True,
         task_serializer="json",
@@ -319,6 +328,8 @@ def make_celery() -> Celery:
         broker_pool_limit=pool_limit,
         broker_transport_options=broker_transport_options,
         result_backend_transport_options=result_transport_options,
+        task_ignore_result=task_ignore_result,
+        broker_connection_retry_on_startup=broker_retry_on_startup,
     )
     celery_app.conf.beat_schedule = {
         "dispatch-due-schedules-every-minute": {
@@ -327,7 +338,7 @@ def make_celery() -> Celery:
         },
         "redis-healthcheck-every-minute": {
             "task": "tasks.redis_healthcheck",
-            "schedule": 60,
+            "schedule": redis_healthcheck_period,
         },
     }
 

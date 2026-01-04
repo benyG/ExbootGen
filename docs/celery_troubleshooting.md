@@ -28,6 +28,14 @@ Cette erreur provient de Redis : l'instance a atteint la limite de connexions s
 3. **Augmenter la capacité Redis**
    - Passer à un plan Redis avec plus de clients autorisés.
 
+### Actions correctives immédiates (Windows et Redis Cloud)
+
+1. **Adapter le lancement Windows** : le script `start_app.bat` démarre le worker en `eventlet` avec `-c 10 --pool-limit=20` pour limiter l'empreinte Redis. Ajustez ces valeurs uniquement si votre plan Redis autorise plus de connexions.
+2. **Limiter intelligemment les connexions** : réglez ou laissez par défaut `CELERY_POOL_LIMIT_CAP=20` (plafond appliqué aux limites broker/backend), `CELERY_MAX_CONNECTIONS` et `CELERY_RESULT_MAX_CONNECTIONS` pour contenir le nombre de clients Redis.
+3. **Désactiver les résultats non nécessaires** : `CELERY_TASK_IGNORE_RESULT=1` évite l'écriture du statut `SUCCESS` dans Redis.
+4. **Sécuriser le démarrage** : `CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP=1` force un retry sur Redis au boot au lieu d'abandonner immédiatement.
+5. **Espacer le healthcheck Redis** : la tâche `tasks.redis_healthcheck` est cadencée à `CELERY_REDIS_HEALTHCHECK_PERIOD` (défaut 60s, minimum 60s) pour éviter un ping toutes les secondes qui consommerait des connexions.
+
 ### Contexte côté code
 - Le pool Celery utilise par défaut un plafond raisonnable (_max 8_) via `CELERY_POOL_LIMIT` dans `app.py`. Sur un hébergeur limité, il peut être nécessaire de descendre cette valeur à `2` ou `1`.
 - Les mêmes variables `CELERY_MAX_CONNECTIONS` et `CELERY_RESULT_MAX_CONNECTIONS` contrôlent respectivement le transport broker et le backend résultat.
