@@ -56,7 +56,9 @@ call .venv\Scripts\activate.bat
 REM ---------------------------------------------------------------------------
 REM  Lancement du worker Celery dans une nouvelle fenetre
 REM ---------------------------------------------------------------------------
-start "Celery Worker" cmd /k "celery -A app.celery_app worker --loglevel=info"
+REM  Utilisation d'eventlet (-P) et limite de concurrence pour reduire les connexions Redis
+REM  Ajustez -c (concurrency) et --pool-limit si vous disposez de plus de marge Redis
+start "Celery Worker" cmd /k "celery -A app.celery_app worker --loglevel=info -P eventlet -c 10 --pool-limit=20"
 
 REM ---------------------------------------------------------------------------
 REM  Lancement de Celery Beat pour l'execution automatique des plannings
