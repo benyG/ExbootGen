@@ -77,10 +77,26 @@ def _dict_from_schedule_row(row, columns):
     job_id = data.get("job_id") or data.get("jobId")
     result_summary = data.get("result_summary") or data.get("summary")
 
+    def _format_time_of_day(raw_time):
+        if not raw_time:
+            return None
+        if isinstance(raw_time, time):
+            return raw_time.isoformat(timespec="minutes")
+        if isinstance(raw_time, timedelta):
+            combined = datetime.min + raw_time
+            return combined.time().isoformat(timespec="minutes")
+        if isinstance(raw_time, datetime):
+            return raw_time.time().isoformat(timespec="minutes")
+        try:
+            parsed = time.fromisoformat(str(raw_time))
+            return parsed.isoformat(timespec="minutes")
+        except Exception:
+            return str(raw_time)
+
     return {
         "id": data.get("id"),
         "day": data.get("day").isoformat() if data.get("day") else None,
-        "time": data.get("time_of_day").isoformat(timespec="minutes") if data.get("time_of_day") else None,
+        "time": _format_time_of_day(data.get("time_of_day")),
         "providerId": data.get("provider_id"),
         "providerName": data.get("provider_name"),
         "certId": data.get("cert_id"),

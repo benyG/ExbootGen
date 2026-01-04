@@ -208,6 +208,55 @@
       letter-spacing: 0.01em;
     }
 
+    .card-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .calendar-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(4,7,17,0.75);
+      backdrop-filter: blur(8px) saturate(130%);
+      z-index: 50;
+      padding: 1rem;
+    }
+
+    .modal-backdrop.is-open { display: flex; }
+
+    .modal {
+      background: var(--glass-strong);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      width: min(900px, 100%);
+      max-height: 90vh;
+      overflow: auto;
+      padding: 1.5rem;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
     .subtle {
       color: var(--muted);
       margin: 0.2rem 0 0.8rem;
@@ -601,6 +650,18 @@
 
     button.primary:hover { transform: translateY(-1px); box-shadow: 0 18px 40px rgba(124, 247, 255, 0.2); }
 
+    button.primary.inline {
+      width: auto;
+      padding-inline: 1.3rem;
+      margin-top: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      min-height: 44px;
+      box-shadow: 0 14px 28px rgba(124, 247, 255, 0.12);
+    }
+
     .status {
       margin-top: 0.6rem;
       font-size: 0.95rem;
@@ -679,6 +740,19 @@
       padding: 0.5rem 0.85rem;
       font-size: 0.92rem;
     }
+
+    .ghost {
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: transparent;
+      color: var(--text);
+      border-radius: 12px;
+      padding: 0.4rem 0.7rem;
+      cursor: pointer;
+      font-weight: 700;
+      transition: border 0.2s ease, transform 0.2s ease;
+    }
+
+    .ghost:hover { border-color: rgba(124, 247, 255, 0.5); transform: translateY(-1px); }
 
     .danger {
       width: fit-content;
@@ -776,10 +850,13 @@
             <span><span class="dot" style="background: #38bdf8; box-shadow: 0 0 0 3px rgba(14,165,233,0.25);"></span> X</span>
             <span><span class="dot" style="background: #a855f7; box-shadow: 0 0 0 3px rgba(168,85,247,0.18);"></span> Article</span>
           </div>
-          <div class="month-switcher">
-            <button type="button" id="prevMonth" aria-label="Mois précédent">◀</button>
-            <div id="currentMonthName" style="font-weight: 700; letter-spacing: 0.02em;"></div>
-            <button type="button" id="nextMonth" aria-label="Mois suivant">▶</button>
+          <div class="calendar-actions">
+            <div class="month-switcher">
+              <button type="button" id="prevMonth" aria-label="Mois précédent">◀</button>
+              <div id="currentMonthName" style="font-weight: 700; letter-spacing: 0.02em;"></div>
+              <button type="button" id="nextMonth" aria-label="Mois suivant">▶</button>
+            </div>
+            <button type="button" class="primary inline" id="openScheduleModal">Ajouter</button>
           </div>
         </div>
         <div class="weekday-row">
@@ -813,85 +890,93 @@
             <div class="report-list" id="reportList"></div>
           </div>
         </div>
-
-        <div class="card">
-          <h3>Programmer une action</h3>
-          <p class="subtle">Définissez les critères obligatoires : provider, certification, type de sujet, lien Examboot ou personnalisé, canal ciblé et heure précise.</p>
-          <form id="scheduleForm" class="grid-two">
-            <div>
-              <label for="providerSearch">Recherche provider</label>
-              <input type="search" id="providerSearch" placeholder="Rechercher un provider">
-            </div>
-            <div>
-              <label for="providerSelect">Providers disponibles</label>
-              <select id="providerSelect">
-                <option value="">Choisir un provider…</option>
-              </select>
-            </div>
-            <div>
-              <label for="certSearch">Recherche certification</label>
-              <input type="search" id="certSearch" placeholder="Rechercher une certification" disabled>
-            </div>
-            <div>
-              <label for="certSelect">Certifications</label>
-              <select id="certSelect" disabled>
-                <option value="">Choisir une certification…</option>
-              </select>
-            </div>
-            <div>
-              <label for="topicType">Type de sujet</label>
-              <select id="topicType">
-                <option value="">Sélectionner…</option>
-                <option value="certification_presentation">Présentation de certification</option>
-                <option value="preparation_methodology">Méthodologie & préparation</option>
-                <option value="experience_testimony">Retour d'expérience</option>
-                <option value="career_impact">Impact carrière</option>
-                <option value="engagement_community">Engagement communauté</option>
-              </select>
-            </div>
-            <div>
-              <label for="contentType">Format de publication</label>
-              <select id="contentType">
-                <option value="post_social">Post court (social)</option>
-                <option value="article_long">Article long</option>
-                <option value="teasing">Teasing certification</option>
-                <option value="ressource">Partage de ressource/test</option>
-              </select>
-            </div>
-            <div>
-              <label for="linkInput">Lien de référence</label>
-              <div class="input-with-action">
-                <input type="url" id="linkInput" placeholder="URL du test partagé Examboot ou lien personnalisé">
-                <button type="button" class="secondary" id="generateExamBtn" disabled>Générer un test</button>
-              </div>
-              <p class="inline-hint">Utilise la certification sélectionnée pour générer et préremplir le lien Examboot.</p>
-            </div>
-            <div>
-              <label for="timeInput">Heure de diffusion</label>
-              <input type="time" id="timeInput" value="09:00">
-            </div>
-            <div class="checkbox-group">
-              <label class="checkbox-pill"><input type="checkbox" value="linkedin" class="channel-checkbox"> LinkedIn</label>
-              <label class="checkbox-pill"><input type="checkbox" value="x" class="channel-checkbox"> X (Twitter)</label>
-              <label class="checkbox-pill"><input type="checkbox" value="article" class="channel-checkbox"> Article long</label>
-            </div>
-            <div class="option-row">
-              <label class="image-toggle">
-                <input type="checkbox" id="addImageToggle" checked>
-                <span>Ajouter une image à la publication</span>
-              </label>
-            </div>
-            <div>
-              <label for="noteInput">Notes internes (optionnel)</label>
-              <input type="search" id="noteInput" placeholder="CTA, angle éditorial, visuel attendu…">
-            </div>
-            <div style="grid-column: 1 / -1;">
-              <button type="submit" class="primary">Planifier pour la date sélectionnée</button>
-              <div id="formStatus" class="status" role="status"></div>
-            </div>
-          </form>
-        </div>
       </section>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="scheduleModal" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="scheduleModalTitle">
+      <div class="modal-header">
+        <div>
+          <p class="pill" style="margin:0;">Planifier une action</p>
+          <h3 id="scheduleModalTitle" style="margin:0.2rem 0 0;">Configurer la publication pour la date sélectionnée</h3>
+          <p class="subtle" id="modalDateLabel" style="margin:0;">Date sélectionnée : <strong id="modalDateValue"></strong></p>
+        </div>
+        <button type="button" class="ghost" id="closeScheduleModal" aria-label="Fermer la fenêtre">✕</button>
+      </div>
+      <form id="scheduleForm" class="grid-two">
+        <div>
+          <label for="providerSearch">Recherche provider</label>
+          <input type="search" id="providerSearch" placeholder="Rechercher un provider">
+        </div>
+        <div>
+          <label for="providerSelect">Providers disponibles</label>
+          <select id="providerSelect">
+            <option value="">Choisir un provider…</option>
+          </select>
+        </div>
+        <div>
+          <label for="certSearch">Recherche certification</label>
+          <input type="search" id="certSearch" placeholder="Rechercher une certification" disabled>
+        </div>
+        <div>
+          <label for="certSelect">Certifications</label>
+          <select id="certSelect" disabled>
+            <option value="">Choisir une certification…</option>
+          </select>
+        </div>
+        <div>
+          <label for="topicType">Type de sujet</label>
+          <select id="topicType">
+            <option value="">Sélectionner…</option>
+            <option value="certification_presentation">Présentation de certification</option>
+            <option value="preparation_methodology">Méthodologie & préparation</option>
+            <option value="experience_testimony">Retour d'expérience</option>
+            <option value="career_impact">Impact carrière</option>
+            <option value="engagement_community">Engagement communauté</option>
+          </select>
+        </div>
+        <div>
+          <label for="contentType">Format de publication</label>
+          <select id="contentType">
+            <option value="post_social">Post court (social)</option>
+            <option value="article_long">Article long</option>
+            <option value="teasing">Teasing certification</option>
+            <option value="ressource">Partage de ressource/test</option>
+          </select>
+        </div>
+        <div>
+          <label for="linkInput">Lien de référence</label>
+          <div class="input-with-action">
+            <input type="url" id="linkInput" placeholder="URL du test partagé Examboot ou lien personnalisé">
+            <button type="button" class="secondary" id="generateExamBtn" disabled>Générer un test</button>
+          </div>
+          <p class="inline-hint">Utilise la certification sélectionnée pour générer et préremplir le lien Examboot.</p>
+        </div>
+        <div>
+          <label for="timeInput">Heure de diffusion</label>
+          <input type="time" id="timeInput" value="09:00">
+        </div>
+        <div class="checkbox-group">
+          <label class="checkbox-pill"><input type="checkbox" value="linkedin" class="channel-checkbox"> LinkedIn</label>
+          <label class="checkbox-pill"><input type="checkbox" value="x" class="channel-checkbox"> X (Twitter)</label>
+          <label class="checkbox-pill"><input type="checkbox" value="article" class="channel-checkbox"> Article long</label>
+        </div>
+        <div class="option-row">
+          <label class="image-toggle">
+            <input type="checkbox" id="addImageToggle" checked>
+            <span>Ajouter une image à la publication</span>
+          </label>
+        </div>
+        <div>
+          <label for="noteInput">Notes internes (optionnel)</label>
+          <input type="search" id="noteInput" placeholder="CTA, angle éditorial, visuel attendu…">
+        </div>
+        <div style="grid-column: 1 / -1;">
+          <button type="submit" class="primary">Planifier pour la date sélectionnée</button>
+          <div id="formStatus" class="status" role="status"></div>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -922,6 +1007,10 @@
     const generateExamBtn = document.getElementById('generateExamBtn');
     const formStatus = document.getElementById('formStatus');
     const scheduleForm = document.getElementById('scheduleForm');
+    const scheduleModal = document.getElementById('scheduleModal');
+    const openScheduleModalBtn = document.getElementById('openScheduleModal');
+    const closeScheduleModalBtn = document.getElementById('closeScheduleModal');
+    const modalDateValue = document.getElementById('modalDateValue');
 
     let providers = [];
     let certifications = [];
@@ -964,17 +1053,35 @@
     }
 
     function mergeServerPlanning(entries) {
+      const idToDay = {};
+      Object.entries(planning).forEach(([day, items]) => {
+        items.forEach(item => {
+          if (item.id) idToDay[item.id] = day;
+        });
+      });
+
+      const nextPlanning = { ...planning };
       entries.forEach(entry => {
         const dayKey = entry.day;
-        planning[dayKey] = planning[dayKey] || [];
-        const existingIndex = planning[dayKey].findIndex(item => item.id === entry.id);
         const normalizedEntry = normaliseEntry(entry);
-        if (existingIndex >= 0) {
-          planning[dayKey][existingIndex] = { ...planning[dayKey][existingIndex], ...normalizedEntry };
-        } else {
-          planning[dayKey].push(normalizedEntry);
+        if (!normalizedEntry.id || !dayKey) return;
+
+        const previousDay = idToDay[normalizedEntry.id];
+        if (previousDay && previousDay !== dayKey && nextPlanning[previousDay]) {
+          nextPlanning[previousDay] = nextPlanning[previousDay].filter(item => item.id !== normalizedEntry.id);
+          if (!nextPlanning[previousDay].length) delete nextPlanning[previousDay];
         }
+
+        const dayEntries = nextPlanning[dayKey] ? [...nextPlanning[dayKey]] : [];
+        const existingIndex = dayEntries.findIndex(item => item.id === normalizedEntry.id);
+        if (existingIndex >= 0) {
+          dayEntries[existingIndex] = normalizedEntry;
+        } else {
+          dayEntries.push(normalizedEntry);
+        }
+        nextPlanning[dayKey] = dayEntries;
       });
+      planning = nextPlanning;
       savePlanning();
     }
 
@@ -1064,12 +1171,13 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(entry)
         });
+        const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
-          throw new Error(data.error || 'Erreur inconnue');
+          throw new Error(payload.error || 'Erreur inconnue');
         }
+        return { ...entry, id: payload.id || entry.id };
       } catch (err) {
-        setStatus(`Action sauvegardée en local mais non synchronisée : ${err.message}`, 'error');
+        throw err;
       }
     }
 
@@ -1517,6 +1625,46 @@
       }
     }
 
+    function updateModalDateLabel() {
+      if (!modalDateValue) return;
+      modalDateValue.textContent = formatDateLabel(selectedDate);
+    }
+
+    function toggleScheduleModal(open = true) {
+      if (!scheduleModal) return;
+      if (open) {
+        updateModalDateLabel();
+        scheduleModal.classList.add('is-open');
+        scheduleModal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        if (providerSearch) providerSearch.focus();
+      } else {
+        scheduleModal.classList.remove('is-open');
+        scheduleModal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+      }
+    }
+
+    if (openScheduleModalBtn) {
+      openScheduleModalBtn.addEventListener('click', () => toggleScheduleModal(true));
+    }
+
+    if (closeScheduleModalBtn) {
+      closeScheduleModalBtn.addEventListener('click', () => toggleScheduleModal(false));
+    }
+
+    if (scheduleModal) {
+      scheduleModal.addEventListener('click', event => {
+        if (event.target === scheduleModal) toggleScheduleModal(false);
+      });
+    }
+
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && scheduleModal && scheduleModal.classList.contains('is-open')) {
+        toggleScheduleModal(false);
+      }
+    });
+
     providerSearch.addEventListener('input', () => {
       const query = providerSearch.value.toLowerCase();
       const filtered = providers.filter(p => p.name.toLowerCase().includes(query));
@@ -1611,7 +1759,7 @@
       }
     });
 
-    scheduleForm.addEventListener('submit', event => {
+    scheduleForm.addEventListener('submit', async event => {
       event.preventDefault();
       const providerId = providerSelect.value;
       const certId = certSelect.value;
@@ -1652,14 +1800,33 @@
         status: 'queued'
       };
 
-      planning[dayKey] = planning[dayKey] || [];
-      planning[dayKey].push(entry);
-      savePlanning();
-      refreshReportForDay(dayKey);
-      persistEntryToServer({ ...entry, day: dayKey });
-      renderCalendar();
-      renderDayDetails();
-      setStatus('Action planifiée avec succès pour la date sélectionnée.', 'success');
+      try {
+        setStatus('Sauvegarde de la planification en cours…');
+        const savedEntry = await persistEntryToServer({ ...entry, day: dayKey });
+        const normalizedEntry = normaliseEntry(savedEntry);
+        planning[dayKey] = planning[dayKey] || [];
+        const existingIndex = planning[dayKey].findIndex(item => item.id === normalizedEntry.id);
+        if (existingIndex >= 0) {
+          planning[dayKey][existingIndex] = normalizedEntry;
+        } else {
+          planning[dayKey].push(normalizedEntry);
+        }
+        savePlanning();
+        refreshReportForDay(dayKey);
+        renderCalendar();
+        renderDayDetails();
+        scheduleForm.reset();
+        addImageToggle.checked = true;
+        certifications = [];
+        renderCertifications([]);
+        certSearch.disabled = true;
+        generateExamBtn.disabled = true;
+        updateActionsAvailability();
+        toggleScheduleModal(false);
+        setStatus('Action planifiée avec succès pour la date sélectionnée.', 'success');
+      } catch (err) {
+        setStatus(`Erreur lors de la sauvegarde : ${err.message}`, 'error');
+      }
     });
 
     prevMonthBtn.addEventListener('click', () => {
