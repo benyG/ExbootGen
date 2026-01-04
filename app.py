@@ -1425,6 +1425,9 @@ def dispatch_due_schedules() -> Dict[str, object]:
     due_by_day: Dict[str, List[dict]] = {}
     skipped_invalid: List[str] = []
     for entry in entries:
+        status = _normalise_schedule_status(entry.get("status"))
+        if status in {"succeeded", "failed", "running"}:
+            continue
         scheduled_at = _schedule_entry_datetime(entry)
         if scheduled_at is None:
             skipped_invalid.append(str(entry.get("id", "?")))
