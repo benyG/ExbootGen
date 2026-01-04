@@ -410,6 +410,122 @@
       font-size: 1rem;
     }
 
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: capitalize;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      color: var(--muted);
+      background: rgba(148, 163, 184, 0.08);
+    }
+
+    .status-badge::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      background: currentColor;
+      box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16);
+    }
+
+    .status-badge.success { color: #22c55e; border-color: rgba(34,197,94,0.4); background: rgba(34,197,94,0.12); }
+    .status-badge.error { color: #f472b6; border-color: rgba(244,114,182,0.4); background: rgba(244,114,182,0.14); }
+    .status-badge.pending { color: #f59e0b; border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.12); }
+    .status-badge.running { color: #60a5fa; border-color: rgba(96,165,250,0.4); background: rgba(96,165,250,0.12); }
+
+    .log-link {
+      margin-left: auto;
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 0.92rem;
+      text-decoration: none;
+    }
+
+    .report-block {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 14px;
+      background: rgba(12, 16, 29, 0.86);
+      border: 1px solid rgba(148,163,184,0.18);
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .report-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .report-list {
+      display: grid;
+      gap: 0.5rem;
+    }
+
+    .report-entry {
+      padding: 0.65rem 0.8rem;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      background: rgba(17, 22, 36, 0.75);
+      display: grid;
+      gap: 0.25rem;
+    }
+
+    .report-entry .title-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .report-entry .message {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .report-summary {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .report-pill {
+      display: inline-flex;
+      gap: 0.45rem;
+      align-items: center;
+      padding: 0.45rem 0.75rem;
+      border-radius: 12px;
+      background: rgba(12, 16, 29, 0.66);
+      border: 1px solid rgba(148,163,184,0.2);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .report-pill .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .report-pill.success { border-color: rgba(34,197,94,0.45); color: #22c55e; }
+    .report-pill.success .dot { background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,0.12); }
+    .report-pill.error { border-color: rgba(244,114,182,0.45); color: #f472b6; }
+    .report-pill.error .dot { background: #f472b6; box-shadow: 0 0 0 4px rgba(244,114,182,0.12); }
+    .report-pill.pending { border-color: rgba(245,158,11,0.45); color: #f59e0b; }
+    .report-pill.pending .dot { background: #f59e0b; box-shadow: 0 0 0 4px rgba(245,158,11,0.12); }
+    .report-pill.running { border-color: rgba(96,165,250,0.45); color: #60a5fa; }
+    .report-pill.running .dot { background: #60a5fa; box-shadow: 0 0 0 4px rgba(96,165,250,0.12); }
+
     .form-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -682,6 +798,20 @@
             <button id="executeDayBtn" class="secondary" type="button" disabled>Exécuter les actions du jour</button>
             <div id="executeStatus" class="status" role="status"></div>
           </div>
+          <div class="report-block">
+            <div class="report-header">
+              <div>
+                <h4 style="margin:0;">Rapport du jour</h4>
+                <p class="subtle" style="margin:0;">Visualisez rapidement les résultats des dernières exécutions, leurs messages clés et accédez aux logs de job.</p>
+              </div>
+              <div>
+                <label for="reportDateFilter" style="margin-bottom:0.2rem;">Filtrer par date</label>
+                <input type="date" id="reportDateFilter">
+              </div>
+            </div>
+            <div class="report-summary" id="reportSummary"></div>
+            <div class="report-list" id="reportList"></div>
+          </div>
         </div>
 
         <div class="card">
@@ -772,6 +902,9 @@
     const scheduleList = document.getElementById('scheduleList');
     const executeDayBtn = document.getElementById('executeDayBtn');
     const executeStatus = document.getElementById('executeStatus');
+    const reportList = document.getElementById('reportList');
+    const reportSummary = document.getElementById('reportSummary');
+    const reportDateFilter = document.getElementById('reportDateFilter');
     const currentMonthName = document.getElementById('currentMonthName');
     const monthLabel = document.getElementById('monthLabel');
     const prevMonthBtn = document.getElementById('prevMonth');
@@ -793,7 +926,8 @@
     let providers = [];
     let certifications = [];
     let filteredCerts = [];
-    let planning = normalisePlanning(loadPlanning());
+    let planning = {};
+    let scheduleReports = {};
 
     let viewDate = new Date();
     let selectedDate = new Date();
@@ -811,83 +945,98 @@
       return date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     }
 
-    function loadPlanning() {
-      try {
-        const raw = localStorage.getItem('exboot-schedule');
-        return raw ? JSON.parse(raw) : {};
-      } catch (err) {
-        console.warn('Impossible de charger la planification locale', err);
-        return {};
-      }
-    }
-
-    function savePlanning() {
-      try {
-        localStorage.setItem('exboot-schedule', JSON.stringify(planning));
-      } catch (err) {
-        console.warn('Impossible de sauvegarder la planification locale', err);
-      }
-    }
-
-    function mergeServerPlanning(entries) {
-      entries.forEach(entry => {
-        const dayKey = entry.day;
-        planning[dayKey] = planning[dayKey] || [];
-        const existingIndex = planning[dayKey].findIndex(item => item.id === entry.id);
-        const normalizedEntry = normaliseEntry(entry);
-        if (existingIndex >= 0) {
-          planning[dayKey][existingIndex] = { ...planning[dayKey][existingIndex], ...normalizedEntry };
-        } else {
-          planning[dayKey].push(normalizedEntry);
-        }
-      });
-      savePlanning();
-    }
-
     function normaliseEntry(entry) {
       if (!entry) return {};
       return {
         ...entry,
-        addImage: entry.addImage !== false
+        addImage: entry.addImage !== false,
+        status: normaliseStatus(entry.status || entry.state || 'queued'),
+        jobId: entry.jobId || entry.job_id || null,
+        resultSummary: entry.resultSummary || entry.summary || null
       };
     }
 
-    function normalisePlanning(raw) {
-      if (!raw || typeof raw !== 'object') return {};
-      const normalised = {};
-      Object.entries(raw).forEach(([day, entries]) => {
-        normalised[day] = Array.isArray(entries) ? entries.map(normaliseEntry) : [];
+    function setPlanningFromEntries(entries) {
+      planning = {};
+      (entries || []).forEach(entry => {
+        const normalised = normaliseEntry(entry);
+        if (!normalised.day) return;
+        planning[normalised.day] = planning[normalised.day] || [];
+        planning[normalised.day].push(normalised);
       });
-      return normalised;
+    }
+
+    const statusLabels = {
+      succeeded: 'succès',
+      success: 'succès',
+      failed: 'échec',
+      error: 'échec',
+      running: 'en cours',
+      queued: 'en attente',
+      pending: 'en attente'
+    };
+
+    function normaliseStatus(raw) {
+      if (!raw) return 'queued';
+      const value = raw.toString().toLowerCase();
+      if (['success', 'succeeded', 'completed'].includes(value)) return 'succeeded';
+      if (['failed', 'error'].includes(value)) return 'failed';
+      if (['running', 'in_progress'].includes(value)) return 'running';
+      if (value === 'pending') return 'pending';
+      return value;
+    }
+
+    function statusClass(status) {
+      switch (normaliseStatus(status)) {
+        case 'succeeded': return 'success';
+        case 'failed': return 'error';
+        case 'running': return 'running';
+        default: return 'pending';
+      }
+    }
+
+    function statusLabel(status) {
+      const normalized = normaliseStatus(status);
+      return statusLabels[normalized] || normalized;
+    }
+
+    function summariseEntry(entry) {
+      const provider = entry.providerName || 'Provider';
+      const cert = entry.certName || 'Certification';
+      const subject = entry.subjectLabel || entry.subject || 'Sujet';
+      const content = entry.contentTypeLabel || entry.contentType || 'Contenu';
+      const time = entry.time || 'Heure non précisée';
+      return `${time} • ${provider} · ${cert} (${subject} – ${content})`;
     }
 
     async function fetchServerPlanning() {
       try {
         const response = await fetch('/schedule/api');
         if (!response.ok) throw new Error('Réponse serveur invalide');
-        const entries = await response.json();
-        mergeServerPlanning(entries || []);
+        const payload = await response.json();
+        const entries = Array.isArray(payload) ? payload : payload.entries || [];
+        scheduleReports = payload.reports || {};
+        setPlanningFromEntries(entries || []);
         renderCalendar();
         renderDayDetails();
+        renderReport();
       } catch (err) {
         console.warn('Impossible de synchroniser la planification serveur', err);
       }
     }
 
     async function persistEntryToServer(entry) {
-      try {
-        const response = await fetch('/schedule/api', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(entry)
-        });
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
-          throw new Error(data.error || 'Erreur inconnue');
-        }
-      } catch (err) {
-        setStatus(`Action sauvegardée en local mais non synchronisée : ${err.message}`, 'error');
+      const response = await fetch('/schedule/api', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = data.error || 'Erreur lors de la sauvegarde en base.';
+        throw new Error(message);
       }
+      return data;
     }
 
     function renderCalendar() {
@@ -950,13 +1099,125 @@
           renderDayDetails();
         });
 
-        calendarGrid.appendChild(cell);
+      calendarGrid.appendChild(cell);
+    }
+    }
+
+    function buildReportFromEntries(dateKey, entries) {
+      const items = [];
+      const summary = { succeeded: 0, failed: 0, pending: 0, running: 0 };
+      let jobId = (scheduleReports[dateKey] && scheduleReports[dateKey].job_id) || null;
+
+      entries.forEach(entry => {
+        const status = normaliseStatus(entry.status);
+        const message = summariseEntry(entry);
+        if (!jobId && (entry.jobId || entry.job_id)) jobId = entry.jobId || entry.job_id;
+        items.push({
+          id: entry.id,
+          status,
+          message,
+          job_id: entry.jobId || entry.job_id || jobId,
+          channels: entry.channels || [],
+          last_run_at: entry.lastRunAt || entry.last_run_at || null
+        });
+        if (status === 'succeeded') summary.succeeded += 1;
+        else if (status === 'failed') summary.failed += 1;
+        else if (status === 'running') summary.running += 1;
+        else summary.pending += 1;
+      });
+
+      let overall = 'succeeded';
+      if (summary.failed > 0) {
+        overall = 'failed';
+      } else if (summary.running > 0) {
+        overall = 'running';
+      } else if (items.length && summary.pending === items.length) {
+        overall = 'queued';
       }
+
+      return {
+        job_id: jobId,
+        entries: items,
+        summary,
+        status: overall
+      };
+    }
+
+    function getReportForDate(dateKey) {
+      if (scheduleReports[dateKey]) return scheduleReports[dateKey];
+      const entries = planning[dateKey] || [];
+      return buildReportFromEntries(dateKey, entries);
+    }
+
+    function renderReport(targetDate) {
+      if (!reportList || !reportSummary) return;
+      const dateKey = targetDate || formatDateKey(selectedDate);
+      if (reportDateFilter && !reportDateFilter.value) {
+        reportDateFilter.value = dateKey;
+      }
+
+      const report = getReportForDate(dateKey);
+      const summary = (report && report.summary) || {};
+      const entries = (report && report.entries) || [];
+
+      reportSummary.innerHTML = '';
+      [
+        { key: 'succeeded', label: 'Succès', className: 'success' },
+        { key: 'failed', label: 'Échecs', className: 'error' },
+        { key: 'running', label: 'En cours', className: 'running' },
+        { key: 'pending', label: 'En attente', className: 'pending' }
+      ].forEach(item => {
+        const pill = document.createElement('div');
+        pill.className = `report-pill ${item.className}`;
+        pill.innerHTML = `<span class="dot"></span> <span>${item.label}</span> <strong>${summary[item.key] || 0}</strong>`;
+        reportSummary.appendChild(pill);
+      });
+
+      reportList.innerHTML = '';
+      if (!entries.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = 'Aucun rapport disponible pour cette date.';
+        reportList.appendChild(empty);
+        return;
+      }
+
+      entries.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'report-entry';
+        const header = document.createElement('div');
+        header.className = 'title-row';
+
+        const badge = document.createElement('span');
+        badge.className = `status-badge ${statusClass(item.status)}`;
+        badge.textContent = statusLabel(item.status);
+        header.appendChild(badge);
+
+        if (item.job_id) {
+          const link = document.createElement('a');
+          link.href = `/schedule/status/${encodeURIComponent(item.job_id)}`;
+          link.target = '_blank';
+          link.className = 'log-link';
+          link.textContent = `Log job #${item.job_id}`;
+          header.appendChild(link);
+        }
+
+        const message = document.createElement('div');
+        message.className = 'message';
+        message.textContent = item.message || 'Action planifiée';
+
+        row.appendChild(header);
+        row.appendChild(message);
+        reportList.appendChild(row);
+      });
     }
 
     function renderDayDetails() {
       const key = formatDateKey(selectedDate);
       const entries = (planning[key] || []).slice().sort((a, b) => a.time.localeCompare(b.time));
+      if (reportDateFilter) {
+        reportDateFilter.value = key;
+      }
       selectedDateTitle.textContent = formatDateLabel(selectedDate);
       selectedDateSummary.textContent = entries.length
         ? `${entries.length} action${entries.length > 1 ? 's' : ''} planifiée${entries.length > 1 ? 's' : ''} pour cette date.`
@@ -985,12 +1246,27 @@
         time.textContent = item.time || '—';
         header.appendChild(time);
 
+        const jobId = item.jobId || (scheduleReports[key] && scheduleReports[key].job_id);
+        const badge = document.createElement('span');
+        badge.className = `status-badge ${statusClass(item.status)}`;
+        badge.textContent = statusLabel(item.status);
+        header.appendChild(badge);
+
         item.channels.forEach(ch => {
           const chip = document.createElement('span');
           chip.className = `chip ${ch}`;
           chip.textContent = channelLabels[ch] || ch;
           header.appendChild(chip);
         });
+
+        if (jobId) {
+          const logLink = document.createElement('a');
+          logLink.href = `/schedule/status/${encodeURIComponent(jobId)}`;
+          logLink.target = '_blank';
+          logLink.className = 'log-link';
+          logLink.textContent = 'Log du job';
+          header.appendChild(logLink);
+        }
 
         const provider = document.createElement('div');
         provider.innerHTML = `<strong>${item.providerName || 'Provider'}</strong> · ${item.certName || 'Certification'}`;
@@ -1044,6 +1320,7 @@
 
         scheduleList.appendChild(card);
       });
+      renderReport(key);
     }
 
     function setStatus(message, type = '') {
@@ -1069,14 +1346,7 @@
         const response = await fetch(`/schedule/api/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Suppression impossible');
-        const dayEntries = planning[dayKey] || [];
-        planning[dayKey] = dayEntries.filter(entry => entry.id !== item.id);
-        if (planning[dayKey] && planning[dayKey].length === 0) {
-          delete planning[dayKey];
-        }
-        savePlanning();
-        renderCalendar();
-        renderDayDetails();
+        await fetchServerPlanning();
         setExecuteStatus('Planification supprimée.', 'success');
       } catch (err) {
         setExecuteStatus(`Erreur de suppression : ${err.message}`, 'error');
@@ -1096,6 +1366,7 @@
         const mode = data.mode || 'inline';
         const jobId = data.job_id || data.id || 'planifié';
         setExecuteStatus(`Job ${jobId} relancé (${mode}).`, 'success');
+        await fetchServerPlanning();
       } catch (err) {
         setExecuteStatus(`Erreur lors de la relance : ${err.message}`, 'error');
       } finally {
@@ -1248,6 +1519,7 @@
 
     executeDayBtn.addEventListener('click', async () => {
       const key = formatDateKey(selectedDate);
+      await fetchServerPlanning();
       const entries = planning[key] || [];
       if (!entries.length) {
         setExecuteStatus('Aucune action planifiée pour cette date.', 'error');
@@ -1263,7 +1535,9 @@
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Exécution impossible');
-        setExecuteStatus(`Job ${data.job_id || 'planifié'} en cours (${data.mode || 'inline'}).`, 'success');
+        const jobId = data.job_id || 'planifié';
+        setExecuteStatus(`Job ${jobId} en cours (${data.mode || 'inline'}).`, 'success');
+        await fetchServerPlanning();
       } catch (err) {
         setExecuteStatus(`Erreur lors du lancement : ${err.message}`, 'error');
       }
@@ -1306,16 +1580,17 @@
         time: timeInput.value || '09:00',
         channels: channelValues,
         note: (noteInput.value || '').trim(),
-        addImage: addImageToggle.checked
+        addImage: addImageToggle.checked,
+        status: 'queued'
       };
 
-      planning[dayKey] = planning[dayKey] || [];
-      planning[dayKey].push(entry);
-      savePlanning();
-      persistEntryToServer({ ...entry, day: dayKey });
-      renderCalendar();
-      renderDayDetails();
-      setStatus('Action planifiée avec succès pour la date sélectionnée.', 'success');
+      try {
+        await persistEntryToServer({ ...entry, day: dayKey });
+        await fetchServerPlanning();
+        setStatus('Action planifiée avec succès pour la date sélectionnée.', 'success');
+      } catch (err) {
+        setStatus(err && err.message ? err.message : 'Erreur lors de la sauvegarde en base.', 'error');
+      }
     });
 
     prevMonthBtn.addEventListener('click', () => {
@@ -1327,6 +1602,13 @@
       viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1);
       renderCalendar();
     });
+
+    if (reportDateFilter) {
+      reportDateFilter.addEventListener('change', () => {
+        const target = reportDateFilter.value || formatDateKey(selectedDate);
+        renderReport(target);
+      });
+    }
 
     fetchProviders().then(() => {
       renderCertifications([]);
