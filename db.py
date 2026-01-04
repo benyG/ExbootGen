@@ -274,6 +274,28 @@ def update_schedule_status(
     conn.close()
 
 
+def get_public_certifications():
+    """Return certifications marked as published along with their provider."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT c.id, c.name, c.prov AS provider_id, p.name AS provider_name
+        FROM courses c
+        LEFT JOIN provs p ON p.id = c.prov
+        WHERE c.pub = 1
+        ORDER BY c.name
+    """
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [
+        {"id": row[0], "name": row[1], "provider_id": row[2], "provider_name": row[3]}
+        for row in rows
+    ]
+
+
 def get_providers():
     conn = get_connection()
     cursor = conn.cursor()

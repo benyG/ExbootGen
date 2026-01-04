@@ -1,8 +1,8 @@
 import os
 import random
 import json
-import threading
 import time
+import threading
 import uuid
 from textwrap import dedent
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -10,7 +10,8 @@ from pathlib import Path
 from threading import Lock
 from types import SimpleNamespace
 from typing import Dict, Iterable, List, Optional, Tuple
-from datetime import datetime, date, time as dt_time
+from datetime import datetime, date, time as dt_time, timedelta
+from calendar import monthrange
 
 try:  # pragma: no cover - optional runtime dependency
     from celery import Celery  # type: ignore
@@ -750,6 +751,131 @@ def _schedule_entry_datetime(entry: Dict[str, object]) -> datetime | None:
     return datetime.combine(planned_day, planned_time)
 
 
+def _generate_auto_schedule(
+    certifications: List[dict],
+    *,
+    today: date | None = None,
+    rng: random.Random | None = None,
+) -> List[dict]:
+    """Create a full-month social + article plan following subject quotas.
+
+    Each day receives a LinkedIn+X publication; an article is added every two
+    days (and on mandatory subject days) to satisfy cadence requirements.
+    """
+
+    if not certifications:
+        raise ValueError("Au moins une certification publiée est requise.")
+
+    randomizer = rng or random.Random()
+    base_date = today or date.today()
+    start = date(base_date.year, base_date.month, 1)
+    days_in_month = monthrange(start.year, start.month)[1]
+    days = [start + timedelta(days=offset) for offset in range(days_in_month)]
+
+    subject_labels = {
+        "certification_presentation": "Présentation de certification",
+        "preparation_methodology": "Méthodologie & préparation",
+        "career_impact": "Impact carrière",
+        "experience_testimony": "Retour d'expérience",
+        "engagement_community": "Engagement communauté",
+    }
+    mandatory_subjects = ["certification_presentation", "preparation_methodology", "career_impact"]
+    subject_caps = {"experience_testimony": 2, "engagement_community": 3}
+    subject_counts = {key: 0 for key in subject_labels}
+
+    # Plan articles every other day; mandatory subject days always carry an article.
+    article_days: set[date] = {day for idx, day in enumerate(days) if idx % 2 == 0}
+    forced_subjects: dict[date, str] = {}
+    candidate_days = list(article_days) or list(days)
+    randomizer.shuffle(candidate_days)
+
+    for subject in mandatory_subjects:
+        if not candidate_days:
+            candidate_days = list(days)
+            randomizer.shuffle(candidate_days)
+        chosen_day = candidate_days.pop()
+        forced_subjects[chosen_day] = subject
+        article_days.add(chosen_day)
+        subject_counts[subject] += 1
+
+    def _pick_subject() -> str:
+        available = []
+        for subject in subject_labels:
+            cap = subject_caps.get(subject)
+            if cap is not None and subject_counts[subject] >= cap:
+                continue
+            available.append(subject)
+        if not available:
+            return "preparation_methodology"
+        return randomizer.choice(available)
+
+    def _choose_certification() -> dict:
+        return randomizer.choice(certifications)
+
+    entries: List[dict] = []
+    social_time_slots = ["08:45", "10:30", "14:00", "17:20"]
+    article_time_slots = ["11:45", "15:15", "19:00"]
+
+    for day in days:
+        subject = forced_subjects.get(day) or _pick_subject()
+        subject_counts[subject] += 1 if day not in forced_subjects else 0
+        cert = _choose_certification()
+        provider_id = (
+            cert.get("provider_id")
+            or cert.get("providerId")
+            or cert.get("prov")
+            or cert.get("provider")
+        )
+        provider_name = cert.get("provider_name") or cert.get("providerName") or cert.get("provider") or "Provider"
+        cert_id = cert.get("id") or cert.get("certId")
+        cert_name = cert.get("name") or cert.get("certName") or "Certification"
+
+        entries.append(
+            {
+                "id": uuid.uuid4().hex,
+                "day": day.isoformat(),
+                "time": randomizer.choice(social_time_slots),
+                "providerId": provider_id,
+                "providerName": provider_name,
+                "certId": cert_id,
+                "certName": cert_name,
+                "subject": subject,
+                "subjectLabel": subject_labels[subject],
+                "contentType": "post_social",
+                "contentTypeLabel": "Post court (social)",
+                "channels": ["linkedin", "x"],
+                "link": "",
+                "note": f"Planification automatique ({subject_labels[subject]}).",
+                "addImage": True,
+                "status": "queued",
+            }
+        )
+
+        if day in article_days:
+            entries.append(
+                {
+                    "id": uuid.uuid4().hex,
+                    "day": day.isoformat(),
+                    "time": randomizer.choice(article_time_slots),
+                    "providerId": provider_id,
+                    "providerName": provider_name,
+                    "certId": cert_id,
+                    "certName": cert_name,
+                    "subject": subject,
+                    "subjectLabel": subject_labels[subject],
+                    "contentType": "article_long",
+                    "contentTypeLabel": "Article long",
+                    "channels": ["article"],
+                    "link": "",
+                    "note": "Planification automatique – article long.",
+                    "addImage": True,
+                    "status": "queued",
+                }
+            )
+
+    return entries
+
+
 @app.route("/schedule/api", methods=["POST"])
 def schedule_save():
     """Persist a schedule entry."""
@@ -788,6 +914,50 @@ def schedule_save():
         return jsonify({"error": str(exc)}), 500
 
     return jsonify({"status": "saved", "id": entry["id"]})
+
+
+@app.route("/schedule/auto-plan", methods=["POST"])
+def schedule_auto_plan():
+    """Generate and persist a full-month schedule automatically."""
+
+    try:
+        public_certs = db.get_public_certifications()
+    except Exception as exc:  # pragma: no cover - defensive path
+        app.logger.exception("Echec de récupération des certifications publiées")
+        return jsonify({"error": f"Chargement des certifications impossible: {exc}"}), 500
+
+    if not public_certs:
+        return jsonify({"error": "Aucune certification publiée disponible pour l'auto-planification."}), 400
+
+    try:
+        generated_entries = _generate_auto_schedule(public_certs)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:  # pragma: no cover - defensive path
+        app.logger.exception("Echec de génération automatique du planning")
+        return jsonify({"error": "Echec de génération automatique du planning."}), 500
+
+    persisted = 0
+    planned_days: set[str] = set()
+    for entry in generated_entries:
+        payload = {
+            **entry,
+            "addImage": True,
+            "note": _serialise_schedule_note(entry.get("note") or "", True),
+        }
+        try:
+            db.upsert_schedule_entry(payload)
+        except Exception as exc:  # pragma: no cover - defensive path
+            app.logger.exception("Echec de sauvegarde d'une planification auto pour le %s", entry.get("day"))
+            return (
+                jsonify({"error": f"Sauvegarde interrompue après {persisted} entrées : {exc}"}),
+                500,
+            )
+        persisted += 1
+        if entry.get("day"):
+            planned_days.add(entry["day"])
+
+    return jsonify({"status": "planned", "count": persisted, "days": sorted(planned_days)})
 
 
 @app.route("/schedule/api/<entry_id>", methods=["DELETE"])
