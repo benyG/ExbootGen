@@ -926,7 +926,7 @@
     let providers = [];
     let certifications = [];
     let filteredCerts = [];
-    let planning = normalisePlanning(loadPlanning());
+    let planning = {};
     let scheduleReports = {};
 
     let viewDate = new Date();
@@ -945,39 +945,6 @@
       return date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     }
 
-    function loadPlanning() {
-      try {
-        const raw = localStorage.getItem('exboot-schedule');
-        return raw ? JSON.parse(raw) : {};
-      } catch (err) {
-        console.warn('Impossible de charger la planification locale', err);
-        return {};
-      }
-    }
-
-    function savePlanning() {
-      try {
-        localStorage.setItem('exboot-schedule', JSON.stringify(planning));
-      } catch (err) {
-        console.warn('Impossible de sauvegarder la planification locale', err);
-      }
-    }
-
-    function mergeServerPlanning(entries) {
-      entries.forEach(entry => {
-        const dayKey = entry.day;
-        planning[dayKey] = planning[dayKey] || [];
-        const existingIndex = planning[dayKey].findIndex(item => item.id === entry.id);
-        const normalizedEntry = normaliseEntry(entry);
-        if (existingIndex >= 0) {
-          planning[dayKey][existingIndex] = { ...planning[dayKey][existingIndex], ...normalizedEntry };
-        } else {
-          planning[dayKey].push(normalizedEntry);
-        }
-      });
-      savePlanning();
-    }
-
     function normaliseEntry(entry) {
       if (!entry) return {};
       return {
@@ -989,13 +956,57 @@
       };
     }
 
-    function normalisePlanning(raw) {
-      if (!raw || typeof raw !== 'object') return {};
-      const normalised = {};
-      Object.entries(raw).forEach(([day, entries]) => {
-        normalised[day] = Array.isArray(entries) ? entries.map(normaliseEntry) : [];
+    function setPlanningFromEntries(entries) {
+      planning = {};
+      (entries || []).forEach(entry => {
+        const normalised = normaliseEntry(entry);
+        if (!normalised.day) return;
+        planning[normalised.day] = planning[normalised.day] || [];
+        planning[normalised.day].push(normalised);
       });
-      return normalised;
+    }
+
+    const statusLabels = {
+      succeeded: 'succès',
+      success: 'succès',
+      failed: 'échec',
+      error: 'échec',
+      running: 'en cours',
+      queued: 'en attente',
+      pending: 'en attente'
+    };
+
+    function normaliseStatus(raw) {
+      if (!raw) return 'queued';
+      const value = raw.toString().toLowerCase();
+      if (['success', 'succeeded', 'completed'].includes(value)) return 'succeeded';
+      if (['failed', 'error'].includes(value)) return 'failed';
+      if (['running', 'in_progress'].includes(value)) return 'running';
+      if (value === 'pending') return 'pending';
+      return value;
+    }
+
+    function statusClass(status) {
+      switch (normaliseStatus(status)) {
+        case 'succeeded': return 'success';
+        case 'failed': return 'error';
+        case 'running': return 'running';
+        default: return 'pending';
+      }
+    }
+
+    function statusLabel(status) {
+      const normalized = normaliseStatus(status);
+      return statusLabels[normalized] || normalized;
+    }
+
+    function summariseEntry(entry) {
+      const provider = entry.providerName || 'Provider';
+      const cert = entry.certName || 'Certification';
+      const subject = entry.subjectLabel || entry.subject || 'Sujet';
+      const content = entry.contentTypeLabel || entry.contentType || 'Contenu';
+      const time = entry.time || 'Heure non précisée';
+      return `${time} • ${provider} · ${cert} (${subject} – ${content})`;
     }
 
     const statusLabels = {
@@ -1048,7 +1059,7 @@
         const payload = await response.json();
         const entries = Array.isArray(payload) ? payload : payload.entries || [];
         scheduleReports = payload.reports || {};
-        mergeServerPlanning(entries || []);
+        setPlanningFromEntries(entries || []);
         renderCalendar();
         renderDayDetails();
         renderReport();
@@ -1058,19 +1069,17 @@
     }
 
     async function persistEntryToServer(entry) {
-      try {
-        const response = await fetch('/schedule/api', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(entry)
-        });
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
-          throw new Error(data.error || 'Erreur inconnue');
-        }
-      } catch (err) {
-        setStatus(`Action sauvegardée en local mais non synchronisée : ${err.message}`, 'error');
+      const response = await fetch('/schedule/api', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = data.error || 'Erreur lors de la sauvegarde en base.';
+        throw new Error(message);
       }
+      return data;
     }
 
     function renderCalendar() {
@@ -1175,16 +1184,6 @@
         summary,
         status: overall
       };
-    }
-
-    function refreshReportForDay(dateKey) {
-      if (!dateKey) return;
-      const entries = planning[dateKey] || [];
-      if (!entries.length) {
-        delete scheduleReports[dateKey];
-        return;
-      }
-      scheduleReports[dateKey] = buildReportFromEntries(dateKey, entries);
     }
 
     function getReportForDate(dateKey) {
@@ -1390,15 +1389,7 @@
         const response = await fetch(`/schedule/api/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Suppression impossible');
-        const dayEntries = planning[dayKey] || [];
-        planning[dayKey] = dayEntries.filter(entry => entry.id !== item.id);
-        if (planning[dayKey] && planning[dayKey].length === 0) {
-          delete planning[dayKey];
-        }
-        savePlanning();
-        refreshReportForDay(dayKey);
-        renderCalendar();
-        renderDayDetails();
+        await fetchServerPlanning();
         setExecuteStatus('Planification supprimée.', 'success');
       } catch (err) {
         setExecuteStatus(`Erreur de suppression : ${err.message}`, 'error');
@@ -1426,8 +1417,7 @@
         scheduleReports[dayKey] = buildReportFromEntries(dayKey, dayEntries);
         savePlanning();
         setExecuteStatus(`Job ${jobId} relancé (${mode}).`, 'success');
-        renderCalendar();
-        renderDayDetails();
+        await fetchServerPlanning();
       } catch (err) {
         setExecuteStatus(`Erreur lors de la relance : ${err.message}`, 'error');
       } finally {
@@ -1580,6 +1570,7 @@
 
     executeDayBtn.addEventListener('click', async () => {
       const key = formatDateKey(selectedDate);
+      await fetchServerPlanning();
       const entries = planning[key] || [];
       if (!entries.length) {
         setExecuteStatus('Aucune action planifiée pour cette date.', 'error');
@@ -1596,16 +1587,8 @@
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Exécution impossible');
         const jobId = data.job_id || 'planifié';
-        const dayEntries = planning[key] || [];
-        dayEntries.forEach(entry => {
-          entry.jobId = jobId;
-          entry.status = 'queued';
-        });
-        scheduleReports[key] = buildReportFromEntries(key, dayEntries);
-        savePlanning();
-        renderCalendar();
-        renderDayDetails();
         setExecuteStatus(`Job ${jobId} en cours (${data.mode || 'inline'}).`, 'success');
+        await fetchServerPlanning();
       } catch (err) {
         setExecuteStatus(`Erreur lors du lancement : ${err.message}`, 'error');
       }
@@ -1652,14 +1635,13 @@
         status: 'queued'
       };
 
-      planning[dayKey] = planning[dayKey] || [];
-      planning[dayKey].push(entry);
-      savePlanning();
-      refreshReportForDay(dayKey);
-      persistEntryToServer({ ...entry, day: dayKey });
-      renderCalendar();
-      renderDayDetails();
-      setStatus('Action planifiée avec succès pour la date sélectionnée.', 'success');
+      try {
+        await persistEntryToServer({ ...entry, day: dayKey });
+        await fetchServerPlanning();
+        setStatus('Action planifiée avec succès pour la date sélectionnée.', 'success');
+      } catch (err) {
+        setStatus(err && err.message ? err.message : 'Erreur lors de la sauvegarde en base.', 'error');
+      }
     });
 
     prevMonthBtn.addEventListener('click', () => {
