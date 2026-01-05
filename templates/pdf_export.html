@@ -85,6 +85,15 @@
     .header-inner { width: min(1080px, 92vw); margin: 0 auto; padding: 1.2rem 0; display: flex; align-items: center; justify-content: space-between; }
     .brand { display: flex; align-items: center; gap: 0.8rem; font-family: 'Space Grotesk', sans-serif; }
     .brand-mark { width: 2.6rem; height: 2.6rem; border-radius: 14px; display: grid; place-items: center; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.26)); border: 1px solid rgba(148,163,184,0.25); color: #7cf7ff; font-weight: 700; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.16); }
+    .nav-toggle { display: none; width: 2.8rem; height: 2.8rem; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 19, 32, 0.68); color: var(--text-primary); align-items: center; justify-content: center; cursor: pointer; transition: transform 0.35s var(--transition), background 0.35s var(--transition); }
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+    .nav-toggle span, .nav-toggle span::before, .nav-toggle span::after { display: block; width: 18px; height: 2px; background: currentColor; border-radius: 999px; position: relative; transition: transform 0.35s ease, opacity 0.3s ease; }
+    .nav-toggle span::before, .nav-toggle span::after { content: ''; position: absolute; left: 0; }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
     .stellar-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-left: 1.2rem; border-radius: 16px; padding: 0.35rem; background: rgba(8, 12, 24, 0.55); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
     .stellar-nav a { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.05rem; border-radius: 14px; text-decoration: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition); }
     .stellar-nav a::after { content: ''; position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14)); opacity: 0; transition: opacity 0.35s var(--transition); z-index: -1; }
@@ -95,7 +104,9 @@
 
     @media (max-width: 960px) {
       .header-inner { flex-direction: column; align-items: flex-start; gap: 0.8rem; }
-      .stellar-nav { width: 100%; margin-left: 0; }
+      .nav-toggle { display: inline-flex; align-self: flex-end; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 0.6rem; }
+      .stellar-nav { width: 100%; margin-left: 0; flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
       .stellar-nav a { width: 100%; justify-content: center; }
     }
   </style>
@@ -110,6 +121,9 @@
           <div style="color:var(--text-muted); font-size:0.9rem;">Export PDF de questions</div>
         </div>
       </div>
+      <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+        <span></span>
+      </button>
       {% set active_page = 'pdf_export' %}
       {% include '_nav.html' %}
     </div>
@@ -151,6 +165,29 @@
   </div>
 
   <script>
+    const navToggle = document.getElementById('navToggle');
+    const nav = document.getElementById('stellarNav');
+    const navMediaQuery = window.matchMedia('(max-width: 960px)');
+
+    if (navToggle && nav) {
+      navToggle.addEventListener('click', () => {
+        const isOpen = navToggle.classList.toggle('is-open');
+        document.body.classList.toggle('nav-open', isOpen);
+        navToggle.setAttribute('aria-expanded', isOpen);
+      });
+    }
+
+    const closeNavOnDesktop = () => {
+      if (!navMediaQuery.matches && navToggle) {
+        document.body.classList.remove('nav-open');
+        navToggle.classList.remove('is-open');
+        navToggle.setAttribute('aria-expanded', 'false');
+      }
+    };
+
+    navMediaQuery.addEventListener('change', closeNavOnDesktop);
+    closeNavOnDesktop();
+
     const providerSelect = document.getElementById('provider');
     const certSelect = document.getElementById('certification');
     const form = document.getElementById('exportForm');

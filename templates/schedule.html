@@ -109,6 +109,48 @@
       letter-spacing: 0.01em;
     }
 
+    .nav-toggle {
+      display: none;
+      width: 2.8rem;
+      height: 2.8rem;
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(15, 19, 32, 0.68);
+      color: var(--text);
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.35s var(--transition), background 0.35s var(--transition);
+    }
+
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+
+    .nav-toggle span,
+    .nav-toggle span::before,
+    .nav-toggle span::after {
+      display: block;
+      width: 18px;
+      height: 2px;
+      background: currentColor;
+      border-radius: 999px;
+      position: relative;
+      transition: transform 0.35s ease, opacity 0.3s ease;
+    }
+
+    .nav-toggle span::before,
+    .nav-toggle span::after {
+      content: '';
+      position: absolute;
+      left: 0;
+    }
+
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
     .stellar-nav {
       display: flex;
       flex-wrap: wrap;
@@ -191,6 +233,24 @@
 
     @media (max-width: 1024px) {
       .layout { grid-template-columns: 1fr; }
+      .top-bar { align-items: flex-start; }
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav {
+        max-height: 600px;
+        opacity: 1;
+        pointer-events: auto;
+        margin-top: 1rem;
+      }
+      .stellar-nav {
+        flex-direction: column;
+        max-height: 0;
+        opacity: 0;
+        pointer-events: none;
+        overflow: hidden;
+        transition: max-height 0.4s ease, opacity 0.4s ease;
+        width: 100%;
+      }
+      .stellar-nav a { width: 100%; justify-content: center; }
     }
 
     .card {
@@ -830,6 +890,9 @@
             <div style="color: var(--muted); font-size: 0.9rem;">Coordination sociale et éditoriale</div>
           </div>
         </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
+        </button>
       </div>
       {% set active_page = 'schedule' %}
       {% include '_nav.html' %}
@@ -1079,6 +1142,29 @@
   </div>
 
   <script>
+    const navToggle = document.getElementById('navToggle');
+    const nav = document.getElementById('stellarNav');
+    const navMediaQuery = window.matchMedia('(max-width: 1024px)');
+
+    if (navToggle && nav) {
+      navToggle.addEventListener('click', () => {
+        const isOpen = navToggle.classList.toggle('is-open');
+        document.body.classList.toggle('nav-open', isOpen);
+        navToggle.setAttribute('aria-expanded', isOpen);
+      });
+    }
+
+    const resetNavState = () => {
+      if (!navMediaQuery.matches && navToggle) {
+        document.body.classList.remove('nav-open');
+        navToggle.classList.remove('is-open');
+        navToggle.setAttribute('aria-expanded', 'false');
+      }
+    };
+
+    navMediaQuery.addEventListener('change', resetNavState);
+    resetNavState();
+
     const calendarGrid = document.getElementById('calendarGrid');
     const selectedDateTitle = document.getElementById('selectedDateTitle');
     const selectedDateSummary = document.getElementById('selectedDateSummary');
