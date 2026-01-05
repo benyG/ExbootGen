@@ -63,7 +63,7 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for environments with
         return 60
 
 
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
 try:  # pragma: no cover - optional runtime dependency
     from kombu.exceptions import OperationalError  # type: ignore
@@ -538,6 +538,11 @@ def pick_secondary_domains(all_domains, primary_domain):
 @app.route("/")
 def home():
     return render_template("home.html")
+
+
+@app.route("/favicon.ico")
+def favicon():
+    return send_from_directory(str(BASE_DIR / "static"), "favicon.svg", mimetype="image/svg+xml")
 
 
 @app.route("/schedule")
