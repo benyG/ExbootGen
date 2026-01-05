@@ -81,10 +81,53 @@
     .result-card small { display: block; color: var(--muted); margin-top: 0.35rem; }
     .result-card .src { color: #c084fc; font-size: 0.9rem; }
 
-    .editor { background: var(--panel-soft); border: 1px solid var(--border); border-radius: var(--radius); min-height: 200px; padding: 1rem; }
-    .toolbar { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.75rem; }
-    .toolbar button { background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text); padding: 0.55rem 0.75rem; border-radius: 10px; cursor: pointer; }
+    .editor {
+      background: var(--panel-soft);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      min-height: 220px;
+      padding: 1rem;
+      outline: none;
+    }
+    .editor[data-placeholder]:empty::before {
+      content: attr(data-placeholder);
+      color: var(--muted);
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-bottom: 0.75rem;
+      padding: 0.35rem;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding-right: 0.35rem;
+      border-right: 1px solid var(--border);
+    }
+    .toolbar-group:last-of-type { border-right: none; padding-right: 0; }
+    .toolbar button {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.45rem 0.55rem;
+      border-radius: 10px;
+      cursor: pointer;
+      min-width: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      font-weight: 600;
+    }
+    .toolbar button span { opacity: 0.9; }
     .toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+    .toolbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
     .answers { display: flex; flex-direction: column; gap: 0.75rem; }
     .answer-item { background: var(--panel-soft); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem; display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: center; }
@@ -174,17 +217,43 @@
         </div>
       </div>
 
-      <div class="toolbar">
-        <button type="button" data-cmd="bold"><strong>Gras</strong></button>
-        <button type="button" data-cmd="italic"><em>Italique</em></button>
-        <button type="button" data-cmd="underline"><u>Souligné</u></button>
-        <button type="button" data-cmd="insertUnorderedList">Liste</button>
-        <button type="button" data-cmd="insertOrderedList">Liste numérotée</button>
-        <button type="button" id="addTable">Tableau</button>
-        <button type="button" id="addImage">Image</button>
-        <button type="button" data-cmd="createLink">Lien</button>
+      <div class="toolbar" id="editorToolbar" role="toolbar" aria-label="Outils de mise en forme">
+        <div class="toolbar-group">
+          <button type="button" data-command="bold" aria-label="Gras"><strong>B</strong></button>
+          <button type="button" data-command="italic" aria-label="Italique"><em>I</em></button>
+          <button type="button" data-command="underline" aria-label="Souligné"><u>U</u></button>
+          <button type="button" data-command="strikeThrough" aria-label="Barré"><span style="text-decoration: line-through;">S</span></button>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" data-command="subscript" aria-label="Indice">x<sub>2</sub></button>
+          <button type="button" data-command="superscript" aria-label="Exposant">x<sup>2</sup></button>
+          <button type="button" data-command="createLink" aria-label="Insérer un lien">🔗</button>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" data-command="formatBlock" data-value="H2" aria-label="Titre niveau 2">H2</button>
+          <button type="button" data-command="formatBlock" data-value="H3" aria-label="Titre niveau 3">H3</button>
+          <button type="button" data-command="formatBlock" data-value="P" aria-label="Paragraphe">¶</button>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" data-command="justifyLeft" aria-label="Aligner à gauche">⟸</button>
+          <button type="button" data-command="justifyCenter" aria-label="Centrer">⇔</button>
+          <button type="button" data-command="justifyRight" aria-label="Aligner à droite">⟹</button>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" data-command="insertUnorderedList" aria-label="Liste à puces">•</button>
+          <button type="button" data-command="insertOrderedList" aria-label="Liste numérotée">1.</button>
+          <button type="button" data-command="formatBlock" data-value="BLOCKQUOTE" aria-label="Citation">❝</button>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" data-command="insertImage" aria-label="Insérer une image">🖼️</button>
+          <button type="button" data-command="removeFormat" aria-label="Effacer la mise en forme">⨯</button>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" data-command="undo" aria-label="Annuler">↺</button>
+          <button type="button" data-command="redo" aria-label="Rétablir">↻</button>
+        </div>
       </div>
-      <div class="editor" id="questionEditor" contenteditable="true" aria-label="Éditeur de question"></div>
+      <div class="editor" id="questionEditor" contenteditable="true" aria-label="Éditeur de question" data-placeholder="Commencez à saisir le texte de la question…"></div>
 
       <div style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
         <h3 style="margin: 0;">Réponses</h3>
@@ -341,40 +410,32 @@
       answersContainer.appendChild(wrapper);
     }
 
-    function execCommand(cmd) {
-      if (cmd === 'createLink') {
-        const url = prompt('URL du lien');
-        if (url) document.execCommand(cmd, false, url);
-        return;
+    function applyCommand(command, value = null) {
+      switch (command) {
+        case 'createLink': {
+          const url = prompt('URL du lien');
+          if (url) document.execCommand('createLink', false, url);
+          break;
+        }
+        case 'insertImage': {
+          const url = prompt('URL de l\'image');
+          if (url) document.execCommand('insertImage', false, url);
+          break;
+        }
+        case 'formatBlock':
+          document.execCommand('formatBlock', false, value || 'P');
+          break;
+        default:
+          document.execCommand(command, false, value);
       }
-      document.execCommand(cmd, false, null);
       questionEditor.focus();
     }
 
-    document.querySelectorAll('.toolbar button[data-cmd]').forEach(btn => {
-      btn.addEventListener('click', () => execCommand(btn.dataset.cmd));
-    });
-
-    document.getElementById('addTable').addEventListener('click', () => {
-      const rows = parseInt(prompt('Nombre de lignes ?', '2'), 10) || 2;
-      const cols = parseInt(prompt('Nombre de colonnes ?', '2'), 10) || 2;
-      let html = '<table style="width:100%; border-collapse: collapse;">';
-      for (let r = 0; r < rows; r++) {
-        html += '<tr>';
-        for (let c = 0; c < cols; c++) {
-          html += '<td style="border:1px solid #94a3b8; padding:6px;">Cellule</td>';
-        }
-        html += '</tr>';
-      }
-      html += '</table>';
-      document.execCommand('insertHTML', false, html);
-    });
-
-    document.getElementById('addImage').addEventListener('click', () => {
-      const url = prompt('URL de l\'image');
-      if (url) {
-        document.execCommand('insertImage', false, url);
-      }
+    const editorToolbar = document.getElementById('editorToolbar');
+    editorToolbar.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-command]');
+      if (!button) return;
+      applyCommand(button.dataset.command, button.dataset.value || null);
     });
 
     document.getElementById('addAnswer').addEventListener('click', () => addAnswerField());
