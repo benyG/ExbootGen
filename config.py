@@ -90,6 +90,13 @@ LINKEDIN_ASSET_REGISTER_URL = os.environ.get(
 GUI_PASSWORD = os.environ.get("GUI_PASSWORD", "admin")
 
 # ---------------------------------------------------------------------------
+# Google Cloud Storage (image uploads)
+# ---------------------------------------------------------------------------
+# Bucket and path used to store images pasted in the Edit Question editor.
+GCS_BUCKET_NAME = os.environ.get("GCS_BUCKET_NAME", "exambootstorage")
+GCS_UPLOAD_FOLDER = os.environ.get("GCS_UPLOAD_FOLDER", "img_question")
+
+# ---------------------------------------------------------------------------
 # Question distribution
 # ---------------------------------------------------------------------------
 # ``DISTRIBUTION`` defines how many questions must be generated for each
@@ -143,4 +150,3 @@ DISTRIBUTION = {
 
 # Total number of questions expected per domain when following the distribution.
 TOTAL_QUESTIONS_PER_DOMAIN = _distribution_total(DISTRIBUTION)
-

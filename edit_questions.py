@@ -1,8 +1,13 @@
 from flask import Blueprint, render_template, jsonify, request, g
 import json
+import mimetypes
 import mysql.connector
+from google.cloud import storage
+from werkzeug.utils import secure_filename
+from uuid import uuid4
+from pathlib import Path
 
-from config import DB_CONFIG
+from config import DB_CONFIG, GCS_BUCKET_NAME, GCS_UPLOAD_FOLDER
 
 edit_question_bp = Blueprint('edit_question', __name__)
 
@@ -232,3 +237,45 @@ def api_update_question(question_id: int):
 
     cur.close()
     return jsonify({'status': 'updated', 'answers': len(answers)})
+
+
+@edit_question_bp.route('/api/upload-image', methods=['POST'])
+def api_upload_image():
+    """Upload an image to Google Cloud Storage and return its public URL."""
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'Aucun fichier image reçu.'}), 400
+
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'error': 'Le fichier est vide.'}), 400
+
+    mimetype = file.mimetype or ''
+    if not mimetype.startswith('image/'):
+        return jsonify({'error': "Seuls les fichiers d'image sont autorisés."}), 400
+
+    # Build a safe filename and storage path
+    original_name = secure_filename(file.filename) or 'image'
+    extension = Path(original_name).suffix
+    if not extension:
+        guessed = mimetypes.guess_extension(mimetype) or '.png'
+        extension = guessed
+    object_name = f"{GCS_UPLOAD_FOLDER.rstrip('/')}/{uuid4().hex}{extension}"
+
+    try:
+        client = storage.Client()
+        bucket = client.bucket(GCS_BUCKET_NAME)
+        blob = bucket.blob(object_name)
+
+        file.stream.seek(0)
+        blob.upload_from_file(file.stream, content_type=mimetype)
+        # Ensure the file is publicly accessible
+        blob.make_public()
+
+        return jsonify({
+            'url': blob.public_url,
+            'bucket': GCS_BUCKET_NAME,
+            'path': object_name,
+        })
+    except Exception as exc:  # pragma: no cover - runtime safety
+        return jsonify({'error': f"Échec de l'upload : {exc}"}), 500
