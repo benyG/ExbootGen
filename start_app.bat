@@ -43,6 +43,13 @@ set "CELERY_RESULT_BACKEND=redis://:%REDIS_PASSWORD%@%REDIS_HOST%/0"
 REM === Mot de passe de l'interface ===
 set "GUI_PASSWORD=admin"
 
+REM === Google Cloud Storage (upload images depuis l'éditeur) ===
+REM  Point GOOGLE_APPLICATION_CREDENTIALS vers la clé JSON du compte de service
+REM  GCS autorisé sur le bucket cible.
+set "GOOGLE_APPLICATION_CREDENTIALS=C:\chemin\vers\service-account.json"
+set "GCS_BUCKET_NAME=exambootstorage"
+set "GCS_UPLOAD_FOLDER=img_question"
+
 REM ---------------------------------------------------------------------------
 REM  Activation de l'environnement virtuel
 REM ---------------------------------------------------------------------------
