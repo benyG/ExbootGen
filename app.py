@@ -81,6 +81,7 @@ from config import (
     API_REQUEST_DELAY,
     DISTRIBUTION,
     GUI_PASSWORD,
+    SESSION_INACTIVITY_MINUTES,
     _distribution_total,
 )
 import db
@@ -124,6 +125,8 @@ app = Flask(
 )
 # Minimal secret key required for session-based authentication protecting the UI
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "exboot-secret-key")
+# Enforce a maximum duration of inactivity before sessions expire.
+app.permanent_session_lifetime = timedelta(minutes=SESSION_INACTIVITY_MINUTES)
 
 
 def _ensure_login_template() -> None:
@@ -1544,6 +1547,15 @@ def _is_authenticated() -> bool:
     return session.get("user") == "exboot"
 
 
+def _session_expired(last_activity: float | None) -> bool:
+    """Return True when the session has been idle longer than the allowed duration."""
+
+    if last_activity is None:
+        return False
+    inactivity_seconds = SESSION_INACTIVITY_MINUTES * 60
+    return time.time() - last_activity > inactivity_seconds
+
+
 @app.before_request
 def require_login():
     """Protect the application with a simple session-based login check."""
@@ -1553,6 +1565,12 @@ def require_login():
         return None
 
     if _is_authenticated():
+        if _session_expired(session.get("last_activity")):
+            session.clear()
+            login_url = url_for("login", next=request.url)
+            return redirect(login_url)
+        session.permanent = True
+        session["last_activity"] = time.time()
         return None
 
     login_url = url_for("login", next=request.url)
@@ -1567,6 +1585,8 @@ def login():
         password = request.form.get("password", "")
         if username == "exboot" and password == GUI_PASSWORD:
             session["user"] = "exboot"
+            session["last_activity"] = time.time()
+            session.permanent = True
             target = request.args.get("next") or url_for("home")
             return redirect(target)
         error = "Nom d'utilisateur ou mot de passe incorrect."
@@ -1575,7 +1595,7 @@ def login():
 
 @app.route("/logout")
 def logout():
-    session.pop("user", None)
+    session.clear()
     return redirect(url_for("login"))
 
 
