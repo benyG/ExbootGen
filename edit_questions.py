@@ -269,11 +269,15 @@ def api_upload_image():
 
         file.stream.seek(0)
         blob.upload_from_file(file.stream, content_type=mimetype)
-        # Ensure the file is publicly accessible
-        blob.make_public()
+
+        # ``blob.make_public`` is not compatible with buckets using uniform
+        # access control and triggers ``storage.objects.getIamPolicy``
+        # permission errors.  The bucket already grants public read access, so
+        # the object URL is directly accessible without modifying ACLs.
+        public_url = blob.public_url
 
         return jsonify({
-            'url': blob.public_url,
+            'url': public_url,
             'bucket': GCS_BUCKET_NAME,
             'path': object_name,
         })
