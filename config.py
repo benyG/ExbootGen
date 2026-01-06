@@ -89,6 +89,11 @@ LINKEDIN_ASSET_REGISTER_URL = os.environ.get(
 # environment variable to avoid hard-coding sensitive values in the codebase.
 GUI_PASSWORD = os.environ.get("GUI_PASSWORD", "admin")
 
+# Session inactivity timeout (in minutes) applied to the web interface.  The
+# session is invalidated after a period without activity to reduce the risk of
+# unintended access when a user leaves the application open.
+SESSION_INACTIVITY_MINUTES = int(os.environ.get("SESSION_INACTIVITY_MINUTES", "30"))
+
 # ---------------------------------------------------------------------------
 # Google Cloud Storage (image uploads)
 # ---------------------------------------------------------------------------
