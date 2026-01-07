@@ -890,16 +890,18 @@ def generate_lab_blueprint(
     - Main domain description: {domain_descr}
     - Lab Difficulty: {difficulty}
     - Expected step types (JSON): {step_types_json}
+    The lab should allow the user to gain practical experience on the subject matter.
+    
     STRICT SCOPE:
     1. Only use the information that can be logically derived from the official domain objectives and description.
-    2. Do NOT introduce topics, services, products, features or commands that are not clearly part of this domain for this certification.
-    3. If you are unsure whether a topic is in scope, consider it OUT of scope and do not create a question on it.
-    4. If you cannot map the question to at least one explicit objective of the domain, DO NOT include that question.
+    2. Do NOT introduce topics, services, products, features or commands that are not clearly part of the domain and certification specified.
+    3. If you are unsure whether a topic is in scope, consider it OUT of scope and do not create a step to cover it.
+    4. If you cannot map a question step to at least one explicit objective of the domain, DO NOT include that question.
     5. If the certification is identified as a technology vendor-neutral provider, the question should take this into account.
     Each lab must be valid JSON only, following all rules below.
-    The next section details its key structure.
 
-    ### Expected JSON Structure
+    ### Strictly Expected JSON Structure:
+    Uses only the intended JSON objects and keys as defined in the structure below.
     ## Root Object
     schema_version: always "0.2.0".
     lab: contains all scenario data.
@@ -1124,9 +1126,8 @@ def generate_lab_blueprint(
     correct: list of one or more correct IDs.
     explanations (optional): feedback per choice.
     validators: may include {"kind":"quiz","expect":["a","c"]}.
-    #6. anticipation
-    keep the quiz structure but focus questions on projection or prospective analysis.
-    ### Additional rules and compatibility
+    
+    ### RULES AND COMPATIBILITY
     All steps must follow the scenario_md narrative and the learning goal for the chosen certification domains. Each step must update or check the world state (world_patch, form.model_path, architecture.world_path, etc.).
     Hints must be progressive and in context.
     Honor {step_types_json}: include each requested step type at least once.
