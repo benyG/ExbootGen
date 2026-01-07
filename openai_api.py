@@ -83,7 +83,7 @@ writing_rules_tweet = """
 
 ARTICLE_PROMPT_TEMPLATES = {
     "certification_presentation": f"""
-Retrieve official information about exam certification: {certification} from vendor {vendor}.
+Retrieve official information about exam certification: {{certification}} from vendor {{vendor}}.
 Your mission is to write a SEO optimized, clear, actionable and up-to-date article, which presents the certification to the reader.
 Reference Sources: only from official website of the specified certification vendor.
 If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate informations.
@@ -193,7 +193,7 @@ End with a call to action to “Start your free practice test today: {{exam_url}
 """,
     "preparation_methodology": f"""
 Write a LinkedIn post giving practical study tips for passing the certification exam: {{certification}} from vendor {{vendor}}.
-Start with a question like “Getting ready for {certification} from @{vendor}? Here’s how to study smarter.”,
+Start with a question like “Getting ready for {{certification}} from @{{vendor}}? Here’s how to study smarter.”,
 give 3 concise preparation tips. 
 {writing_rules_linkedin}
 End with a link to try a free ExamBoot test simulation: {{exam_url}}.
