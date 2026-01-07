@@ -30,22 +30,69 @@ DOMAIN_PROMPT_TEMPLATE = (
     "]"
 )
 
+writing_rules = """ 
+- Format the response in clean, basic HTML (h1–h3, p, ul, ol, strong).
+- Provide one clear, SEO-optimized H1 title (short and impactful).
+- Identify and consistently target one primary keyword and several
+  semantically related keywords.
+- Match the article to clear search intent (informational or educational).
+- Write a compelling introduction that clearly states the problem and what the reader will learn.
+- Use a logical structure with scannable H2/H3 headings.
+- Target length: 1,000–1,500 words.
+- Tone: factual, motivating, confident, without unexplained jargon.
+- Use concrete examples, explanations, or reasoning (avoid generic advice).
+- Write complete, natural, non-robotic sentences.
+- End with a concise conclusion summarizing key takeaways.
+- Do NOT use hashtags.
+- Use emojis only if explicitly relevant and sparingly (preferably in the introduction only).
+"""
+
+writing_rules_linkedin = """ 
+- First sentence should be shocking to drive attention.
+- Formulates complete, non-robotic sentences
+- Target length: 500–1100 words.
+- Tone: motivating, factual, without unexplained jargon.
+- Improve overall writing quality. Be clear and impactful. Simplify language for broader accessibility.
+- Add relevant emojis with moderation and at least 5 hashtags for increased engagement.
+- Return only the LinkedIn post body without extra commentary.
+"""
+
+writing_rules_linkedin = """ 
+- First sentence must be a strong hook that challenges an assumption, highlights a surprising fact, or creates tension.
+- Target audience: Professionals preparing for certifications, Students, recent graduates, HR professionals, Recruiters, Training & Development managers, Educators, trainers, Engineers, Project managers, Consultants, Technical specialists, Career advancement seekers, Learning & Development executives, Educational program directors
+- Target length: 180–400 words.
+- Use short paragraphs (1–3 lines) for mobile readability.
+- Tone: motivating, factual, confident, without unexplained jargon.
+- Use concrete examples or observations (not generic advice).
+- Emojis: optional, relevant, no more than 1 per 3–4 paragraphs,
+  placed only at paragraph starts or line breaks (never mid-sentence).
+- Include 5–8 relevant hashtags at the end, not embedded in the text.
+- End with a light engagement prompt (question or reflection).
+- Return only the LinkedIn post body, with no commentary or metadata.
+"""
+
+writing_rules_tweet = """ 
+- Return only the tweet content without additional commentary.
+- Max 280 characters.
+- First line must contain a strong hook (bold claim, insight, or contrast).
+- Focus on a single clear idea (no multi-topic tweets).
+- Tone: concise, confident, human (no corporate or robotic phrasing).
+- Add relevant emojis sparingly (0–2 max), never mid-sentence.
+- Include exactly 2–3 relevant hashtags at the end of the tweet.
+"""
+
 ARTICLE_PROMPT_TEMPLATES = {
-    "certification_presentation": """
+    "certification_presentation": f"""
 Retrieve official information about exam certification: {certification} from vendor {vendor}.
 Your mission is to write a SEO optimized, clear, actionable and up-to-date article, which presents the certification to the reader.
 Reference Sources: only from official website of the specified certification vendor.
 If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate informations.
 RULES:
-- Format your response in basic HTML.
-- Titles should be short.
-- Title and content must be SEO optimized.
-- respect scrupulously the given Article structure only
-- Formulates complete, non-robotic sentences
-- Target length: 1,000–1700 words.
+{writing_rules}
+- Respect scrupulously the given Article structure only
 - Study tip must be ≤50 words
-- Tone: motivating, factual, without unexplained jargon.
 - Zero fluff: each section must deliver useful and actionable information.
+
 STRUCTURE:
 - Certification objectives
 - Targeted professions.
@@ -54,57 +101,45 @@ STRUCTURE:
 - Exam plan: Precise format (duration, number of questions, types), language, passing score, retake policy, validity/recertification.
 - How ExamBoot.net helps candidates prepare
 - Study tip
-- A call to action with a link to start a free test: {exam_url}.
+- A call to action with a link to start a free test:  {{exam_url}}.
 """,
-    "preparation_methodology": """
-Write a SEO optimized, clear, actionable and up-to-date step-by-step guide on how to Prepare for the certification exam: {certification} from {vendor}.
+    "preparation_methodology": f"""
+Write a SEO optimized, clear, actionable and up-to-date step-by-step guide on how to Prepare for the certification exam: {{certification}} from vendor {{vendor}}.
 Include study duration, key topics, common mistakes, and preparation resources.
 Integrate how ExamBoot.net features like qustions bank, AI coach, performances analysis and realistic simulations, can help accelerate learning.
 Format with headings, bullet points, and a motivational tone.
-Explicitly include the link to start a free ExamBoot test: {exam_url}.
+Explicitly include the link to start a free ExamBoot test:  {{exam_url}}.
 RULES:
-- Format your response in HTML.
-- Title and content must be SEO optimized.
-- Formulates complete, non-robotic sentences
-- Target length: 1,000–1500 words.
+{writing_rules}
 """,
-    "experience_testimony": """
-Using a realistic, third-person fictional character, write a clear, actionable, storytelling-style blog post in the form of a testimonial, testifying to how the character passed with the help of ExamBoot the certification exam: {certification} from {vendor}.
+    "experience_testimony": f"""
+Using a realistic, third-person fictional character, write a clear, actionable, storytelling-style blog post in the form of a testimonial, testifying to how the character passed with the help of ExamBoot the certification exam: {{certification}} from vendor {{vendor}}.
 Structure: Context, motivation, challenges, strategy, results.
 Make it inspiring and motivating.
 Include realistic study milestones, use of ExamBoot.net, and takeaways for other candidates.
-End with a call to action containing the link to start a free test: {exam_url}.
+End with a call to action containing the link to start a free test:  {{exam_url}}.
 RULES:
-- Format your response in HTML.
-- Title and content must be SEO optimized.
-- Formulates complete, non-robotic sentences
-- Target length: 1,000–1500 words.
+{writing_rules}
 """,
-    "career_impact": """
-Write a data-driven blog post on how the certification exam: {certification} from {vendor} can Boost Your career Opportunities.
+    "career_impact": f"""
+Write a data-driven blog post on how the certification exam: {{certification}} from vendor {{vendor}} can Boost Your career Opportunities.
 Include statistics (average salaries, job titles, demand trends), examples of companies hiring certified professionals, and how ExamBoot.net helps candidates stand out.
-Conclude with a call to action featuring the link to start a free ExamBoot test: {exam_url}.
+Conclude with a call to action featuring the link to start a free ExamBoot test:  {{exam_url}}.
 RULES:
-- Format your response in HTML.
-- Title and content must be SEO optimized.
-- Formulates complete, non-robotic sentences
-- Target length: 1,000–1500 words.
+{writing_rules}
 """,
-    "engagement_community": """
-Write an interactive blog post titled “Can You Pass This Mini {certification} from {vendor} Quiz?”
+    "engagement_community": f"""
+Write an interactive blog post titled “Can You Pass This Mini {{certification}} from vendor {{vendor}} Quiz?”
 Include 5–10 sample questions with answers and explanations.
 Add a section inviting readers to try the full simulation on ExamBoot.net and share their scores online.
-Insert a call to action with the link to start a free ExamBoot test: {exam_url}.
+Insert a call to action with the link to start a free ExamBoot test:  {{exam_url}}.
 RULES:
-- Format your response in HTML.
-- Title and content must be SEO optimized.
-- Formulates complete, non-robotic sentences
-- Target length: 1,000–1500 words.
+{writing_rules}
 """,
 }
 
 CERTIFICATION_PRESENTATION_JSON_PROMPT = """
-You are an expert certification advisor helping candidates understand {certification} from {vendor}.
+You are an expert certification advisor helping candidates understand {certification} from vendor {vendor}.
 Produce a JSON object describing the certification with the following exact structure:
 {{
   "prerequisites": ["text1", "text2", "text3"],
@@ -120,86 +155,68 @@ Guidelines:
 """
 
 TWEET_PROMPT_TEMPLATES = {
-    "certification_presentation": """
-Compose a short, punchy tweet introducing the certification: {certification} from {vendor}.
+    "certification_presentation": f"""
+Compose a short, punchy tweet introducing the certification: {{certification}} from vendor {{vendor}}.
 Highlight 1 key benefit, 1 career outcome, and mention ExamBoot.net as the platform to prepare.
-Include 3 relevant hashtags and a link to the free practice test: {exam_url}.
-Use emojis but with moderation.
-Return only the tweet text without additional commentary.
-max 280 characters.
+Include a link to the free practice test:  {{exam_url}}.
+{writing_rules_tweet}
 """,
-    "preparation_methodology": """
-Tweet actionable exam prep tips for certification exam: {certification} from {vendor}.
-Follow with 3 quick bullet points, then “💡Train smarter with ExamBoot free test: {exam_url}”.
-Include 3 relevant hashtags and no additional commentary.
-Use emojis but with moderation.
-max 280 characters.
+    "preparation_methodology": f"""
+Tweet actionable exam prep tips for certification exam: {{certification}} from vendor {{vendor}}.
+Follow with 3 quick bullet points, then “💡Train smarter with ExamBoot free test:  {{exam_url}}”.
+{writing_rules_tweet}
 """,
-    "experience_testimony": """
-Tweet a motivational cote on how to pass the certification exam: {certification} from {vendor} after specified weeks of focused prep.
-Try ExamBoot.net for your journey with a link to start a free test: 👉{exam_url}
-Include 3 relevant hashtags.
-Use emojis but with moderation.
-Return only the tweet body.
-max 280 characters.
+    "experience_testimony": f"""
+Tweet a motivational cote on how to pass the certification exam: {{certification}} from vendor {{vendor}} after specified weeks of focused prep.
+Try ExamBoot.net for your journey with a link to start a free test: 👉 {{exam_url}}
+{writing_rules_tweet}
 """,
-    "career_impact": """
-Tweet key value insight from certification exam: {certification} from {vendor}.
-Include 3 relevant hashtags and a link to the free practice test: {exam_url}.
-Use emojis but with moderation.
-Return only the tweet content.
-max 280 characters.
+    "career_impact": f"""
+Tweet key value insight from certification exam: {{certification}} from vendor {{vendor}}.
+Include a link to the free practice test:  {{exam_url}}.
+{writing_rules_tweet}
 """,
-    "engagement_community": """
-Tweet an engaging challenge post inviting readers to take a quick quiz related to the certification exam: {certification} from {vendor} 
+    "engagement_community": f"""
+Tweet an engaging challenge post inviting readers to take a quick quiz related to the certification exam: {{certification}} from vendor {{vendor}} 
 Try the free practice test now on ExamBoot.net and share your score!
-👉 {exam_url}
-Include 3 relevant hashtags and no additional commentary.
-Use emojis but with moderation.
-Return only the tweet content.
-max 280 characters.
+👉  {{exam_url}}
+{writing_rules_tweet}
 """,
 }
 
 LINKEDIN_POST_PROMPT_TEMPLATES = {
-    "certification_presentation": """
-Create an engaging LinkedIn post announcing a guide about the certification: {certification} from {vendor}.
+    "certification_presentation": f"""
+Create an engaging LinkedIn post announcing a guide about the certification: {{certification}} from vendor {{vendor}}.
 Explain why professionals should consider it, what career paths it opens, and how they can start preparing using ExamBoot.net.
-End with a call to action to “Start your free practice test today: {exam_url}.”
-Include 3 relevant hashtags.
-Use emojis but with moderation.
-Return only the LinkedIn post body without extra commentary.
+{writing_rules_linkedin}
+End with a call to action to “Start your free practice test today: {{exam_url}}.”
 """,
-    "preparation_methodology": """
-Write a LinkedIn post giving practical study tips for passing the certification exam: {certification} from {vendor}.
+    "preparation_methodology": f"""
+Write a LinkedIn post giving practical study tips for passing the certification exam: {{certification}} from vendor {{vendor}}.
 Start with a question like “Getting ready for {certification} from @{vendor}? Here’s how to study smarter.”,
-give 3 concise preparation tips, and end with a link to try a free ExamBoot simulation: {exam_url}.
-Use emojis but with moderation.
-Include 3 relevant hashtags and no additional commentary.
+give 3 concise preparation tips. 
+{writing_rules_linkedin}
+End with a link to try a free ExamBoot test simulation: {{exam_url}}.
 """,
-    "experience_testimony": """
-Using a realistic, third-person fictional character, write a clear, actionable, storytelling-style blog post in the form of a testimonial, testifying to how the character passed with the help of ExamBoot the certification exam: {certification} from {vendor}.
+    "experience_testimony": f"""
+Using a realistic, third-person fictional character, write a clear, actionable, storytelling-style blog post in the form of a testimonial, testifying to how the character passed with the help of ExamBoot the certification exam: {{certification}} from vendor {{vendor}}.
 Make it inspiring and motivating (Context, motivation, challenges, strategy, results).
 Use a storytelling tone, mention ExamBoot.net as part of the preparation journey, and end with encouragement for others to start.
-A call to action with a link to start a free test: {exam_url}.
-Use emojis but with moderation.
-Include 3 relevant hashtags and return only the post text.
+{writing_rules_linkedin}
+A call to action with a link to start a free test: {{exam_url}}.
 """,
-    "career_impact": """
-Draft a professional LinkedIn post highlighting the career benefits of the certification exam: {certification} from {vendor}.
+    "career_impact": f"""
+Draft a professional LinkedIn post highlighting the career benefits of the certification exam: {{certification}} from vendor {{vendor}}.
 Include statistics (average salaries, job titles, demand trends), examples of companies hiring certified professionals, and how ExamBoot.net helps candidates stand out.
-Use clear bullet points and finish with “Start your certification journey with ExamBoot.net.”
-A call to action with a link to start a free test: {exam_url}.
-Include 3 relevant hashtags.
-Use emojis but with moderation.
-Return only the LinkedIn post body text.
+Use clear bullet points and finish with “Start your certification journey with ExamBoot.net.”.
+{writing_rules_linkedin}
+A call to action with a link to start a free test: {{exam_url}}.
 """,
-    "engagement_community": """
-Create an engaging LinkedIn post inviting readers to take a quick quiz for the certification exam: {certification} from {vendor}.
-Example intro: “Think you know [field topic]? Test yourself with our simulated test for {certification} from {vendor}!”
-Add a link {exam_url} to the shareable test and encourage users to share their results.
-Use emojis but with moderation.
-Include 3 relevant hashtags and no additional commentary.
+    "engagement_community": f"""
+Create an engaging LinkedIn post inviting readers to take a quick quiz for the certification exam: {{certification}} from vendor {{vendor}}.
+Example intro: “Think you know [field topic]? Test yourself with our simulated test for {{certification}} from vendor {{vendor}}!”.
+{writing_rules_linkedin}
+Add a link  {{exam_url}} to the shareable test and encourage users to share their results.
 """,
 }
 
