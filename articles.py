@@ -1275,9 +1275,13 @@ def run_scheduled_publication(
     or persist outcomes.
     """
 
-    channels_set = {channel for channel in channels if channel}
+    allowed_channels = {"article", "linkedin", "x"}
+    channels_set = {channel for channel in channels if channel in allowed_channels}
     if not channels_set:
-        raise ValueError("Aucun canal sélectionné pour la publication.")
+        invalid = ", ".join({channel for channel in channels if channel}) or "aucun canal"  # type: ignore[arg-type]
+        raise ValueError(
+            f"Aucun canal sélectionné pour la publication (canaux reçus : {invalid})."
+        )
 
     exam_url, _ = ensure_exam_url(certification_id, exam_url)
 

@@ -899,7 +899,7 @@ def generate_lab_blueprint(
     Each lab must be valid JSON only, following all rules below.
     The next section details its key structure.
 
-    ### Expected JSON Structure
+    ### Strictly Expected JSON schema (Match the schema exactly as shown):
     ## Root Object
     schema_version: always "0.2.0".
     lab: contains all scenario data.
@@ -910,7 +910,7 @@ def generate_lab_blueprint(
     variables (optional): reusable definitions (type: "choice"|"string"|"number", with possible choices, min, max, etc.). Use via {{variable}}.
     scoring: {"max_points": <sum of step points>}.
     timer: {"mode": "countdown", "seconds": x} — Duration must be estimated during generation.
-    assets: array of downloadable or inline resources (id, kind, filename, mime, inline:true, content_b64). Resources must always be realistic.
+    assets: array of realistic downloadable or inline resources (id, kind, filename, mime, inline:true, content_b64).
     steps: ordered list of detailed steps (≥ {min_steps}), following type-specific rules.
     # Reference JSON template:
     {
@@ -928,21 +928,28 @@ def generate_lab_blueprint(
         },
         "scoring": { "max_points": x },
         "timer": { "mode": "countdown", "seconds": x },
-        "assets": [
-          {
-            "id": "file-id",
-            "kind": "file",
-            "filename": "policy.json",
-            "mime": "application/json",
-            "inline": true,
-            "content_b64": "BASE64..."
-          }
-        ],
+        "assets": [],
         "steps": []
       }
     }
 
-    ## Common Step Structure (lab.steps[i])
+    ## Common Asset schema (lab.asset[i])
+    {
+      "id": "file-id",
+      "kind": "file",
+      "filename": "<FILENAME>",
+      "mime": "<MIME_TYPE>",
+      "inline": true,
+      "content_b64": "<BASE64>"
+    }
+    Requirements: Generate a realistic file appropriate for technical analysis for labs or CTF.
+    - id: Arbitrary identifier for the asset.
+    - kind: Asset type. "file" indicates a downloadable/generated file.
+    - filename: Name of the generated file, including extension.
+    - mime: MIME type describing the file format.
+    - content_b64: Base64-encoded content of the file. Ensure Base64 decoding produces a valid file.
+        
+    ## Common Step schema (lab.steps[i])
     {
      "id": "unique-step-id",
      "type": "terminal | console_form | inspect_file | architecture | quiz | anticipation",
@@ -966,7 +973,7 @@ def generate_lab_blueprint(
     validators: define strict validation rules with optional feedback messages.
     world_patch: pre-validation JSON operations (set|unset|push|remove) using dot paths (e.g., systems.firewall.enabled).
 
-    ## JSON structure by step type:
+    ## JSON schema by step type:
      #1. terminal
     Specific block: terminal property.
     "terminal": {
@@ -1003,6 +1010,7 @@ def generate_lab_blueprint(
     Each "command" validator defines the exact expected commands (program, subcommands, flags, args).
     The response sets effects (stdout_template, stderr_template, world patches).
     Add validators to cover all required or allowed command variants.
+     
      #2. console_form
     Specific block: form (simulated UI). Validation goes in validators.
     "form": {
@@ -1037,6 +1045,7 @@ def generate_lab_blueprint(
     Payload validators check the submitted data; world validators verify the saved world state.
     Validators: "payload" checks submitted data; "world" checks saved state.
     Add messages or combined checks to ensure only the correct configurations passes.
+     
      #3. inspect_file
     Specific block: file_ref and input keys.
     "file_ref": "file-id",
@@ -1126,7 +1135,8 @@ def generate_lab_blueprint(
     validators: may include {"kind":"quiz","expect":["a","c"]}.
     #6. anticipation
     keep the quiz structure but focus questions on projection or prospective analysis.
-    ### Additional rules and compatibility
+    
+    ### RULES AND COMPATIBILITY
     All steps must follow the scenario_md narrative and the learning goal for the chosen certification domains. Each step must update or check the world state (world_patch, form.model_path, architecture.world_path, etc.).
     Hints must be progressive and in context.
     Honor {step_types_json}: include each requested step type at least once.

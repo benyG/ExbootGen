@@ -81,6 +81,7 @@ from config import (
     API_REQUEST_DELAY,
     DISTRIBUTION,
     GUI_PASSWORD,
+    SESSION_INACTIVITY_MINUTES,
     _distribution_total,
 )
 import db
@@ -124,6 +125,8 @@ app = Flask(
 )
 # Minimal secret key required for session-based authentication protecting the UI
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "exboot-secret-key")
+# Enforce a maximum duration of inactivity before sessions expire.
+app.permanent_session_lifetime = timedelta(minutes=SESSION_INACTIVITY_MINUTES)
 
 
 def _ensure_login_template() -> None:
@@ -562,6 +565,8 @@ def _normalise_schedule_status(status: str | None) -> str:
         return "failed"
     if status in {"running", "in_progress"}:
         return "running"
+    if status == "partial":
+        return "partial"
     return status
 
 
@@ -592,6 +597,7 @@ def _register_schedule_job(date: str, job_id: str, entries: List[dict]) -> None:
                     "status": _normalise_schedule_status(entry.get("status")),
                     "message": _summarise_schedule_entry(entry),
                     "channels": entry.get("channels") or [],
+                    "channel_results": {},
                 }
                 for entry in entries
             ],
@@ -600,7 +606,13 @@ def _register_schedule_job(date: str, job_id: str, entries: List[dict]) -> None:
 
 
 def _update_schedule_report(
-    date: str, entry: Dict[str, object], status: str, *, message: str | None = None
+    date: str,
+    entry: Dict[str, object],
+    status: str,
+    *,
+    message: str | None = None,
+    channel_results: Dict[str, Dict[str, object]] | None = None,
+    summary: str | None = None,
 ) -> None:
     """Update cached report data for a specific entry within a day."""
 
@@ -617,6 +629,8 @@ def _update_schedule_report(
                         "message": message,
                         "channels": entry.get("channels") or [],
                         "job_id": _schedule_entry_jobs.get(str(entry_id)),
+                        "channel_results": channel_results or item.get("channel_results") or {},
+                        "result_summary": summary or item.get("result_summary"),
                     }
                 )
                 found = True
@@ -629,6 +643,8 @@ def _update_schedule_report(
                     "message": message,
                     "channels": entry.get("channels") or [],
                     "job_id": _schedule_entry_jobs.get(str(entry_id)),
+                    "channel_results": channel_results or {},
+                    "result_summary": summary,
                 }
             )
         report["status"] = _normalise_schedule_status(status)
@@ -645,6 +661,7 @@ def _finalise_schedule_report(date: str, status: str, counters: Dict[str, int]) 
             "processed": counters.get("processed", 0),
             "succeeded": counters.get("succeeded", 0),
             "failed": counters.get("failed", 0),
+            "partial": counters.get("partial", 0),
         }
         report["updated_at"] = datetime.now().isoformat()
 
@@ -678,7 +695,7 @@ def _build_schedule_reports(entries: List[dict]) -> Dict[str, Dict[str, object]]
     for day, day_entries in grouped.items():
         current = reports.get(day, {"entries": []})
         entries_payload = []
-        summary = {"succeeded": 0, "failed": 0, "pending": 0, "running": 0}
+        summary = {"succeeded": 0, "failed": 0, "pending": 0, "running": 0, "partial": 0}
 
         for entry in day_entries:
             status = _normalise_schedule_status(entry.get("status"))
@@ -697,6 +714,8 @@ def _build_schedule_reports(entries: List[dict]) -> Dict[str, Dict[str, object]]
                     "message": message,
                     "job_id": job_id,
                     "channels": entry.get("channels") or [],
+                    "channel_results": (existing_entry or {}).get("channel_results") or entry.get("channel_results") or {},
+                    "result_summary": (existing_entry or {}).get("result_summary") or entry.get("resultSummary") or entry.get("summary"),
                     "last_run_at": entry.get("lastRunAt"),
                 }
             )
@@ -706,12 +725,16 @@ def _build_schedule_reports(entries: List[dict]) -> Dict[str, Dict[str, object]]
                 summary["failed"] += 1
             elif status == "running":
                 summary["running"] += 1
+            elif status == "partial":
+                summary["partial"] += 1
             else:
                 summary["pending"] += 1
 
         overall_status = "succeeded"
         if summary["failed"] > 0:
             overall_status = "failed"
+        elif summary["partial"] > 0:
+            overall_status = "partial"
         elif summary["running"] > 0:
             overall_status = "running"
         elif summary["pending"] == len(entries_payload):
@@ -1174,7 +1197,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         return cleaned[: limit - 1] + "…"
 
     context.log(f"Planification du {date}: {len(entries)} action(s) détectée(s).")
-    counters: Dict[str, int] = {"processed": 0, "succeeded": 0, "failed": 0}
+    counters: Dict[str, int] = {"processed": 0, "succeeded": 0, "failed": 0, "partial": 0}
     context.update_counters(**counters, date=date)
 
     def _persist_generated_link(entry_data: dict, link_value: str) -> None:
@@ -1214,7 +1237,8 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         content_label = entry.get("contentTypeLabel") or entry.get("contentType") or "Contenu"
         link = (entry.get("link") or "").strip()
         time_of_day = entry.get("time") or "Heure non précisée"
-        channels = entry.get("channels") or []
+        allowed_channels = {"article", "linkedin", "x"}
+        channels = [channel for channel in (entry.get("channels") or []) if channel in allowed_channels]
         attach_image = bool(entry.get("addImage", True))
         entry_id = entry.get("id")
 
@@ -1228,6 +1252,21 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         note = entry.get("note")
         if note:
             context.log(f"Note interne : {note}")
+
+        if not channels:
+            counters["failed"] += 1
+            _update_schedule_report(
+                date,
+                entry,
+                "failed",
+                message="Canaux invalides ou manquants : aucun canal reconnu.",
+                channel_results={},
+                summary="Aucun canal valide.",
+            )
+            _update_entry_status(entry_id, "failed", stamp=True)
+            counters["processed"] += 1
+            context.update_counters(**counters, date=date)
+            continue
 
         _update_schedule_report(date, entry, "running", message="Action en cours d'exécution.")
         try:
@@ -1273,6 +1312,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         context.log(f"Lien/source : {display_link}")
 
         _update_entry_status(entry_id, "running", stamp=True)
+        channel_results: Dict[str, Dict[str, object]] = {}
         try:
             result = run_scheduled_publication(
                 provider_id=provider_id,
@@ -1291,6 +1331,8 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
                 entry,
                 "failed",
                 message=f"Erreur lors du déclenchement des publications : {exc}",
+                channel_results=channel_results,
+                summary="Échec global : publication non déclenchée.",
             )
         else:
             channel_outcomes: List[bool] = []
@@ -1306,25 +1348,27 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
                     )
                     title = result.get("title") or "Article généré"
                     context.log(f"Titre : {_shorten(str(title), limit=120)}")
-                    summary = result.get("summary") or ""
-                    if summary:
-                        context.log(f"Résumé : {_shorten(str(summary), limit=200)}")
+                    summary_text = result.get("summary") or ""
+                    if summary_text:
+                        context.log(f"Résumé : {_shorten(str(summary_text), limit=200)}")
                     channel_outcomes.append(True)
+                    channel_results["article"] = {"status": "succeeded", "message": title}
                     if result.get("course_art") is not None:
                         context.log("Fiche certification enregistrée.")
                     if result.get("course_art_error"):
                         context.log(f"Fiche certification non enregistrée : {result['course_art_error']}")
                 else:
                     channel_outcomes.append(False)
-                    context.log(
-                        f"Article non généré : {article_error or 'raison inconnue'}"
-                    )
+                    message = f"Article non généré : {article_error or 'raison inconnue'}"
+                    channel_results["article"] = {"status": "failed", "message": message}
+                    context.log(message)
 
             if "x" in channels:
                 tweet_result: SocialPostResult | None = result.get("tweet_result")
                 tweet_text = (tweet_result.text if tweet_result else None) or result.get("tweet") or ""
                 if tweet_result and tweet_result.published:
                     channel_outcomes.append(True)
+                    channel_results["x"] = {"status": "succeeded", "message": _shorten(str(tweet_text))}
                     if tweet_text:
                         context.log(f"Tweet envoyé : {_shorten(str(tweet_text))}")
                     else:
@@ -1332,6 +1376,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
                 else:
                     channel_outcomes.append(False)
                     error = (tweet_result and tweet_result.error) or "Tweet non publié."
+                    channel_results["x"] = {"status": "failed", "message": error}
                     context.log(error)
                     if tweet_text:
                         context.log(f"Contenu du tweet : {_shorten(str(tweet_text))}")
@@ -1343,6 +1388,10 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
                 ) or result.get("linkedin_post") or ""
                 if linkedin_result and linkedin_result.published:
                     channel_outcomes.append(True)
+                    channel_results["linkedin"] = {
+                        "status": "succeeded",
+                        "message": _shorten(str(linkedin_text)),
+                    }
                     if linkedin_text:
                         context.log(f"Post LinkedIn envoyé : {_shorten(str(linkedin_text))}")
                     else:
@@ -1350,11 +1399,22 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
                 else:
                     channel_outcomes.append(False)
                     error = (linkedin_result and linkedin_result.error) or "LinkedIn non publié."
+                    channel_results["linkedin"] = {"status": "failed", "message": error}
                     context.log(error)
                     if linkedin_text:
                         context.log(f"Contenu LinkedIn : {_shorten(str(linkedin_text))}")
 
-            if channel_outcomes and all(channel_outcomes):
+            success_count = sum(1 for outcome in channel_outcomes if outcome)
+            total_channels = len(channel_outcomes)
+            summary_parts = []
+            for channel_name, result_data in channel_results.items():
+                label = {"article": "Article", "linkedin": "LinkedIn", "x": "X"}.get(channel_name, channel_name)
+                status_label = "OK" if result_data.get("status") == "succeeded" else "KO"
+                message = result_data.get("message")
+                summary_parts.append(f"{label}: {status_label}{f' ({message})' if message else ''}")
+            summary_text = " · ".join(summary_parts) if summary_parts else None
+
+            if total_channels and success_count == total_channels:
                 counters["succeeded"] += 1
                 _update_entry_status(entry_id, "succeeded", stamp=True)
                 _update_schedule_report(
@@ -1362,6 +1422,19 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
                     entry,
                     "succeeded",
                     message="Publication envoyée sur tous les canaux sélectionnés.",
+                    channel_results=channel_results,
+                    summary=summary_text,
+                )
+            elif success_count > 0:
+                counters["partial"] += 1
+                _update_entry_status(entry_id, "partial", stamp=True)
+                _update_schedule_report(
+                    date,
+                    entry,
+                    "partial",
+                    message="Publication partielle : au moins un canal a échoué.",
+                    channel_results=channel_results,
+                    summary=summary_text,
                 )
             else:
                 counters["failed"] += 1
@@ -1370,7 +1443,9 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
                     date,
                     entry,
                     "failed",
-                    message="Échec sur au moins un canal, voir logs du job.",
+                    message="Échec sur tous les canaux, voir logs du job.",
+                    channel_results=channel_results,
+                    summary=summary_text,
                 )
 
         counters["processed"] += 1
@@ -1378,9 +1453,10 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
 
     context.log(
         f"Planification terminée : {counters['processed']} action(s) traitée(s), "
-        f"{counters['succeeded']} réussie(s), {counters['failed']} en échec."
+        f"{counters['succeeded']} réussie(s), {counters['failed']} en échec, "
+        f"{counters['partial']} partielle(s)."
     )
-    overall_status = "failed" if counters.get("failed") else "succeeded"
+    overall_status = "failed" if counters.get("failed") else "partial" if counters.get("partial") else "succeeded"
     _finalise_schedule_report(date, overall_status, counters)
     return counters
 
@@ -1471,6 +1547,15 @@ def _is_authenticated() -> bool:
     return session.get("user") == "exboot"
 
 
+def _session_expired(last_activity: float | None) -> bool:
+    """Return True when the session has been idle longer than the allowed duration."""
+
+    if last_activity is None:
+        return False
+    inactivity_seconds = SESSION_INACTIVITY_MINUTES * 60
+    return time.time() - last_activity > inactivity_seconds
+
+
 @app.before_request
 def require_login():
     """Protect the application with a simple session-based login check."""
@@ -1480,6 +1565,12 @@ def require_login():
         return None
 
     if _is_authenticated():
+        if _session_expired(session.get("last_activity")):
+            session.clear()
+            login_url = url_for("login", next=request.url)
+            return redirect(login_url)
+        session.permanent = True
+        session["last_activity"] = time.time()
         return None
 
     login_url = url_for("login", next=request.url)
@@ -1494,6 +1585,8 @@ def login():
         password = request.form.get("password", "")
         if username == "exboot" and password == GUI_PASSWORD:
             session["user"] = "exboot"
+            session["last_activity"] = time.time()
+            session.permanent = True
             target = request.args.get("next") or url_for("home")
             return redirect(target)
         error = "Nom d'utilisateur ou mot de passe incorrect."
@@ -1502,7 +1595,7 @@ def login():
 
 @app.route("/logout")
 def logout():
-    session.pop("user", None)
+    session.clear()
     return redirect(url_for("login"))
 
 

@@ -555,6 +555,7 @@
     .status-badge.error { color: #f472b6; border-color: rgba(244,114,182,0.4); background: rgba(244,114,182,0.14); }
     .status-badge.pending { color: #ffffff; border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.08); }
     .status-badge.running { color: #60a5fa; border-color: rgba(96,165,250,0.4); background: rgba(96,165,250,0.12); }
+    .status-badge.partial { color: #fb923c; border-color: rgba(251,146,60,0.4); background: rgba(251,146,60,0.12); }
 
     .log-link {
       margin-left: auto;
@@ -608,6 +609,18 @@
       font-size: 0.92rem;
     }
 
+    .channel-results {
+      display: grid;
+      gap: 0.25rem;
+      margin-top: 0.1rem;
+    }
+
+    .channel-results .channel-detail {
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.35;
+    }
+
     .report-summary {
       display: flex;
       gap: 1rem;
@@ -642,6 +655,8 @@
     .report-pill.pending .dot { background: #ffffff; box-shadow: 0 0 0 4px rgba(255,255,255,0.12); }
     .report-pill.running { border-color: rgba(96,165,250,0.45); color: #60a5fa; }
     .report-pill.running .dot { background: #60a5fa; box-shadow: 0 0 0 4px rgba(96,165,250,0.12); }
+    .report-pill.partial { border-color: rgba(251,146,60,0.45); color: #fb923c; }
+    .report-pill.partial .dot { background: #fb923c; box-shadow: 0 0 0 4px rgba(251,146,60,0.12); }
 
     .form-grid {
       display: grid;
@@ -1278,7 +1293,8 @@
         addImage: entry.addImage !== false,
         status: normaliseStatus(entry.status || entry.state || 'queued'),
         jobId: entry.jobId || entry.job_id || null,
-        resultSummary: entry.resultSummary || entry.summary || null
+        resultSummary: entry.resultSummary || entry.result_summary || entry.summary || null,
+        channelResults: entry.channelResults || entry.channel_results || {}
       };
     }
 
@@ -1298,7 +1314,8 @@
       error: 'échec',
       running: 'en cours',
       queued: 'en attente',
-      pending: 'en attente'
+      pending: 'en attente',
+      partial: 'partiel'
     };
 
     function normaliseStatus(raw) {
@@ -1307,6 +1324,7 @@
       if (['success', 'succeeded', 'completed'].includes(value)) return 'succeeded';
       if (['failed', 'error'].includes(value)) return 'failed';
       if (['running', 'in_progress'].includes(value)) return 'running';
+      if (value === 'partial') return 'partial';
       if (value === 'pending') return 'pending';
       return value;
     }
@@ -1316,6 +1334,7 @@
         case 'succeeded': return 'success';
         case 'failed': return 'error';
         case 'running': return 'running';
+        case 'partial': return 'partial';
         default: return 'pending';
       }
     }
@@ -1433,7 +1452,7 @@
 
     function buildReportFromEntries(dateKey, entries) {
       const items = [];
-      const summary = { succeeded: 0, failed: 0, pending: 0, running: 0 };
+      const summary = { succeeded: 0, failed: 0, pending: 0, running: 0, partial: 0 };
       let jobId = (scheduleReports[dateKey] && scheduleReports[dateKey].job_id) || null;
 
       entries.forEach(entry => {
@@ -1446,10 +1465,13 @@
           message,
           job_id: entry.jobId || entry.job_id || jobId,
           channels: entry.channels || [],
+          channel_results: entry.channelResults || entry.channel_results || {},
+          result_summary: entry.resultSummary || entry.summary || entry.result_summary || null,
           last_run_at: entry.lastRunAt || entry.last_run_at || null
         });
         if (status === 'succeeded') summary.succeeded += 1;
         else if (status === 'failed') summary.failed += 1;
+        else if (status === 'partial') summary.partial += 1;
         else if (status === 'running') summary.running += 1;
         else summary.pending += 1;
       });
@@ -1457,6 +1479,8 @@
       let overall = 'succeeded';
       if (summary.failed > 0) {
         overall = 'failed';
+      } else if (summary.partial > 0) {
+        overall = 'partial';
       } else if (summary.running > 0) {
         overall = 'running';
       } else if (items.length && summary.pending === items.length) {
@@ -1501,6 +1525,7 @@
       reportSummary.innerHTML = '';
       [
         { key: 'succeeded', label: 'Succès', className: 'success' },
+        { key: 'partial', label: 'Partiels', className: 'partial' },
         { key: 'failed', label: 'Échecs', className: 'error' },
         { key: 'running', label: 'En cours', className: 'running' },
         { key: 'pending', label: 'En attente', className: 'pending' }
@@ -1544,8 +1569,32 @@
         message.className = 'message';
         message.textContent = item.message || 'Action planifiée';
 
+        const summaryBlock = document.createElement('div');
+        summaryBlock.className = 'channel-results';
+        if (item.channel_results && typeof item.channel_results === 'object') {
+          Object.entries(item.channel_results).forEach(([ch, payload]) => {
+            const chip = document.createElement('span');
+            chip.className = `chip ${ch} ${statusClass(payload.status)}`;
+            chip.textContent = `${channelLabels[ch] || ch}: ${statusLabel(payload.status)}`;
+            summaryBlock.appendChild(chip);
+            if (payload.message) {
+              const detail = document.createElement('div');
+              detail.className = 'channel-detail';
+              detail.textContent = payload.message;
+              summaryBlock.appendChild(detail);
+            }
+          });
+        }
+        if (item.result_summary) {
+          const summaryLine = document.createElement('div');
+          summaryLine.className = 'channel-detail';
+          summaryLine.textContent = item.result_summary;
+          summaryBlock.appendChild(summaryLine);
+        }
+
         row.appendChild(header);
         row.appendChild(message);
+        if (summaryBlock.childNodes.length) row.appendChild(summaryBlock);
         reportList.appendChild(row);
       });
     }
