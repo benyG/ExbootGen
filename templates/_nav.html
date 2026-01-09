@@ -1,5 +1,6 @@
 <nav class="stellar-nav" id="stellarNav">
   <a href="{{ url_for('home') }}" data-route="{{ url_for('home') }}"{% if active_page|default('') == 'home' %} class="active"{% endif %}>Home</a>
+  <a href="{{ url_for('dashboard') }}" data-route="{{ url_for('dashboard') }}"{% if active_page|default('') == 'dashboard' %} class="active"{% endif %}>Dashboard</a>
   <a href="{{ url_for('pdf.index') }}" data-route="{{ url_for('pdf.index') }}"{% if active_page|default('') == 'pdf_import' %} class="active"{% endif %}>PDF Import</a>
   <a href="{{ url_for('pdf.generate_index') }}" data-route="{{ url_for('pdf.generate_index') }}"{% if active_page|default('') == 'pdf_generate' %} class="active"{% endif %}>Generate via PDF</a>
   <a href="{{ url_for('dom.index') }}" data-route="{{ url_for('dom.index') }}"{% if active_page|default('') == 'domains' %} class="active"{% endif %}>Domains(AI)</a>
