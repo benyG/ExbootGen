@@ -160,55 +160,41 @@
     <section class="glass-card hero" data-animate>
       <h1>Dashboard</h1>
       <p>Suivez les performances des utilisateurs, certifications et revenus avec des filtres avancés par période, segments et domaines. Cette vue est conçue pour piloter les objectifs marketing et l'efficacité pédagogique.</p>
-      <div class="filters">
-        <div class="filter-group">
-          <label for="range">Période</label>
-          <select id="range">
-            <option>7 derniers jours</option>
-            <option>30 derniers jours</option>
-            <option>Trimestre</option>
-            <option>Année en cours</option>
-          </select>
-        </div>
+      <form class="filters" method="get">
         <div class="filter-group">
           <label for="date-start">Du</label>
-          <input id="date-start" type="date" value="2024-01-01">
+          <input id="date-start" name="start" type="date" value="{{ start_date }}">
         </div>
         <div class="filter-group">
           <label for="date-end">Au</label>
-          <input id="date-end" type="date" value="2024-12-31">
+          <input id="date-end" name="end" type="date" value="{{ end_date }}">
         </div>
         <div class="filter-group">
           <label for="plan">Segment</label>
-          <select id="plan">
-            <option>Tous les plans</option>
-            <option>Free</option>
-            <option>Basic</option>
-            <option>Standard</option>
-            <option>Pro</option>
-            <option>Gold</option>
+          <select id="plan" name="plan">
+            {% for option in plan_options %}
+            <option value="{{ option.value }}" {% if option.value|string == selected_plan|string %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
           </select>
         </div>
         <div class="filter-group">
           <label for="cert">Certification</label>
-          <select id="cert">
-            <option>Toutes les certifications</option>
-            <option>AWS Solutions Architect</option>
-            <option>Azure Fundamentals</option>
-            <option>Google Cloud Engineer</option>
+          <select id="cert" name="cert_id">
+            <option value="">Toutes les certifications</option>
+            {% for cert in certifications %}
+            <option value="{{ cert.id }}" {% if cert.id == selected_cert %}selected{% endif %}>{{ cert.name }}</option>
+            {% endfor %}
           </select>
         </div>
         <div class="filter-group">
-          <label for="region">Localisation</label>
-          <select id="region">
-            <option>Toutes les régions</option>
-            <option>Europe</option>
-            <option>Afrique</option>
-            <option>Amériques</option>
-            <option>Asie</option>
-          </select>
+          <label for="user">Utilisateur (nom ou email)</label>
+          <input id="user" name="user" type="text" placeholder="ex. fatima@exboot.com" value="{{ selected_user }}">
         </div>
-      </div>
+        <div class="filter-group">
+          <label>&nbsp;</label>
+          <button type="submit" style="padding: 0.7rem 0.9rem; border-radius: var(--radius-md); border: 1px solid rgba(148, 163, 184, 0.28); background: rgba(71,245,192,0.2); color: var(--text-primary); font-weight: 600;">Appliquer</button>
+        </div>
+      </form>
     </section>
 
     <section class="glass-card" data-animate>
@@ -219,33 +205,33 @@
       <div class="kpi-grid">
         <article class="kpi-card">
           <span>Utilisateurs actifs</span>
-          <strong>12 480</strong>
-          <em>+8,4% vs période précédente</em>
+          <strong>{{ kpis.active_users }}</strong>
+          <em>Sur la période sélectionnée</em>
         </article>
         <article class="kpi-card">
           <span>Nouveaux inscrits</span>
-          <strong>1 240</strong>
-          <em>+4,1% sur 30 jours</em>
+          <strong>{{ kpis.new_users }}</strong>
+          <em>Inscrits sur la période</em>
         </article>
         <article class="kpi-card">
           <span>Taux de conversion</span>
-          <strong>6,3%</strong>
-          <em>+0,7 pt</em>
+          <strong>{{ kpis.conversion_rate }}</strong>
+          <em>Abonnements actifs / utilisateurs</em>
         </article>
         <article class="kpi-card">
           <span>Examens complétés</span>
-          <strong>3 086</strong>
-          <em>+12,6%</em>
+          <strong>{{ kpis.completed_exams }}</strong>
+          <em>Examens finalisés</em>
         </article>
         <article class="kpi-card">
           <span>CA abonnement</span>
-          <strong>€78 900</strong>
-          <em>+9,2%</em>
+          <strong>{{ kpis.revenue }}</strong>
+          <em>Revenus sur la période</em>
         </article>
         <article class="kpi-card">
           <span>Engagement moyen</span>
-          <strong>4,8 sessions</strong>
-          <em>+0,4 session</em>
+          <strong>{{ kpis.engagement }} sessions</strong>
+          <em>Sessions / utilisateur actif</em>
         </article>
       </div>
     </section>
@@ -259,14 +245,32 @@
         <div class="chart-card">
           <div class="chart-title">Nouveaux vs récurrents</div>
           <div class="chart-placeholder"></div>
+          <div style="display:flex; justify-content:space-between; font-size:0.9rem; color:var(--text-muted);">
+            <span>Nouveaux: <strong style="color:var(--text-primary);">{{ acquisition.new_users }}</strong></span>
+            <span>Récurrents: <strong style="color:var(--text-primary);">{{ acquisition.returning_users }}</strong></span>
+          </div>
         </div>
         <div class="chart-card">
           <div class="chart-title">Funnel d'inscription → certification</div>
           <div class="chart-placeholder"></div>
+          <ul style="margin:0; padding-left:1rem; color:var(--text-muted); font-size:0.9rem;">
+            <li>Nouveaux inscrits: <strong style="color:var(--text-primary);">{{ acquisition.new_users }}</strong></li>
+            <li>Abonnements actifs: <strong style="color:var(--text-primary);">{{ acquisition.active_subscriptions }}</strong></li>
+            <li>Examens complétés: <strong style="color:var(--text-primary);">{{ kpis.completed_exams }}</strong></li>
+          </ul>
         </div>
         <div class="chart-card">
           <div class="chart-title">Sources d'acquisition</div>
           <div class="chart-placeholder"></div>
+          <ul style="margin:0; padding-left:1rem; color:var(--text-muted); font-size:0.9rem;">
+            {% if locations %}
+              {% for loc in locations %}
+              <li>{{ loc.label }} <strong style="color:var(--text-primary);">({{ loc.total }})</strong></li>
+              {% endfor %}
+            {% else %}
+              <li>Aucune localisation disponible sur la période.</li>
+            {% endif %}
+          </ul>
         </div>
       </div>
     </section>
@@ -278,20 +282,44 @@
       </div>
       <div class="chart-grid">
         <div class="chart-card">
-          <div class="chart-title">Score moyen par certification</div>
+          <div class="chart-title">Examens complétés par certification</div>
           <div class="chart-placeholder"></div>
+          <ul style="margin:0; padding-left:1rem; color:var(--text-muted); font-size:0.9rem;">
+            {% if performance.completions_by_cert %}
+              {% for cert in performance.completions_by_cert %}
+              <li>{{ cert.name }} <strong style="color:var(--text-primary);">({{ cert.completions }})</strong></li>
+              {% endfor %}
+            {% else %}
+              <li>Aucune certification complétée sur la période.</li>
+            {% endif %}
+          </ul>
         </div>
         <div class="chart-card">
-          <div class="chart-title">Distribution des scores</div>
+          <div class="chart-title">Taux de complétion examens</div>
           <div class="chart-placeholder"></div>
+          <div style="font-size:0.95rem; color:var(--text-muted);">
+            <strong style="color:var(--text-primary);">{{ performance.completion_rate_display }}</strong> des examens assignés sont terminés.
+          </div>
         </div>
         <div class="chart-card">
           <div class="chart-title">Temps moyen par examen</div>
           <div class="chart-placeholder"></div>
+          <div style="font-size:0.95rem; color:var(--text-muted);">
+            Temps moyen: <strong style="color:var(--text-primary);">{{ performance.avg_exam_duration_display }}</strong>
+          </div>
         </div>
         <div class="chart-card">
-          <div class="chart-title">Progression par module</div>
+          <div class="chart-title">Certifications avec le plus d'utilisateurs</div>
           <div class="chart-placeholder"></div>
+          <ul style="margin:0; padding-left:1rem; color:var(--text-muted); font-size:0.9rem;">
+            {% if cert_popularity %}
+              {% for cert in cert_popularity %}
+              <li>{{ cert.name }} <strong style="color:var(--text-primary);">({{ cert.user_count }})</strong></li>
+              {% endfor %}
+            {% else %}
+              <li>Aucune inscription sur la période.</li>
+            {% endif %}
+          </ul>
         </div>
       </div>
     </section>
@@ -327,34 +355,34 @@
           <thead>
             <tr>
               <th>Utilisateur</th>
-              <th>Certification</th>
-              <th>Score moyen</th>
+              <th>Email</th>
+              <th>Sessions</th>
+              <th>Examens complétés</th>
+              <th>Certification dominante</th>
+              <th>Complétions</th>
               <th>Dernière activité</th>
               <th>Plan</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td>Aïcha Kouyaté</td>
-              <td>AWS Solutions Architect</td>
-              <td>82%</td>
-              <td>Il y a 2h</td>
-              <td>Pro</td>
-            </tr>
-            <tr>
-              <td>Marc Dupont</td>
-              <td>Azure Fundamentals</td>
-              <td>74%</td>
-              <td>Hier</td>
-              <td>Standard</td>
-            </tr>
-            <tr>
-              <td>Salima Z.</td>
-              <td>Google Cloud Engineer</td>
-              <td>69%</td>
-              <td>Il y a 3 jours</td>
-              <td>Basic</td>
-            </tr>
+            {% if top_users %}
+              {% for user in top_users %}
+              <tr>
+                <td>{{ user.name }}</td>
+                <td>{{ user.email }}</td>
+                <td>{{ user.sessions }}</td>
+                <td>{{ user.exams_completed }}</td>
+                <td>{{ user.top_cert }}</td>
+                <td>{{ user.top_cert_completions }}</td>
+                <td>{{ user.last_activity_display }}</td>
+                <td>{{ user.plan_label }}</td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="8">Aucune activité utilisateur sur la période.</td>
+              </tr>
+            {% endif %}
           </tbody>
         </table>
       </div>

@@ -910,3 +910,365 @@ def add_answers(question_id, answers):
         conn.commit()
     finally:
         cursor.close(); conn.close()
+
+
+def _build_user_filter_clause(alias, plan, cert_id, user_query):
+    conditions = []
+    params = {}
+    if plan is not None:
+        conditions.append(f"{alias}.ex = %(plan)s")
+        params["plan"] = plan
+    if cert_id is not None:
+        conditions.append(
+            f"EXISTS (SELECT 1 FROM users_course uc WHERE uc.user = {alias}.id AND uc.course = %(cert_id)s)"
+        )
+        params["cert_id"] = cert_id
+    if user_query:
+        conditions.append(
+            f"({alias}.name LIKE %(user_query)s OR {alias}.email LIKE %(user_query)s OR {alias}.usn LIKE %(user_query)s)"
+        )
+        params["user_query"] = f"%{user_query}%"
+    clause = " AND ".join(conditions)
+    return clause, params
+
+
+def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    user_filters, params = _build_user_filter_clause("u", plan, cert_id, user_query)
+    base_params = {
+        "start": start_dt,
+        "end": end_dt,
+        "now": datetime.utcnow(),
+        **params,
+    }
+
+    def _apply_filters(base_query):
+        if user_filters:
+            return f"{base_query} AND {user_filters}"
+        return base_query
+
+    cursor.execute(
+        _apply_filters(
+            """
+            SELECT COUNT(*)
+            FROM users u
+            WHERE u.created_at BETWEEN %(start)s AND %(end)s
+            """
+        ),
+        base_params,
+    )
+    new_users = cursor.fetchone()[0] or 0
+
+    cursor.execute(
+        _apply_filters(
+            """
+            SELECT COUNT(*)
+            FROM users u
+            WHERE u.id IS NOT NULL
+            """
+        ),
+        params,
+    )
+    total_users = cursor.fetchone()[0] or 0
+
+    cursor.execute(
+        _apply_filters(
+            """
+            SELECT COUNT(DISTINCT j.user)
+            FROM journs j
+            JOIN users u ON u.id = j.user
+            WHERE j.created_at BETWEEN %(start)s AND %(end)s
+            """
+        ),
+        base_params,
+    )
+    active_users = cursor.fetchone()[0] or 0
+
+    cursor.execute(
+        _apply_filters(
+            """
+            SELECT COUNT(*)
+            FROM orders o
+            JOIN users u ON u.id = o.user
+            WHERE o.type = 0 AND o.exp > %(now)s
+            """
+        ),
+        base_params,
+    )
+    active_subscriptions = cursor.fetchone()[0] or 0
+
+    cursor.execute(
+        _apply_filters(
+            """
+            SELECT COALESCE(SUM(o.amount), 0)
+            FROM orders o
+            JOIN users u ON u.id = o.user
+            WHERE o.type = 0 AND o.created_at BETWEEN %(start)s AND %(end)s
+            """
+        ),
+        base_params,
+    )
+    revenue = cursor.fetchone()[0] or 0
+
+    exam_params = {
+        "start": start_dt,
+        "end": end_dt,
+    }
+    exam_conditions = ["eu.comp_at BETWEEN %(start)s AND %(end)s"]
+    if plan is not None:
+        exam_params["plan"] = plan
+        exam_conditions.append("u.ex = %(plan)s")
+    if cert_id is not None:
+        exam_params["cert_id"] = cert_id
+        exam_conditions.append("e.certi = %(cert_id)s")
+    if user_query:
+        exam_params["user_query"] = f"%{user_query}%"
+        exam_conditions.append(
+            "(u.name LIKE %(user_query)s OR u.email LIKE %(user_query)s OR u.usn LIKE %(user_query)s)"
+        )
+    exam_where = " AND ".join(exam_conditions)
+
+    cursor.execute(
+        f"""
+        SELECT COUNT(*)
+        FROM exam_users eu
+        JOIN users u ON u.id = eu.user
+        JOIN exams e ON e.id = eu.exam
+        WHERE {exam_where}
+        """,
+        exam_params,
+    )
+    completed_exams = cursor.fetchone()[0] or 0
+
+    cursor.execute(
+        _apply_filters(
+            """
+            SELECT COUNT(*)
+            FROM journs j
+            JOIN users u ON u.id = j.user
+            WHERE j.created_at BETWEEN %(start)s AND %(end)s
+            """
+        ),
+        base_params,
+    )
+    total_sessions = cursor.fetchone()[0] or 0
+    engagement = total_sessions / active_users if active_users else 0
+
+    cursor.execute(
+        _apply_filters(
+            """
+            SELECT COUNT(DISTINCT j.user)
+            FROM journs j
+            JOIN users u ON u.id = j.user
+            WHERE j.created_at BETWEEN %(start)s AND %(end)s
+              AND u.created_at < %(start)s
+            """
+        ),
+        base_params,
+    )
+    returning_users = cursor.fetchone()[0] or 0
+
+    cursor.execute(
+        _apply_filters(
+            """
+            SELECT COALESCE(j.city, j.loc, 'Inconnu') AS location, COUNT(*) AS total
+            FROM journs j
+            JOIN users u ON u.id = j.user
+            WHERE j.created_at BETWEEN %(start)s AND %(end)s
+            GROUP BY location
+            ORDER BY total DESC
+            LIMIT 5
+            """
+        ),
+        base_params,
+    )
+    locations = [{"label": row[0], "total": row[1]} for row in cursor.fetchall()]
+
+    cursor.execute(
+        f"""
+        SELECT c.id, c.name, COUNT(eu.id) AS completions
+        FROM exam_users eu
+        JOIN exams e ON e.id = eu.exam
+        JOIN courses c ON c.id = e.certi
+        JOIN users u ON u.id = eu.user
+        WHERE {exam_where}
+        GROUP BY c.id, c.name
+        ORDER BY completions DESC
+        LIMIT 5
+        """,
+        exam_params,
+    )
+    completions_by_cert = [
+        {"id": row[0], "name": row[1], "completions": row[2]} for row in cursor.fetchall()
+    ]
+
+    cursor.execute(
+        f"""
+        SELECT AVG(TIMESTAMPDIFF(MINUTE, eu.start_at, eu.comp_at))
+        FROM exam_users eu
+        JOIN exams e ON e.id = eu.exam
+        JOIN users u ON u.id = eu.user
+        WHERE eu.start_at IS NOT NULL
+          AND eu.comp_at IS NOT NULL
+          AND {exam_where}
+        """,
+        exam_params,
+    )
+    avg_exam_duration = cursor.fetchone()[0]
+
+    cursor.execute(
+        f"""
+        SELECT COUNT(*)
+        FROM exam_users eu
+        JOIN exams e ON e.id = eu.exam
+        JOIN users u ON u.id = eu.user
+        WHERE eu.added BETWEEN %(start)s AND %(end)s
+        {"AND u.ex = %(plan)s" if plan is not None else ""}
+        {"AND e.certi = %(cert_id)s" if cert_id is not None else ""}
+        {"AND (u.name LIKE %(user_query)s OR u.email LIKE %(user_query)s OR u.usn LIKE %(user_query)s)" if user_query else ""}
+        """,
+        exam_params,
+    )
+    total_exam_assignments = cursor.fetchone()[0] or 0
+
+    cert_activity_conditions = ["eu.comp_at BETWEEN %(start)s AND %(end)s"]
+    if cert_id is not None:
+        cert_activity_conditions.append("e.certi = %(cert_id)s")
+    if plan is not None:
+        cert_activity_conditions.append("u.ex = %(plan)s")
+    if user_query:
+        cert_activity_conditions.append(
+            "(u.name LIKE %(user_query)s OR u.email LIKE %(user_query)s OR u.usn LIKE %(user_query)s)"
+        )
+    cert_activity_where = " AND ".join(cert_activity_conditions)
+
+    cursor.execute(
+        f"""
+        SELECT cert_counts.user_id, cert_counts.cert_name, cert_counts.cert_completions
+        FROM (
+            SELECT eu.user AS user_id, c.name AS cert_name, COUNT(*) AS cert_completions
+            FROM exam_users eu
+            JOIN exams e ON e.id = eu.exam
+            JOIN courses c ON c.id = e.certi
+            JOIN users u ON u.id = eu.user
+            WHERE {cert_activity_where}
+            GROUP BY eu.user, c.id, c.name
+        ) cert_counts
+        JOIN (
+            SELECT user_id, MAX(cert_completions) AS max_completions
+            FROM (
+                SELECT eu.user AS user_id, c.id AS cert_id, COUNT(*) AS cert_completions
+                FROM exam_users eu
+                JOIN exams e ON e.id = eu.exam
+                JOIN courses c ON c.id = e.certi
+                JOIN users u ON u.id = eu.user
+                WHERE {cert_activity_where}
+                GROUP BY eu.user, c.id
+            ) max_counts
+            GROUP BY user_id
+        ) top_counts
+          ON cert_counts.user_id = top_counts.user_id
+         AND cert_counts.cert_completions = top_counts.max_completions
+        """,
+        exam_params,
+    )
+    top_cert_map = {
+        row[0]: {"cert_name": row[1], "cert_completions": row[2]} for row in cursor.fetchall()
+    }
+
+    cursor.execute(
+        f"""
+        SELECT u.id, u.name, u.email, u.ex,
+               MAX(j.created_at) AS last_activity,
+               COUNT(DISTINCT j.id) AS sessions,
+               COUNT(DISTINCT eu.id) AS exams_completed
+        FROM users u
+        LEFT JOIN journs j
+          ON j.user = u.id AND j.created_at BETWEEN %(start)s AND %(end)s
+        LEFT JOIN exam_users eu
+          ON eu.user = u.id AND eu.comp_at BETWEEN %(start)s AND %(end)s
+        {"LEFT JOIN users_course uc ON uc.user = u.id" if cert_id is not None else ""}
+        WHERE 1=1
+        {"AND u.ex = %(plan)s" if plan is not None else ""}
+        {"AND uc.course = %(cert_id)s" if cert_id is not None else ""}
+        {"AND (u.name LIKE %(user_query)s OR u.email LIKE %(user_query)s OR u.usn LIKE %(user_query)s)" if user_query else ""}
+        GROUP BY u.id, u.name, u.email, u.ex
+        ORDER BY last_activity DESC
+        LIMIT 8
+        """,
+        exam_params,
+    )
+    top_users = []
+    for row in cursor.fetchall():
+        top_cert = top_cert_map.get(row[0], {})
+        top_users.append(
+            {
+                "name": row[1],
+                "email": row[2],
+                "plan": row[3],
+                "last_activity": row[4],
+                "sessions": row[5],
+                "exams_completed": row[6],
+                "top_cert": top_cert.get("cert_name"),
+                "top_cert_completions": top_cert.get("cert_completions"),
+            }
+        )
+
+    cert_popularity_conditions = ["uc.created_at BETWEEN %(start)s AND %(end)s"]
+    if plan is not None:
+        cert_popularity_conditions.append("u.ex = %(plan)s")
+    if user_query:
+        cert_popularity_conditions.append(
+            "(u.name LIKE %(user_query)s OR u.email LIKE %(user_query)s OR u.usn LIKE %(user_query)s)"
+        )
+    cert_popularity_where = " AND ".join(cert_popularity_conditions)
+
+    cursor.execute(
+        f"""
+        SELECT c.id, c.name, COUNT(*) AS user_count
+        FROM users_course uc
+        JOIN users u ON u.id = uc.user
+        JOIN courses c ON c.id = uc.course
+        WHERE {cert_popularity_where}
+        GROUP BY c.id, c.name
+        ORDER BY user_count DESC
+        LIMIT 5
+        """,
+        base_params,
+    )
+    cert_popularity = [
+        {"id": row[0], "name": row[1], "user_count": row[2]} for row in cursor.fetchall()
+    ]
+
+    cursor.close()
+    conn.close()
+
+    completion_rate = (
+        (completed_exams / total_exam_assignments) * 100 if total_exam_assignments else 0
+    )
+
+    return {
+        "kpis": {
+            "active_users": active_users,
+            "new_users": new_users,
+            "conversion_rate": (active_subscriptions / total_users * 100 if total_users else 0),
+            "completed_exams": completed_exams,
+            "revenue": revenue,
+            "engagement": engagement,
+        },
+        "acquisition": {
+            "new_users": new_users,
+            "returning_users": returning_users,
+            "active_subscriptions": active_subscriptions,
+        },
+        "performance": {
+            "completion_rate": completion_rate,
+            "avg_exam_duration": avg_exam_duration,
+            "completions_by_cert": completions_by_cert,
+        },
+        "locations": locations,
+        "top_users": top_users,
+        "cert_popularity": cert_popularity,
+    }
