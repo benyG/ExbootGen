@@ -543,6 +543,138 @@ def home():
     return render_template("home.html")
 
 
+@app.route("/dashboard")
+def dashboard():
+    today = datetime.utcnow().date()
+    start_param = request.args.get("start")
+    end_param = request.args.get("end")
+    plan_param = request.args.get("plan")
+    cert_param = request.args.get("cert_id")
+    user_param = (request.args.get("user") or "").strip()
+
+    def _parse_date(value, fallback):
+        if not value:
+            return fallback
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").date()
+        except ValueError:
+            return fallback
+
+    end_date = _parse_date(end_param, today)
+    start_date = _parse_date(start_param, end_date - timedelta(days=29))
+
+    start_dt = datetime.combine(start_date, dt_time.min)
+    end_dt = datetime.combine(end_date, dt_time.max)
+
+    plan = None
+    if plan_param and plan_param != "all":
+        try:
+            plan = int(plan_param)
+        except ValueError:
+            plan = None
+
+    cert_id = None
+    if cert_param:
+        try:
+            cert_id = int(cert_param)
+        except ValueError:
+            cert_id = None
+
+    dashboard_snapshot = db.get_dashboard_snapshot(
+        start_dt,
+        end_dt,
+        plan=plan,
+        cert_id=cert_id,
+        user_query=user_param or None,
+    )
+    certifications = db.get_public_certifications()
+    plan_options = [
+        {"value": "all", "label": "Tous les plans"},
+        {"value": 0, "label": "Free"},
+        {"value": 1, "label": "Basic"},
+        {"value": 2, "label": "Standard"},
+        {"value": 3, "label": "Pro"},
+        {"value": 4, "label": "Gold"},
+    ]
+
+    def _format_number(value):
+        if value is None:
+            return "0"
+        if isinstance(value, float):
+            return f"{value:,.1f}".replace(",", " ").replace(".0", "")
+        return f"{value:,}".replace(",", " ")
+
+    def _format_currency(value):
+        return f"€{_format_number(value)}"
+
+    kpis = dashboard_snapshot["kpis"]
+    formatted_kpis = {
+        "active_users": _format_number(kpis["active_users"]),
+        "new_users": _format_number(kpis["new_users"]),
+        "conversion_rate": f"{kpis['conversion_rate']:.1f}%",
+        "completed_exams": _format_number(kpis["completed_exams"]),
+        "revenue": _format_currency(kpis["revenue"]),
+        "engagement": f"{kpis['engagement']:.1f}",
+    }
+
+    performance = dashboard_snapshot["performance"]
+    avg_exam_duration = performance["avg_exam_duration"]
+    performance["avg_exam_duration_display"] = (
+        f"{avg_exam_duration:.0f} min" if avg_exam_duration is not None else "—"
+    )
+    performance["completion_rate_display"] = f"{performance['completion_rate']:.1f}%"
+
+    acquisition = {
+        "new_users": _format_number(dashboard_snapshot["acquisition"]["new_users"]),
+        "returning_users": _format_number(dashboard_snapshot["acquisition"]["returning_users"]),
+        "active_subscriptions": _format_number(
+            dashboard_snapshot["acquisition"]["active_subscriptions"]
+        ),
+    }
+
+    plan_labels = {
+        0: "Free",
+        1: "Basic",
+        2: "Standard",
+        3: "Pro",
+        4: "Gold",
+    }
+    top_users = []
+    for user in dashboard_snapshot["top_users"]:
+        last_activity = user["last_activity"]
+        top_users.append(
+            {
+                "name": user["name"],
+                "email": user["email"],
+                "sessions": _format_number(user["sessions"]),
+                "exams_completed": _format_number(user["exams_completed"]),
+                "last_activity_display": last_activity.strftime("%Y-%m-%d %H:%M")
+                if isinstance(last_activity, datetime)
+                else "—",
+                "plan_label": plan_labels.get(user["plan"], "—"),
+                "top_cert": user.get("top_cert") or "—",
+                "top_cert_completions": _format_number(user.get("top_cert_completions") or 0),
+            }
+        )
+
+    return render_template(
+        "dashboard.html",
+        certifications=certifications,
+        plan_options=plan_options,
+        selected_plan=plan_param or "all",
+        selected_cert=cert_id,
+        selected_user=user_param,
+        start_date=start_date.isoformat(),
+        end_date=end_date.isoformat(),
+        kpis=formatted_kpis,
+        acquisition=acquisition,
+        performance=performance,
+        locations=dashboard_snapshot["locations"],
+        cert_popularity=dashboard_snapshot["cert_popularity"],
+        top_users=top_users,
+    )
+
+
 @app.route("/favicon.ico")
 def favicon():
     return send_from_directory(str(BASE_DIR / "static"), "favicon.svg", mimetype="image/svg+xml")
