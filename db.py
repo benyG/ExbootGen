@@ -912,9 +912,11 @@ def add_answers(question_id, answers):
         cursor.close(); conn.close()
 
 
-def _build_user_filter_clause(alias, plan, cert_id, user_query):
+def _build_user_filter_clause(alias, plan, cert_id, user_query, exclude_guest=True):
     conditions = []
     params = {}
+    if exclude_guest:
+        conditions.append(f"COALESCE({alias}.`type`, '') <> 'Guest'")
     if plan is not None:
         conditions.append(f"{alias}.ex = %(plan)s")
         params["plan"] = plan
@@ -945,9 +947,16 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
     }
 
     def _apply_filters(base_query):
-        if user_filters:
-            return f"{base_query} AND {user_filters}"
-        return base_query
+        if not user_filters:
+            return base_query
+        insertion = f" AND {user_filters}\n"
+        if "GROUP BY" in base_query:
+            return base_query.replace("GROUP BY", f"{insertion}GROUP BY")
+        if "ORDER BY" in base_query:
+            return base_query.replace("ORDER BY", f"{insertion}ORDER BY")
+        if "LIMIT" in base_query:
+            return base_query.replace("LIMIT", f"{insertion}LIMIT")
+        return f"{base_query} AND {user_filters}"
 
     cursor.execute(
         _apply_filters(
@@ -1016,7 +1025,8 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
         "start": start_dt,
         "end": end_dt,
     }
-    exam_conditions = ["eu.comp_at BETWEEN %(start)s AND %(end)s"]
+    guest_condition = "COALESCE(u.`type`, '') <> 'Guest'"
+    exam_conditions = ["eu.comp_at BETWEEN %(start)s AND %(end)s", guest_condition]
     if plan is not None:
         exam_params["plan"] = plan
         exam_conditions.append("u.ex = %(plan)s")
@@ -1125,6 +1135,7 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
         JOIN exams e ON e.id = eu.exam
         JOIN users u ON u.id = eu.user
         WHERE eu.added BETWEEN %(start)s AND %(end)s
+        AND {guest_condition}
         {"AND u.ex = %(plan)s" if plan is not None else ""}
         {"AND e.certi = %(cert_id)s" if cert_id is not None else ""}
         {"AND (u.name LIKE %(user_query)s OR u.email LIKE %(user_query)s OR u.usn LIKE %(user_query)s)" if user_query else ""}
@@ -1133,7 +1144,7 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
     )
     total_exam_assignments = cursor.fetchone()[0] or 0
 
-    cert_activity_conditions = ["eu.comp_at BETWEEN %(start)s AND %(end)s"]
+    cert_activity_conditions = ["eu.comp_at BETWEEN %(start)s AND %(end)s", guest_condition]
     if cert_id is not None:
         cert_activity_conditions.append("e.certi = %(cert_id)s")
     if plan is not None:
@@ -1191,6 +1202,7 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
           ON eu.user = u.id AND eu.comp_at BETWEEN %(start)s AND %(end)s
         {"LEFT JOIN users_course uc ON uc.user = u.id" if cert_id is not None else ""}
         WHERE 1=1
+        AND {guest_condition}
         {"AND u.ex = %(plan)s" if plan is not None else ""}
         {"AND uc.course = %(cert_id)s" if cert_id is not None else ""}
         {"AND (u.name LIKE %(user_query)s OR u.email LIKE %(user_query)s OR u.usn LIKE %(user_query)s)" if user_query else ""}
@@ -1216,7 +1228,7 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
             }
         )
 
-    cert_popularity_conditions = ["uc.created_at BETWEEN %(start)s AND %(end)s"]
+    cert_popularity_conditions = ["uc.created_at BETWEEN %(start)s AND %(end)s", guest_condition]
     if plan is not None:
         cert_popularity_conditions.append("u.ex = %(plan)s")
     if user_query:
