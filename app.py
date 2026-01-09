@@ -543,6 +543,11 @@ def home():
     return render_template("home.html")
 
 
+@app.route("/dashboard")
+def dashboard():
+    return render_template("dashboard.html")
+
+
 @app.route("/favicon.ico")
 def favicon():
     return send_from_directory(str(BASE_DIR / "static"), "favicon.svg", mimetype="image/svg+xml")

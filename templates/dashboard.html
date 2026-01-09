@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 15% 10%, rgba(56,189,248,0.18), transparent 55%),
+                     radial-gradient(circle at 75% 20%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.2), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --glass-soft: rgba(15, 19, 32, 0.82);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb { position: fixed; width: 30rem; height: 30rem; border-radius: 50%; opacity: 0.45; pointer-events: none; mix-blend-mode: screen; background: radial-gradient(circle, rgba(71,245,192,0.28) 0%, rgba(4,7,17,0) 70%); animation: drift 24s ease-in-out infinite; z-index: 0; }
+    .orb-1 { top: -12rem; left: -4rem; }
+    .orb-2 { bottom: -12rem; right: -6rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.24) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift { 0%, 100% { transform: translate3d(0,0,0) scale(1); } 45% { transform: translate3d(40px, -30px, 0) scale(1.05); } 75% { transform: translate3d(-30px, 25px, 0) scale(0.95); } }
+
+    .stellar-header { position: sticky; top: 0; z-index: 20; background: rgba(4,7,17,0.72); backdrop-filter: saturate(180%) blur(18px); border-bottom: 1px solid rgba(148,163,184,0.18); }
+    .stellar-container { width: min(1200px, 92vw); margin: 0 auto; padding: 1.2rem 0 1.6rem; }
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 18px; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25)); border: 1px solid rgba(148, 163, 184, 0.2); color: var(--accent-strong); font-weight: 600; letter-spacing: 0.05em; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28); }
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .nav-toggle { display: none; width: 2.8rem; height: 2.8rem; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 19, 32, 0.68); color: var(--text-primary); align-items: center; justify-content: center; cursor: pointer; transition: transform 0.35s var(--transition), background 0.35s var(--transition); }
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+    .nav-toggle span, .nav-toggle span::before, .nav-toggle span::after { display: block; width: 18px; height: 2px; background: currentColor; border-radius: 999px; position: relative; transition: transform 0.35s ease, opacity 0.3s ease; }
+    .nav-toggle span::before, .nav-toggle span::after { content: ''; position: absolute; left: 0; }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.4rem; border-radius: var(--radius-lg); padding: 0.35rem; background: rgba(8, 12, 24, 0.55); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
+    .stellar-nav a { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.05rem; border-radius: 14px; text-decoration: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition); }
+    .stellar-nav a::after { content: ''; position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14)); opacity: 0; transition: opacity 0.35s var(--transition); z-index: -1; }
+    .stellar-nav a:hover { color: var(--text-primary); transform: translateY(-2px); }
+    .stellar-nav a:hover::after { opacity: 1; }
+    .stellar-nav a.active { color: var(--text-primary); }
+    .stellar-nav a.active::after { opacity: 1; box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18); }
+
+    .stellar-main { flex: 1; width: min(1200px, 92vw); margin: 0 auto; padding: 3.6rem 0 5rem; display: flex; flex-direction: column; gap: 2.4rem; position: relative; z-index: 1; }
+
+    .glass-card { background: var(--glass); border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-strong); padding: clamp(1.8rem, 2.8vw, 2.8rem); backdrop-filter: blur(26px); position: relative; overflow: hidden; }
+    .glass-card::before { content: ''; position: absolute; inset: 1px; border-radius: calc(var(--radius-xl) - 2px); border: 1px solid rgba(148, 163, 184, 0.12); pointer-events: none; }
+
+    .hero h1 { margin: 0 0 0.9rem; font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.2rem, 4vw, 2.9rem); letter-spacing: -0.01em; }
+    .hero p { margin: 0; color: var(--text-muted); line-height: 1.7; max-width: 70ch; }
+
+    .filters { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-top: 1.5rem; }
+    .filter-group { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.82rem; color: var(--text-muted); }
+    .filter-group label { font-weight: 500; }
+    .filter-group select,
+    .filter-group input {
+      padding: 0.7rem 0.9rem;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      background: rgba(10, 14, 24, 0.75);
+      color: var(--text-primary);
+      font-size: 0.9rem;
+    }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1.2rem; }
+    .kpi-card { background: var(--glass-soft); border-radius: var(--radius-lg); border: 1px solid rgba(148, 163, 184, 0.18); padding: 1.4rem; box-shadow: 0 18px 40px rgba(3, 7, 18, 0.45); display: flex; flex-direction: column; gap: 0.5rem; }
+    .kpi-card span { font-size: 0.85rem; color: var(--text-muted); }
+    .kpi-card strong { font-size: 1.6rem; font-family: 'Space Grotesk', sans-serif; }
+    .kpi-card em { font-style: normal; font-size: 0.85rem; color: #5eead4; }
+
+    .section-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.2rem; }
+    .section-header h2 { margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 1.4rem; }
+    .section-header span { color: var(--text-muted); font-size: 0.9rem; }
+
+    .chart-grid { display: grid; gap: 1.4rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .chart-card { background: rgba(8, 12, 24, 0.75); border-radius: var(--radius-lg); border: 1px solid rgba(148, 163, 184, 0.16); padding: 1.4rem; box-shadow: 0 18px 40px rgba(3, 7, 18, 0.55); display: flex; flex-direction: column; gap: 1rem; }
+    .chart-title { font-size: 0.95rem; font-weight: 600; }
+    .chart-placeholder { height: 180px; border-radius: 16px; background: linear-gradient(135deg, rgba(71,245,192,0.12), rgba(124,247,255,0.12)); border: 1px dashed rgba(124,247,255,0.35); position: relative; overflow: hidden; }
+    .chart-placeholder::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgba(124,247,255,0.08), rgba(124,247,255,0.08) 12px, transparent 12px, transparent 24px); opacity: 0.6; }
+
+    .insight-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .insight-card { padding: 1.2rem 1.4rem; border-radius: var(--radius-lg); background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(94, 234, 212, 0.28); }
+    .insight-card h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+    .insight-card p { margin: 0; color: var(--text-muted); font-size: 0.88rem; }
+
+    .table-card { background: rgba(8, 12, 24, 0.75); border-radius: var(--radius-lg); border: 1px solid rgba(148, 163, 184, 0.16); padding: 1.4rem; box-shadow: 0 18px 40px rgba(3, 7, 18, 0.55); }
+    table { width: 100%; border-collapse: collapse; border-radius: 14px; overflow: hidden; }
+    thead { background: rgba(15,23,42,0.85); }
+    th, td { padding: 0.75rem 1rem; text-align: left; font-size: 0.92rem; }
+    th { font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(226,232,240,0.65); }
+    tbody tr:nth-child(even) { background: rgba(15,23,42,0.5); }
+
+    footer { color: rgba(226, 232, 240, 0.55); text-align: center; padding: 2.4rem 0 3rem; font-size: 0.85rem; }
+
+    @media (max-width: 960px) {
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 1.2rem; }
+      .stellar-nav { flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <span class="brand-mark">EX</span>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Tableaux de bord marketing & performance</span>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
+        </button>
+      </div>
+      {% set active_page = 'dashboard' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+  <main class="stellar-main">
+    <section class="glass-card hero" data-animate>
+      <h1>Dashboard</h1>
+      <p>Suivez les performances des utilisateurs, certifications et revenus avec des filtres avancés par période, segments et domaines. Cette vue est conçue pour piloter les objectifs marketing et l'efficacité pédagogique.</p>
+      <div class="filters">
+        <div class="filter-group">
+          <label for="range">Période</label>
+          <select id="range">
+            <option>7 derniers jours</option>
+            <option>30 derniers jours</option>
+            <option>Trimestre</option>
+            <option>Année en cours</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="date-start">Du</label>
+          <input id="date-start" type="date" value="2024-01-01">
+        </div>
+        <div class="filter-group">
+          <label for="date-end">Au</label>
+          <input id="date-end" type="date" value="2024-12-31">
+        </div>
+        <div class="filter-group">
+          <label for="plan">Segment</label>
+          <select id="plan">
+            <option>Tous les plans</option>
+            <option>Free</option>
+            <option>Basic</option>
+            <option>Standard</option>
+            <option>Pro</option>
+            <option>Gold</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="cert">Certification</label>
+          <select id="cert">
+            <option>Toutes les certifications</option>
+            <option>AWS Solutions Architect</option>
+            <option>Azure Fundamentals</option>
+            <option>Google Cloud Engineer</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="region">Localisation</label>
+          <select id="region">
+            <option>Toutes les régions</option>
+            <option>Europe</option>
+            <option>Afrique</option>
+            <option>Amériques</option>
+            <option>Asie</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>KPIs marketing & performance</h2>
+        <span>Vue synthétique de la période</span>
+      </div>
+      <div class="kpi-grid">
+        <article class="kpi-card">
+          <span>Utilisateurs actifs</span>
+          <strong>12 480</strong>
+          <em>+8,4% vs période précédente</em>
+        </article>
+        <article class="kpi-card">
+          <span>Nouveaux inscrits</span>
+          <strong>1 240</strong>
+          <em>+4,1% sur 30 jours</em>
+        </article>
+        <article class="kpi-card">
+          <span>Taux de conversion</span>
+          <strong>6,3%</strong>
+          <em>+0,7 pt</em>
+        </article>
+        <article class="kpi-card">
+          <span>Examens complétés</span>
+          <strong>3 086</strong>
+          <em>+12,6%</em>
+        </article>
+        <article class="kpi-card">
+          <span>CA abonnement</span>
+          <strong>€78 900</strong>
+          <em>+9,2%</em>
+        </article>
+        <article class="kpi-card">
+          <span>Engagement moyen</span>
+          <strong>4,8 sessions</strong>
+          <em>+0,4 session</em>
+        </article>
+      </div>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>Acquisition & croissance</h2>
+        <span>Inscriptions, conversions, sources</span>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">Nouveaux vs récurrents</div>
+          <div class="chart-placeholder"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Funnel d'inscription → certification</div>
+          <div class="chart-placeholder"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Sources d'acquisition</div>
+          <div class="chart-placeholder"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>Performance utilisateurs & examens</h2>
+        <span>Scores, temps et complétions</span>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">Score moyen par certification</div>
+          <div class="chart-placeholder"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Distribution des scores</div>
+          <div class="chart-placeholder"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Temps moyen par examen</div>
+          <div class="chart-placeholder"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Progression par module</div>
+          <div class="chart-placeholder"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>Insights & alertes</h2>
+        <span>Éléments actionnables</span>
+      </div>
+      <div class="insight-grid">
+        <div class="insight-card">
+          <h3>Baisse de rétention</h3>
+          <p>La cohorte de nouveaux inscrits décroche de 6% après 7 jours.</p>
+        </div>
+        <div class="insight-card">
+          <h3>Certification en tendance</h3>
+          <p>Azure Fundamentals génère 18% de conversions supplémentaires.</p>
+        </div>
+        <div class="insight-card">
+          <h3>Module critique</h3>
+          <p>Le module Networking affiche un score moyen de 54%.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>Tableau détaillé</h2>
+        <span>Suivi opérationnel & export</span>
+      </div>
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Utilisateur</th>
+              <th>Certification</th>
+              <th>Score moyen</th>
+              <th>Dernière activité</th>
+              <th>Plan</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Aïcha Kouyaté</td>
+              <td>AWS Solutions Architect</td>
+              <td>82%</td>
+              <td>Il y a 2h</td>
+              <td>Pro</td>
+            </tr>
+            <tr>
+              <td>Marc Dupont</td>
+              <td>Azure Fundamentals</td>
+              <td>74%</td>
+              <td>Hier</td>
+              <td>Standard</td>
+            </tr>
+            <tr>
+              <td>Salima Z.</td>
+              <td>Google Cloud Engineer</td>
+              <td>69%</td>
+              <td>Il y a 3 jours</td>
+              <td>Basic</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>ExBoot Laboratory · Tableau de bord marketing et performance</footer>
+
+  <script>
+    const navToggle = document.getElementById('navToggle');
+    if (navToggle) {
+      navToggle.addEventListener('click', () => {
+        const isOpen = navToggle.classList.toggle('is-open');
+        document.body.classList.toggle('nav-open', isOpen);
+        navToggle.setAttribute('aria-expanded', String(isOpen));
+      });
+    }
+  </script>
+</body>
+</html>
