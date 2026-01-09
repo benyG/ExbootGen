@@ -623,6 +623,10 @@ def dashboard():
         f"{avg_exam_duration:.0f} min" if avg_exam_duration is not None else "—"
     )
     performance["completion_rate_display"] = f"{performance['completion_rate']:.1f}%"
+    performance["completion_rate_percent"] = min(performance["completion_rate"], 100)
+    performance["avg_exam_duration_percent"] = min(
+        (avg_exam_duration / 120 * 100) if avg_exam_duration else 0, 100
+    )
 
     acquisition = {
         "new_users": _format_number(dashboard_snapshot["acquisition"]["new_users"]),
@@ -631,6 +635,63 @@ def dashboard():
             dashboard_snapshot["acquisition"]["active_subscriptions"]
         ),
     }
+    acquisition_metrics = dashboard_snapshot["acquisition"]
+    new_users = acquisition_metrics["new_users"]
+    returning_users = acquisition_metrics["returning_users"]
+    active_subscriptions = acquisition_metrics["active_subscriptions"]
+    acquisition_total = new_users + returning_users
+    acquisition_breakdown = {
+        "new_percent": round((new_users / acquisition_total * 100) if acquisition_total else 0, 1),
+        "returning_percent": round(
+            (returning_users / acquisition_total * 100) if acquisition_total else 0, 1
+        ),
+    }
+    funnel_max = max(new_users, active_subscriptions, kpis["completed_exams"], 1)
+    acquisition_funnel = {
+        "new_percent": round((new_users / funnel_max * 100), 1),
+        "active_percent": round((active_subscriptions / funnel_max * 100), 1),
+        "completed_percent": round((kpis["completed_exams"] / funnel_max * 100), 1),
+    }
+
+    def _with_percent(values, key):
+        max_value = max((item.get(key) or 0 for item in values), default=0)
+        for item in values:
+            value = item.get(key) or 0
+            item["percent"] = round((value / max_value * 100) if max_value else 0, 1)
+        return values
+
+    locations = _with_percent(dashboard_snapshot["locations"], "total")
+    performance["completions_by_cert"] = _with_percent(
+        performance["completions_by_cert"], "completions"
+    )
+    cert_popularity = _with_percent(dashboard_snapshot["cert_popularity"], "user_count")
+
+    top_cert = performance["completions_by_cert"][0] if performance["completions_by_cert"] else None
+    insights = [
+        {
+            "title": "Rétention des utilisateurs",
+            "description": (
+                f"{(returning_users / acquisition_total * 100):.1f}% des utilisateurs actifs "
+                "sont récurrents sur la période."
+            )
+            if acquisition_total
+            else "Aucune récurrence détectée sur la période sélectionnée.",
+        },
+        {
+            "title": "Certification en tendance",
+            "description": (
+                f"{top_cert['name']} concentre {top_cert['completions']} examens complétés."
+                if top_cert
+                else "Aucune certification complétée sur la période."
+            ),
+        },
+        {
+            "title": "Engagement moyen",
+            "description": (
+                f"{kpis['engagement']:.1f} sessions par utilisateur actif en moyenne."
+            ),
+        },
+    ]
 
     plan_labels = {
         0: "Free",
@@ -668,10 +729,13 @@ def dashboard():
         end_date=end_date.isoformat(),
         kpis=formatted_kpis,
         acquisition=acquisition,
+        acquisition_breakdown=acquisition_breakdown,
+        acquisition_funnel=acquisition_funnel,
         performance=performance,
-        locations=dashboard_snapshot["locations"],
-        cert_popularity=dashboard_snapshot["cert_popularity"],
+        locations=locations,
+        cert_popularity=cert_popularity,
         top_users=top_users,
+        insights=insights,
     )
 
 
