@@ -41,6 +41,25 @@ def _json_dumps(value) -> str | None:
     return json.dumps(value, ensure_ascii=False)
 
 
+def _safe_json_loads(raw, default=None):
+    if raw is None or raw == "":
+        return default
+    if isinstance(raw, (dict, list)):
+        return raw
+    try:
+        return json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return default
+
+
+def _json_dumps(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False)
+
+
 def execute_async(func, *args, **kwargs):
     """Run a database function in a background thread."""
     return executor.submit(func, *args, **kwargs)
