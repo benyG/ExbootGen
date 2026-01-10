@@ -1637,7 +1637,7 @@ def get_automation_rules():
     cursor.close()
     conn.close()
     for row in rows:
-        row["condition"] = _safe_json_loads(row.get("condition"), {})
+        row["run_condition"] = _safe_json_loads(row.get("run_condition"), {})
         row["channels"] = _safe_json_loads(row.get("channels"), [])
     return rows
 
@@ -1650,7 +1650,7 @@ def get_automation_rule(rule_id: int):
     cursor.close()
     conn.close()
     if row:
-        row["condition"] = _safe_json_loads(row.get("condition"), {})
+        row["run_condition"] = _safe_json_loads(row.get("run_condition"), {})
         row["channels"] = _safe_json_loads(row.get("channels"), [])
     return row
 
@@ -1661,10 +1661,10 @@ def create_automation_rule(payload: dict) -> int:
     cursor.execute(
         """
         INSERT INTO auto_rules (
-            name, description, event_type_id, condition, action_id,
+            name, description, event_type_id, run_condition, action_id,
             message_id, channels, enabled, created_at, updated_at
         ) VALUES (
-            %(name)s, %(description)s, %(event_type_id)s, %(condition)s, %(action_id)s,
+            %(name)s, %(description)s, %(event_type_id)s, %(run_condition)s, %(action_id)s,
             %(message_id)s, %(channels)s,
             %(enabled)s, NOW(), NOW()
         )
@@ -1673,7 +1673,7 @@ def create_automation_rule(payload: dict) -> int:
             "name": payload.get("name"),
             "description": payload.get("description"),
             "event_type_id": payload.get("event_type_id"),
-            "condition": _json_dumps(payload.get("condition")),
+            "run_condition": _json_dumps(payload.get("run_condition")),
             "action_id": payload.get("action_id"),
             "message_id": payload.get("message_id"),
             "channels": _json_dumps(payload.get("channels")),
@@ -1696,7 +1696,7 @@ def update_automation_rule(rule_id: int, payload: dict) -> None:
         SET name=%(name)s,
             description=%(description)s,
             event_type_id=%(event_type_id)s,
-            condition=%(condition)s,
+            run_condition=%(run_condition)s,
             action_id=%(action_id)s,
             message_id=%(message_id)s,
             channels=%(channels)s,
@@ -1709,7 +1709,7 @@ def update_automation_rule(rule_id: int, payload: dict) -> None:
             "name": payload.get("name"),
             "description": payload.get("description"),
             "event_type_id": payload.get("event_type_id"),
-            "condition": _json_dumps(payload.get("condition")),
+            "run_condition": _json_dumps(payload.get("run_condition")),
             "action_id": payload.get("action_id"),
             "message_id": payload.get("message_id"),
             "channels": _json_dumps(payload.get("channels")),

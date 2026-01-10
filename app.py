@@ -2098,8 +2098,8 @@ def _process_event_rules(event: dict) -> None:
         try:
             if not rule.get("enabled", True):
                 continue
-            condition = rule.get("condition") or {}
-            if not _evaluate_condition(condition, context):
+            run_condition = rule.get("run_condition") or {}
+            if not _evaluate_condition(run_condition, context):
                 continue
             action_queue_id = None
             notification_id = None
@@ -2459,7 +2459,7 @@ def automation_rules():
         return jsonify(db.get_automation_rules())
 
     payload = request.get_json() or {}
-    payload["condition"] = _parse_json_input(payload.get("condition"), {})
+    payload["run_condition"] = _parse_json_input(payload.get("run_condition"), {})
     payload["channels"] = _parse_json_input(payload.get("channels"), [])
     payload["enabled"] = _normalise_enabled(payload.get("enabled", True))
     rule_id = db.create_automation_rule(payload)
@@ -2473,7 +2473,7 @@ def automation_rule_detail(rule_id: int):
         return jsonify({"status": "deleted"})
 
     payload = request.get_json() or {}
-    payload["condition"] = _parse_json_input(payload.get("condition"), {})
+    payload["run_condition"] = _parse_json_input(payload.get("run_condition"), {})
     payload["channels"] = _parse_json_input(payload.get("channels"), [])
     payload["enabled"] = _normalise_enabled(payload.get("enabled", True))
     db.update_automation_rule(rule_id, payload)

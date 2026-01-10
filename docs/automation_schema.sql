@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS auto_rules (
   name VARCHAR(255) NOT NULL,
   description TEXT DEFAULT NULL,
   event_type_id BIGINT UNSIGNED NOT NULL,
-  condition JSON DEFAULT NULL,
+  run_condition JSON DEFAULT NULL,
   action_id BIGINT UNSIGNED DEFAULT NULL,
   message_id BIGINT UNSIGNED DEFAULT NULL,
   channels JSON DEFAULT NULL,

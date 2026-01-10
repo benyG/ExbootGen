@@ -285,7 +285,7 @@
           <label>Nom<input name="name" required></label>
           <label>Description<input name="description"></label>
           <label>Subject JSON<textarea name="subject" placeholder='{"fr":"Bienvenue","en":"Welcome"}'></textarea></label>
-          <label>Body JSON<textarea name="body" placeholder='{"fr":"Bonjour {{user.name}}","en":"Hi {{user.name}}"}'></textarea></label>
+          <label>Body JSON<textarea name="body" placeholder='{"fr":"Bonjour {{ "{{" }}user.name{{ "}}" }}","en":"Hi {{ "{{" }}user.name{{ "}}" }}"}'></textarea></label>
           <label><input type="checkbox" name="enabled" checked> Activé</label>
           <div class="flex">
             <button class="primary" type="submit">Enregistrer</button>
@@ -313,7 +313,7 @@
           <label>Action<select name="action_id"></select></label>
           <label>Message<select name="message_id"></select></label>
           <label>Channels JSON<textarea name="channels" placeholder='["email","inbox"]'></textarea></label>
-          <label>Condition JSON<textarea name="condition" placeholder='{"field":"payload.data.email","operator":"ne","value":null}'></textarea></label>
+          <label>Condition JSON<textarea name="run_condition" placeholder='{"field":"payload.data.email","operator":"ne","value":null}'></textarea></label>
           <label><input type="checkbox" name="enabled" checked> Activée</label>
           <div class="flex">
             <button class="primary" type="submit">Enregistrer</button>
