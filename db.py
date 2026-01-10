@@ -22,6 +22,25 @@ executor = ThreadPoolExecutor(max_workers=8)
 _SCHEDULE_COLUMNS: set[str] | None = None
 
 
+def _safe_json_loads(raw, default=None):
+    if raw is None or raw == "":
+        return default
+    if isinstance(raw, (dict, list)):
+        return raw
+    try:
+        return json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return default
+
+
+def _json_dumps(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False)
+
+
 def execute_async(func, *args, **kwargs):
     """Run a database function in a background thread."""
     return executor.submit(func, *args, **kwargs)
@@ -1284,3 +1303,801 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
         "top_users": top_users,
         "cert_popularity": cert_popularity,
     }
+
+
+# ---------------------------------------------------------------------------
+# Automation: event-driven rules engine
+# ---------------------------------------------------------------------------
+
+
+def get_automation_event_types():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM auto_event_types ORDER BY id")
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    for row in rows:
+        row["filters"] = _safe_json_loads(row.get("filters"), [])
+        row["payload_columns"] = _safe_json_loads(row.get("payload_columns"), [])
+    return rows
+
+
+def get_automation_event_type(event_type_id: int):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM auto_event_types WHERE id = %s", (event_type_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if row:
+        row["filters"] = _safe_json_loads(row.get("filters"), [])
+        row["payload_columns"] = _safe_json_loads(row.get("payload_columns"), [])
+    return row
+
+
+def create_automation_event_type(payload: dict) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO auto_event_types (
+            code, name, description, enabled, source_table, source_query,
+            cursor_type, cursor_value,
+            filters, payload_columns, created_at, updated_at
+        ) VALUES (
+            %(code)s, %(name)s, %(description)s, %(enabled)s, %(source_table)s, %(source_query)s,
+            %(cursor_type)s, %(cursor_value)s,
+            %(filters)s, %(payload_columns)s, NOW(), NOW()
+        )
+        """,
+        {
+            "code": payload.get("code"),
+            "name": payload.get("name"),
+            "description": payload.get("description"),
+            "enabled": 1 if payload.get("enabled", True) else 0,
+            "source_table": payload.get("source_table"),
+            "source_query": payload.get("source_query"),
+            "cursor_type": payload.get("cursor_type") or "id",
+            "cursor_value": payload.get("cursor_value"),
+            "filters": _json_dumps(payload.get("filters")),
+            "payload_columns": _json_dumps(payload.get("payload_columns")),
+        },
+    )
+    conn.commit()
+    event_type_id = cursor.lastrowid
+    cursor.close()
+    conn.close()
+    return event_type_id
+
+
+def update_automation_event_type(event_type_id: int, payload: dict) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE auto_event_types
+        SET code=%(code)s,
+            name=%(name)s,
+            description=%(description)s,
+            enabled=%(enabled)s,
+            source_table=%(source_table)s,
+            source_query=%(source_query)s,
+            cursor_type=%(cursor_type)s,
+            cursor_value=%(cursor_value)s,
+            filters=%(filters)s,
+            payload_columns=%(payload_columns)s,
+            updated_at=NOW()
+        WHERE id=%(id)s
+        """,
+        {
+            "id": event_type_id,
+            "code": payload.get("code"),
+            "name": payload.get("name"),
+            "description": payload.get("description"),
+            "enabled": 1 if payload.get("enabled", True) else 0,
+            "source_table": payload.get("source_table"),
+            "source_query": payload.get("source_query"),
+            "cursor_type": payload.get("cursor_type") or "id",
+            "cursor_value": payload.get("cursor_value"),
+            "filters": _json_dumps(payload.get("filters")),
+            "payload_columns": _json_dumps(payload.get("payload_columns")),
+        },
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def update_automation_event_cursor(event_type_id: int, cursor_value: str | None) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE auto_event_types SET cursor_value=%s, updated_at=NOW() WHERE id=%s",
+        (cursor_value, event_type_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def delete_automation_event_type(event_type_id: int) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM auto_event_types WHERE id = %s", (event_type_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def get_automation_actions():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM auto_action_types ORDER BY id")
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    for row in rows:
+        row["config"] = _safe_json_loads(row.get("config"), {})
+        row["action_overrides"] = _safe_json_loads(row.get("action_overrides"), {})
+    return rows
+
+
+def get_automation_action(action_id: int):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM auto_action_types WHERE id = %s", (action_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if row:
+        row["config"] = _safe_json_loads(row.get("config"), {})
+        row["action_overrides"] = _safe_json_loads(row.get("action_overrides"), {})
+    return row
+
+
+def create_automation_action(payload: dict) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO auto_action_types (
+            code, name, description, action_type, config, action_overrides, enabled, created_at, updated_at
+        ) VALUES (
+            %(code)s, %(name)s, %(description)s, %(action_type)s, %(config)s, %(action_overrides)s, %(enabled)s,
+            NOW(), NOW()
+        )
+        """,
+        {
+            "code": payload.get("code"),
+            "name": payload.get("name"),
+            "description": payload.get("description"),
+            "action_type": payload.get("action_type"),
+            "config": _json_dumps(payload.get("config")),
+            "action_overrides": _json_dumps(payload.get("action_overrides")),
+            "enabled": 1 if payload.get("enabled", True) else 0,
+        },
+    )
+    conn.commit()
+    action_id = cursor.lastrowid
+    cursor.close()
+    conn.close()
+    return action_id
+
+
+def update_automation_action(action_id: int, payload: dict) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE auto_action_types
+        SET code=%(code)s,
+            name=%(name)s,
+            description=%(description)s,
+            action_type=%(action_type)s,
+            config=%(config)s,
+            action_overrides=%(action_overrides)s,
+            enabled=%(enabled)s,
+            updated_at=NOW()
+        WHERE id=%(id)s
+        """,
+        {
+            "id": action_id,
+            "code": payload.get("code"),
+            "name": payload.get("name"),
+            "description": payload.get("description"),
+            "action_type": payload.get("action_type"),
+            "config": _json_dumps(payload.get("config")),
+            "action_overrides": _json_dumps(payload.get("action_overrides")),
+            "enabled": 1 if payload.get("enabled", True) else 0,
+        },
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def delete_automation_action(action_id: int) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM auto_action_types WHERE id = %s", (action_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def get_automation_messages():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM auto_message_templates ORDER BY id")
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    for row in rows:
+        row["subject"] = _safe_json_loads(row.get("subject"), {})
+        row["body"] = _safe_json_loads(row.get("body"), {})
+    return rows
+
+
+def get_automation_message(message_id: int):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM auto_message_templates WHERE id = %s", (message_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if row:
+        row["subject"] = _safe_json_loads(row.get("subject"), {})
+        row["body"] = _safe_json_loads(row.get("body"), {})
+    return row
+
+
+def create_automation_message(payload: dict) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO auto_message_templates (
+            code, name, description, subject, body, enabled, created_at, updated_at
+        ) VALUES (
+            %(code)s, %(name)s, %(description)s, %(subject)s, %(body)s, %(enabled)s, NOW(), NOW()
+        )
+        """,
+        {
+            "code": payload.get("code"),
+            "name": payload.get("name"),
+            "description": payload.get("description"),
+            "subject": _json_dumps(payload.get("subject")),
+            "body": _json_dumps(payload.get("body")),
+            "enabled": 1 if payload.get("enabled", True) else 0,
+        },
+    )
+    conn.commit()
+    message_id = cursor.lastrowid
+    cursor.close()
+    conn.close()
+    return message_id
+
+
+def update_automation_message(message_id: int, payload: dict) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE auto_message_templates
+        SET code=%(code)s,
+            name=%(name)s,
+            description=%(description)s,
+            subject=%(subject)s,
+            body=%(body)s,
+            enabled=%(enabled)s,
+            updated_at=NOW()
+        WHERE id=%(id)s
+        """,
+        {
+            "id": message_id,
+            "code": payload.get("code"),
+            "name": payload.get("name"),
+            "description": payload.get("description"),
+            "subject": _json_dumps(payload.get("subject")),
+            "body": _json_dumps(payload.get("body")),
+            "enabled": 1 if payload.get("enabled", True) else 0,
+        },
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def delete_automation_message(message_id: int) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM auto_message_templates WHERE id = %s", (message_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def get_automation_rules():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """
+        SELECT r.*, e.code AS event_code, e.name AS event_name,
+               a.code AS action_code, a.name AS action_name,
+               m.code AS message_code, m.name AS message_name
+        FROM auto_rules r
+        LEFT JOIN auto_event_types e ON r.event_type_id = e.id
+        LEFT JOIN auto_action_types a ON r.action_id = a.id
+        LEFT JOIN auto_message_templates m ON r.message_id = m.id
+        ORDER BY r.id
+        """
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    for row in rows:
+        row["condition"] = _safe_json_loads(row.get("condition"), {})
+        row["channels"] = _safe_json_loads(row.get("channels"), [])
+    return rows
+
+
+def get_automation_rule(rule_id: int):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM auto_rules WHERE id = %s", (rule_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if row:
+        row["condition"] = _safe_json_loads(row.get("condition"), {})
+        row["channels"] = _safe_json_loads(row.get("channels"), [])
+    return row
+
+
+def create_automation_rule(payload: dict) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO auto_rules (
+            name, description, event_type_id, condition, action_id,
+            message_id, channels, enabled, created_at, updated_at
+        ) VALUES (
+            %(name)s, %(description)s, %(event_type_id)s, %(condition)s, %(action_id)s,
+            %(message_id)s, %(channels)s,
+            %(enabled)s, NOW(), NOW()
+        )
+        """,
+        {
+            "name": payload.get("name"),
+            "description": payload.get("description"),
+            "event_type_id": payload.get("event_type_id"),
+            "condition": _json_dumps(payload.get("condition")),
+            "action_id": payload.get("action_id"),
+            "message_id": payload.get("message_id"),
+            "channels": _json_dumps(payload.get("channels")),
+            "enabled": 1 if payload.get("enabled", True) else 0,
+        },
+    )
+    conn.commit()
+    rule_id = cursor.lastrowid
+    cursor.close()
+    conn.close()
+    return rule_id
+
+
+def update_automation_rule(rule_id: int, payload: dict) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE auto_rules
+        SET name=%(name)s,
+            description=%(description)s,
+            event_type_id=%(event_type_id)s,
+            condition=%(condition)s,
+            action_id=%(action_id)s,
+            message_id=%(message_id)s,
+            channels=%(channels)s,
+            enabled=%(enabled)s,
+            updated_at=NOW()
+        WHERE id=%(id)s
+        """,
+        {
+            "id": rule_id,
+            "name": payload.get("name"),
+            "description": payload.get("description"),
+            "event_type_id": payload.get("event_type_id"),
+            "condition": _json_dumps(payload.get("condition")),
+            "action_id": payload.get("action_id"),
+            "message_id": payload.get("message_id"),
+            "channels": _json_dumps(payload.get("channels")),
+            "enabled": 1 if payload.get("enabled", True) else 0,
+        },
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def delete_automation_rule(rule_id: int) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM auto_rules WHERE id = %s", (rule_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def create_event_inbox_entry(payload: dict) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO auto_event_tampon (
+            event_type_id, user_id, source_table, source_pk, source, payload,
+            status, created_at, updated_at
+        ) VALUES (
+            %(event_type_id)s, %(user_id)s, %(source_table)s, %(source_pk)s, %(source)s,
+            %(payload)s, %(status)s, NOW(), NOW()
+        )
+        """,
+        {
+            "event_type_id": payload.get("event_type_id"),
+            "user_id": payload.get("user_id"),
+            "source_table": payload.get("source_table"),
+            "source_pk": payload.get("source_pk"),
+            "source": payload.get("source"),
+            "payload": _json_dumps(payload.get("payload")),
+            "status": payload.get("status", "pending"),
+        },
+    )
+    conn.commit()
+    event_id = cursor.lastrowid
+    cursor.close()
+    conn.close()
+    return event_id
+
+
+def update_event_inbox_status(event_id: int, status: str, *, error: str | None = None) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE auto_event_tampon
+        SET status=%s, error=%s, processed_at=IF(%s IN ('processed','failed'), NOW(), processed_at), updated_at=NOW()
+        WHERE id=%s
+        """,
+        (status, error, status, event_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def get_event_inbox_entry(event_id: int):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM auto_event_tampon WHERE id = %s", (event_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if row:
+        row["payload"] = _safe_json_loads(row.get("payload"), {})
+    return row
+
+
+def get_pending_event_inbox(limit: int = 100):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        "SELECT * FROM auto_event_tampon WHERE status = 'pending' ORDER BY created_at LIMIT %s",
+        (limit,),
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    for row in rows:
+        row["payload"] = _safe_json_loads(row.get("payload"), {})
+    return rows
+
+
+def insert_rule_execution(
+    rule_id: int,
+    event_id: int,
+    *,
+    action_queue_id: int | None = None,
+    notification_queue_id: int | None = None,
+) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO auto_rule_executions (
+            rule_id, event_id, action_queue_id, notification_queue_id, created_at
+        ) VALUES (%s, %s, %s, %s, NOW())
+        """,
+        (rule_id, event_id, action_queue_id, notification_queue_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def rule_execution_exists(rule_id: int, event_id: int) -> bool:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT 1 FROM auto_rule_executions WHERE rule_id = %s AND event_id = %s LIMIT 1",
+        (rule_id, event_id),
+    )
+    exists = cursor.fetchone() is not None
+    cursor.close()
+    conn.close()
+    return exists
+
+
+def enqueue_action(payload: dict) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO auto_action_queue (
+            action_id, rule_id, event_id, user_id, payload, status, attempts, created_at, updated_at
+        ) VALUES (
+            %(action_id)s, %(rule_id)s, %(event_id)s, %(user_id)s, %(payload)s,
+            %(status)s, %(attempts)s, NOW(), NOW()
+        )
+        """,
+        {
+            "action_id": payload.get("action_id"),
+            "rule_id": payload.get("rule_id"),
+            "event_id": payload.get("event_id"),
+            "user_id": payload.get("user_id"),
+            "payload": _json_dumps(payload.get("payload")),
+            "status": payload.get("status", "pending"),
+            "attempts": payload.get("attempts", 0),
+        },
+    )
+    conn.commit()
+    action_queue_id = cursor.lastrowid
+    cursor.close()
+    conn.close()
+    return action_queue_id
+
+
+def enqueue_notification(payload: dict) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO auto_notification_queue (
+            message_id, rule_id, event_id, user_id, payload, channels, status,
+            attempts, created_at, updated_at
+        ) VALUES (
+            %(message_id)s, %(rule_id)s, %(event_id)s, %(user_id)s, %(payload)s,
+            %(channels)s, %(status)s, %(attempts)s, NOW(), NOW()
+        )
+        """,
+        {
+            "message_id": payload.get("message_id"),
+            "rule_id": payload.get("rule_id"),
+            "event_id": payload.get("event_id"),
+            "user_id": payload.get("user_id"),
+            "payload": _json_dumps(payload.get("payload")),
+            "channels": _json_dumps(payload.get("channels")),
+            "status": payload.get("status", "pending"),
+            "attempts": payload.get("attempts", 0),
+        },
+    )
+    conn.commit()
+    notification_id = cursor.lastrowid
+    cursor.close()
+    conn.close()
+    return notification_id
+
+
+def get_action_queue_entry(action_queue_id: int):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM auto_action_queue WHERE id = %s", (action_queue_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if row:
+        row["payload"] = _safe_json_loads(row.get("payload"), {})
+    return row
+
+
+def get_notification_queue_entry(notification_id: int):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM auto_notification_queue WHERE id = %s", (notification_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if row:
+        row["payload"] = _safe_json_loads(row.get("payload"), {})
+        row["channels"] = _safe_json_loads(row.get("channels"), [])
+    return row
+
+
+def get_pending_action_queue(limit: int = 100):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        "SELECT * FROM auto_action_queue WHERE status = 'pending' ORDER BY created_at LIMIT %s",
+        (limit,),
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    for row in rows:
+        row["payload"] = _safe_json_loads(row.get("payload"), {})
+    return rows
+
+
+def get_pending_notification_queue(limit: int = 100):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        "SELECT * FROM auto_notification_queue WHERE status = 'pending' ORDER BY created_at LIMIT %s",
+        (limit,),
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    for row in rows:
+        row["payload"] = _safe_json_loads(row.get("payload"), {})
+        row["channels"] = _safe_json_loads(row.get("channels"), [])
+    return rows
+
+
+def update_action_queue_status(action_queue_id: int, status: str, *, error: str | None = None) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE auto_action_queue
+        SET status=%s, last_error=%s,
+            processed_at=IF(%s IN ('processed','failed'), NOW(), processed_at),
+            attempts=attempts + IF(%s='failed', 1, 0),
+            updated_at=NOW()
+        WHERE id=%s
+        """,
+        (status, error, status, status, action_queue_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def update_notification_queue_status(notification_id: int, status: str, *, error: str | None = None) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE auto_notification_queue
+        SET status=%s, last_error=%s,
+            processed_at=IF(%s IN ('processed','failed'), NOW(), processed_at),
+            attempts=attempts + IF(%s='failed', 1, 0),
+            updated_at=NOW()
+        WHERE id=%s
+        """,
+        (status, error, status, status, notification_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def get_automation_event_history(limit: int = 200, status: str | None = None):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    if status:
+        cursor.execute(
+            "SELECT * FROM auto_event_tampon WHERE status = %s ORDER BY created_at DESC LIMIT %s",
+            (status, limit),
+        )
+    else:
+        cursor.execute("SELECT * FROM auto_event_tampon ORDER BY created_at DESC LIMIT %s", (limit,))
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    for row in rows:
+        row["payload"] = _safe_json_loads(row.get("payload"), {})
+    return rows
+
+
+def get_automation_action_history(limit: int = 200, status: str | None = None):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    if status:
+        cursor.execute(
+            "SELECT * FROM auto_action_queue WHERE status = %s ORDER BY created_at DESC LIMIT %s",
+            (status, limit),
+        )
+    else:
+        cursor.execute("SELECT * FROM auto_action_queue ORDER BY created_at DESC LIMIT %s", (limit,))
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    for row in rows:
+        row["payload"] = _safe_json_loads(row.get("payload"), {})
+    return rows
+
+
+def get_automation_notification_history(limit: int = 200, status: str | None = None):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    if status:
+        cursor.execute(
+            "SELECT * FROM auto_notification_queue WHERE status = %s ORDER BY created_at DESC LIMIT %s",
+            (status, limit),
+        )
+    else:
+        cursor.execute(
+            "SELECT * FROM auto_notification_queue ORDER BY created_at DESC LIMIT %s", (limit,)
+        )
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    for row in rows:
+        row["payload"] = _safe_json_loads(row.get("payload"), {})
+        row["channels"] = _safe_json_loads(row.get("channels"), [])
+    return rows
+
+
+def get_automation_rule_history(limit: int = 200, status: str | None = None):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM auto_rule_executions ORDER BY created_at DESC LIMIT %s", (limit,))
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def get_user_by_email(email: str):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT id, name, email, pk FROM users WHERE email = %s LIMIT 1", (email,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return row
+
+
+def get_user_by_id(user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT id, name, email, pk FROM users WHERE id = %s LIMIT 1", (user_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return row
+
+
+def create_in_app_message(user_id: int, subject: str, content: str) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO smails (sub, content, hid, created_at, updated_at)
+        VALUES (%s, %s, 0, NOW(), NOW())
+        """,
+        (subject, content),
+    )
+    smail_id = cursor.lastrowid
+    cursor.execute(
+        """
+        INSERT INTO users_mail (user, mail, sent, read, last_sent)
+        VALUES (%s, %s, 1, 0, NOW())
+        """,
+        (user_id, smail_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return smail_id
