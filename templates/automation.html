@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Automation · ExBoot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #040711;
+      --glass: rgba(12, 16, 29, 0.72);
+      --glass-strong: rgba(17, 22, 36, 0.9);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text: #f8fafc;
+      --muted: rgba(226, 232, 240, 0.78);
+      --warning: #f59e0b;
+      --danger: #f87171;
+      --radius-lg: 22px;
+      --radius-md: 14px;
+      --shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background:
+        radial-gradient(circle at 15% 20%, rgba(124,247,255,0.12), transparent 45%),
+        radial-gradient(circle at 80% 10%, rgba(244,114,182,0.14), transparent 50%),
+        radial-gradient(circle at 50% 80%, rgba(71,245,192,0.16), transparent 60%),
+        var(--bg);
+      color: var(--text);
+    }
+
+    header.stellar-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(4, 7, 17, 0.78);
+      backdrop-filter: blur(16px) saturate(170%);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .container {
+      width: min(1250px, 94vw);
+      margin: 0 auto;
+      padding: 0 1rem 3rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.2rem 0;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+    }
+
+    .brand-mark {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      background: linear-gradient(145deg, rgba(71,245,192,0.9), rgba(124,247,255,0.9));
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      color: #041221;
+      box-shadow: 0 12px 28px rgba(124,247,255,0.18);
+    }
+
+    .brand strong {
+      font-family: 'Space Grotesk', 'Inter', sans-serif;
+      font-size: 1.1rem;
+      letter-spacing: 0.01em;
+    }
+
+    .grid {
+      display: grid;
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      padding: 1.4rem;
+    }
+
+    .card h2 {
+      margin: 0 0 1rem;
+      font-size: 1.25rem;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(280px, 360px) 1fr;
+      gap: 1.5rem;
+    }
+
+    label {
+      font-size: 0.85rem;
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    input, select, textarea {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 0.55rem 0.75rem;
+      font-size: 0.9rem;
+    }
+
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+      font-family: 'JetBrains Mono', 'Menlo', monospace;
+    }
+
+    button.primary {
+      border: none;
+      border-radius: 12px;
+      padding: 0.6rem 1.1rem;
+      background: linear-gradient(135deg, rgba(71,245,192,0.9), rgba(124,247,255,0.85));
+      color: #041221;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button.ghost {
+      background: transparent;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      color: var(--text);
+      padding: 0.5rem 0.9rem;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    .table th, .table td {
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      padding: 0.6rem 0.4rem;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .table th {
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .badge {
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      background: rgba(71,245,192,0.15);
+      color: var(--accent-strong);
+      border: 1px solid rgba(71,245,192,0.35);
+    }
+
+    .status-failed { color: var(--danger); }
+    .status-processed { color: var(--accent); }
+    .status-pending { color: var(--warning); }
+
+    .row-actions {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+
+    .flex {
+      display: flex;
+      gap: 0.8rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 980px) {
+      .split { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="stellar-header">
+    <div class="container">
+      <div class="top-bar">
+        <div class="brand">
+          <div class="brand-mark">EB</div>
+          <div>
+            <strong>ExBoot Automation</strong>
+            <div style="color: var(--muted); font-size: 0.85rem;">Event-driven action & notifications</div>
+          </div>
+        </div>
+      </div>
+      {% include "_nav.html" %}
+    </div>
+  </header>
+
+  <main class="container grid">
+    <section class="card">
+      <h2>Registres (Events · Actions · Messages)</h2>
+      <div class="split">
+        <form id="eventForm" class="grid">
+          <strong>Event registry</strong>
+          <label>Code<input name="code" required></label>
+          <label>Nom<input name="name" required></label>
+          <label>Description<input name="description"></label>
+          <label>Source table<input name="source_table" placeholder="users"></label>
+          <label>Source query (SQL)<textarea name="source_query" placeholder="SELECT id AS event_cursor, user_id, created_at FROM users WHERE id > {{cursor}} ORDER BY id ASC LIMIT {{limit}}"></textarea></label>
+          <label>Cursor type
+            <select name="cursor_type">
+              <option value="id">id</option>
+              <option value="timestamp">timestamp</option>
+            </select>
+          </label>
+          <label>Cursor value<input name="cursor_value"></label>
+          <label>Filters JSON<textarea name="filters" placeholder='[{"column":"pub","op":"=","value":1}]'></textarea></label>
+          <label>Payload columns JSON<textarea name="payload_columns" placeholder='["id","email","created_at"]'></textarea></label>
+          <label><input type="checkbox" name="enabled" checked> Activé</label>
+          <div class="flex">
+            <button class="primary" type="submit">Enregistrer</button>
+            <button class="ghost" type="button" data-reset="event">Nouveau</button>
+          </div>
+        </form>
+        <div>
+          <table class="table" id="eventTable">
+            <thead>
+              <tr><th>ID</th><th>Code</th><th>Nom</th><th>Source</th><th>Cursor</th><th>Statut</th><th>Actions</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="split" style="margin-top: 1.5rem;">
+        <form id="actionForm" class="grid">
+          <strong>Action registry</strong>
+          <label>Code<input name="code" required></label>
+          <label>Nom<input name="name" required></label>
+          <label>Description<input name="description"></label>
+          <label>Action type<input name="action_type" placeholder="update_user_field"></label>
+          <label>Config JSON<textarea name="config" placeholder='{"field":"ax","value":1}'></textarea></label>
+          <label>Action overrides JSON<textarea name="action_overrides" placeholder='{"amount":1}'></textarea></label>
+          <label><input type="checkbox" name="enabled" checked> Activée</label>
+          <div class="flex">
+            <button class="primary" type="submit">Enregistrer</button>
+            <button class="ghost" type="button" data-reset="action">Nouveau</button>
+          </div>
+        </form>
+        <div>
+          <table class="table" id="actionTable">
+            <thead>
+              <tr><th>ID</th><th>Code</th><th>Nom</th><th>Type</th><th>Statut</th><th>Actions</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="split" style="margin-top: 1.5rem;">
+        <form id="messageForm" class="grid">
+          <strong>Message registry</strong>
+          <label>Code<input name="code" required></label>
+          <label>Nom<input name="name" required></label>
+          <label>Description<input name="description"></label>
+          <label>Subject JSON<textarea name="subject" placeholder='{"fr":"Bienvenue","en":"Welcome"}'></textarea></label>
+          <label>Body JSON<textarea name="body" placeholder='{"fr":"Bonjour {{user.name}}","en":"Hi {{user.name}}"}'></textarea></label>
+          <label><input type="checkbox" name="enabled" checked> Activé</label>
+          <div class="flex">
+            <button class="primary" type="submit">Enregistrer</button>
+            <button class="ghost" type="button" data-reset="message">Nouveau</button>
+          </div>
+        </form>
+        <div>
+          <table class="table" id="messageTable">
+            <thead>
+              <tr><th>ID</th><th>Code</th><th>Nom</th><th>Statut</th><th>Actions</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Rules builder</h2>
+      <div class="split">
+        <form id="ruleForm" class="grid">
+          <label>Nom<input name="name" required></label>
+          <label>Description<input name="description"></label>
+          <label>Event type<select name="event_type_id"></select></label>
+          <label>Action<select name="action_id"></select></label>
+          <label>Message<select name="message_id"></select></label>
+          <label>Channels JSON<textarea name="channels" placeholder='["email","inbox"]'></textarea></label>
+          <label>Condition JSON<textarea name="condition" placeholder='{"field":"payload.data.email","operator":"ne","value":null}'></textarea></label>
+          <label><input type="checkbox" name="enabled" checked> Activée</label>
+          <div class="flex">
+            <button class="primary" type="submit">Enregistrer</button>
+            <button class="ghost" type="button" data-reset="rule">Nouvelle</button>
+          </div>
+        </form>
+        <div>
+          <table class="table" id="ruleTable">
+            <thead>
+              <tr><th>ID</th><th>Nom</th><th>Event</th><th>Action</th><th>Message</th><th>Statut</th><th>Actions</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Event tester</h2>
+      <div class="split">
+        <form id="testerForm" class="grid">
+          <label>Event type<select name="event_type_id"></select></label>
+          <label>Email utilisateur<input name="user_email" type="email" required></label>
+          <label>Payload JSON<textarea name="payload" placeholder='{"note":"test"}'></textarea></label>
+          <button class="primary" type="submit">Envoyer l'événement</button>
+        </form>
+        <div>
+          <strong>Résultat</strong>
+          <pre id="testerResult" style="white-space: pre-wrap; background: rgba(15,23,42,0.6); padding: 1rem; border-radius: 12px;"></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Historique</h2>
+      <div class="grid">
+        <div class="flex">
+          <button class="ghost" type="button" data-refresh="history">Rafraîchir</button>
+        </div>
+        <div>
+          <h3>Events</h3>
+          <table class="table" id="historyEvents">
+            <thead><tr><th>ID</th><th>Type</th><th>User</th><th>Status</th><th>Créé</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div>
+          <h3>Actions</h3>
+          <table class="table" id="historyActions">
+            <thead><tr><th>ID</th><th>Action</th><th>User</th><th>Status</th><th>Créé</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div>
+          <h3>Notifications</h3>
+          <table class="table" id="historyNotifications">
+            <thead><tr><th>ID</th><th>Message</th><th>User</th><th>Status</th><th>Créé</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div>
+          <h3>Rules</h3>
+          <table class="table" id="historyRules">
+            <thead><tr><th>ID</th><th>Rule</th><th>Event</th><th>Action</th><th>Notification</th><th>Créé</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const api = async (url, options = {}) => {
+      const res = await fetch(url, {headers: {'Content-Type': 'application/json'}, ...options});
+      let payload = {};
+      try {
+        payload = await res.json();
+      } catch (err) {
+        payload = {error: 'Réponse invalide'};
+      }
+      if (!res.ok) {
+        console.warn('API error', url, payload);
+      }
+      return payload;
+    };
+
+    const setFormValues = (form, data) => {
+      form.dataset.id = data.id || '';
+      Array.from(form.elements).forEach(el => {
+        if (!el.name) return;
+        if (el.type === 'checkbox') {
+          el.checked = Boolean(data[el.name]);
+        } else if (typeof data[el.name] === 'object') {
+          el.value = JSON.stringify(data[el.name] || {}, null, 2);
+        } else {
+          el.value = data[el.name] ?? '';
+        }
+      });
+    };
+
+    const resetForm = (form) => {
+      form.reset();
+      form.dataset.id = '';
+    };
+
+    const renderTable = (tbody, rows, columns, actions) => {
+      tbody.innerHTML = '';
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        columns.forEach(col => {
+          const td = document.createElement('td');
+          td.textContent = row[col] ?? '';
+          tr.appendChild(td);
+        });
+        const actionTd = document.createElement('td');
+        const actionsWrap = document.createElement('div');
+        actionsWrap.className = 'row-actions';
+        actions.forEach(action => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = action.label;
+          btn.className = 'ghost';
+          btn.addEventListener('click', () => action.onClick(row));
+          actionsWrap.appendChild(btn);
+        });
+        actionTd.appendChild(actionsWrap);
+        tr.appendChild(actionTd);
+        tbody.appendChild(tr);
+      });
+    };
+
+    const loadEvents = async () => {
+      const raw = await api('/automation/api/events');
+      const data = Array.isArray(raw) ? raw : [];
+      const tbody = document.querySelector('#eventTable tbody');
+      renderTable(tbody, data, ['id','code','name','source_table','cursor_type','enabled'], [
+        {label: 'Edit', onClick: (row) => setFormValues(document.getElementById('eventForm'), row)},
+        {label: 'Delete', onClick: async (row) => { await api(`/automation/api/events/${row.id}`, {method:'DELETE'}); loadAll(); }}
+      ]);
+      const selects = document.querySelectorAll('select[name="event_type_id"]');
+      selects.forEach(select => {
+        select.innerHTML = data.map(row => `<option value="${row.id}">${row.code}</option>`).join('');
+      });
+    };
+
+    const loadActions = async () => {
+      const raw = await api('/automation/api/actions');
+      const data = Array.isArray(raw) ? raw : [];
+      const tbody = document.querySelector('#actionTable tbody');
+      renderTable(tbody, data, ['id','code','name','action_type','enabled'], [
+        {label: 'Edit', onClick: (row) => setFormValues(document.getElementById('actionForm'), row)},
+        {label: 'Delete', onClick: async (row) => { await api(`/automation/api/actions/${row.id}`, {method:'DELETE'}); loadAll(); }}
+      ]);
+      const select = document.querySelector('select[name="action_id"]');
+      select.innerHTML = '<option value="">--</option>' + data.map(row => `<option value="${row.id}">${row.code}</option>`).join('');
+    };
+
+    const loadMessages = async () => {
+      const raw = await api('/automation/api/messages');
+      const data = Array.isArray(raw) ? raw : [];
+      const tbody = document.querySelector('#messageTable tbody');
+      renderTable(tbody, data, ['id','code','name','enabled'], [
+        {label: 'Edit', onClick: (row) => setFormValues(document.getElementById('messageForm'), row)},
+        {label: 'Delete', onClick: async (row) => { await api(`/automation/api/messages/${row.id}`, {method:'DELETE'}); loadAll(); }}
+      ]);
+      const select = document.querySelector('select[name="message_id"]');
+      select.innerHTML = '<option value="">--</option>' + data.map(row => `<option value="${row.id}">${row.code}</option>`).join('');
+    };
+
+    const loadRules = async () => {
+      const raw = await api('/automation/api/rules');
+      const data = Array.isArray(raw) ? raw : [];
+      const tbody = document.querySelector('#ruleTable tbody');
+      renderTable(tbody, data, ['id','name','event_code','action_code','message_code','enabled'], [
+        {label: 'Edit', onClick: (row) => setFormValues(document.getElementById('ruleForm'), row)},
+        {label: 'Delete', onClick: async (row) => { await api(`/automation/api/rules/${row.id}`, {method:'DELETE'}); loadAll(); }}
+      ]);
+    };
+
+    const loadHistory = async () => {
+      const [eventsRaw, actionsRaw, notificationsRaw, rulesRaw] = await Promise.all([
+        api('/automation/api/history/events'),
+        api('/automation/api/history/actions'),
+        api('/automation/api/history/notifications'),
+        api('/automation/api/history/rules')
+      ]);
+      const events = Array.isArray(eventsRaw) ? eventsRaw : [];
+      const actions = Array.isArray(actionsRaw) ? actionsRaw : [];
+      const notifications = Array.isArray(notificationsRaw) ? notificationsRaw : [];
+      const rules = Array.isArray(rulesRaw) ? rulesRaw : [];
+      const renderHistory = (tbodyId, rows, columns) => {
+        const tbody = document.querySelector(tbodyId);
+        tbody.innerHTML = '';
+        rows.forEach(row => {
+          const tr = document.createElement('tr');
+          columns.forEach(col => {
+            const td = document.createElement('td');
+            if (col === 'status') {
+              td.className = `status-${(row[col] || '').toLowerCase()}`;
+            }
+            td.textContent = row[col] ?? '';
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+      };
+      renderHistory('#historyEvents tbody', events, ['id','event_type_id','user_id','status','created_at']);
+      renderHistory('#historyActions tbody', actions, ['id','action_id','user_id','status','created_at']);
+      renderHistory('#historyNotifications tbody', notifications, ['id','message_id','user_id','status','created_at']);
+      renderHistory('#historyRules tbody', rules, ['id','rule_id','event_id','action_queue_id','notification_queue_id','created_at']);
+    };
+
+    const loadAll = async () => {
+      await Promise.all([loadEvents(), loadActions(), loadMessages(), loadRules(), loadHistory()]);
+    };
+
+    document.getElementById('eventForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const data = Object.fromEntries(new FormData(form).entries());
+      data.enabled = form.enabled.checked;
+      const method = form.dataset.id ? 'PUT' : 'POST';
+      const url = form.dataset.id ? `/automation/api/events/${form.dataset.id}` : '/automation/api/events';
+      await api(url, {method, body: JSON.stringify(data)});
+      resetForm(form);
+      loadAll();
+    });
+
+    document.getElementById('actionForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const data = Object.fromEntries(new FormData(form).entries());
+      data.enabled = form.enabled.checked;
+      const method = form.dataset.id ? 'PUT' : 'POST';
+      const url = form.dataset.id ? `/automation/api/actions/${form.dataset.id}` : '/automation/api/actions';
+      await api(url, {method, body: JSON.stringify(data)});
+      resetForm(form);
+      loadAll();
+    });
+
+    document.getElementById('messageForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const data = Object.fromEntries(new FormData(form).entries());
+      data.enabled = form.enabled.checked;
+      const method = form.dataset.id ? 'PUT' : 'POST';
+      const url = form.dataset.id ? `/automation/api/messages/${form.dataset.id}` : '/automation/api/messages';
+      await api(url, {method, body: JSON.stringify(data)});
+      resetForm(form);
+      loadAll();
+    });
+
+    document.getElementById('ruleForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const data = Object.fromEntries(new FormData(form).entries());
+      data.enabled = form.enabled.checked;
+      const method = form.dataset.id ? 'PUT' : 'POST';
+      const url = form.dataset.id ? `/automation/api/rules/${form.dataset.id}` : '/automation/api/rules';
+      await api(url, {method, body: JSON.stringify(data)});
+      resetForm(form);
+      loadAll();
+    });
+
+    document.getElementById('testerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const data = Object.fromEntries(new FormData(form).entries());
+      const response = await api('/automation/api/test-event', {method: 'POST', body: JSON.stringify(data)});
+      document.getElementById('testerResult').textContent = JSON.stringify(response, null, 2);
+    });
+
+    document.querySelectorAll('[data-reset]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const form = document.getElementById(`${btn.dataset.reset}Form`);
+        if (form) resetForm(form);
+      });
+    });
+
+    document.querySelectorAll('[data-refresh="history"]').forEach(btn => {
+      btn.addEventListener('click', loadHistory);
+    });
+
+    loadAll();
+  </script>
+</body>
+</html>
