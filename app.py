@@ -574,6 +574,7 @@ def dashboard():
     plan_param = request.args.get("plan")
     cert_param = request.args.get("cert_id")
     user_param = (request.args.get("user") or "").strip()
+    user_id_param = request.args.get("user_id")
 
     def _parse_date(value, fallback):
         if not value:
@@ -610,6 +611,23 @@ def dashboard():
         cert_id=cert_id,
         user_query=user_param or None,
     )
+    user_matches = []
+    selected_user_id = None
+    if user_id_param:
+        try:
+            selected_user_id = int(user_id_param)
+        except ValueError:
+            selected_user_id = None
+    if user_param and selected_user_id is None:
+        user_matches = db.search_users(user_param, limit=8)
+        if len(user_matches) == 1:
+            selected_user_id = user_matches[0]["id"]
+
+    user_snapshot = None
+    if selected_user_id is not None:
+        user_snapshot = db.get_user_dashboard_snapshot(
+            selected_user_id, start_dt, end_dt, cert_id=cert_id
+        )
     certifications = db.get_public_certifications()
     plan_options = [
         {"value": "all", "label": "Tous les plans"},
@@ -716,6 +734,50 @@ def dashboard():
         },
     ]
 
+    user_view = None
+    if user_snapshot:
+        profile = user_snapshot["profile"]
+        user_kpis = user_snapshot["kpis"]
+        user_view = {
+            "profile": {
+                "id": profile["id"],
+                "name": profile["name"],
+                "email": profile["email"],
+                "plan": profile["plan"],
+                "account_type": profile["account_type"] or "—",
+            },
+            "kpis": {
+                "sessions": _format_number(user_kpis["sessions"]),
+                "assigned_exams": _format_number(user_kpis["assigned_exams"]),
+                "completed_exams": _format_number(user_kpis["completed_exams"]),
+                "completion_rate": f"{user_kpis['completion_rate']:.1f}%",
+                "avg_exam_duration": (
+                    f"{user_kpis['avg_exam_duration']:.0f} min"
+                    if user_kpis["avg_exam_duration"] is not None
+                    else "—"
+                ),
+                "active_subscription": "Actif" if user_kpis["active_subscription"] else "Inactif",
+            },
+            "completion_rate_percent": min(user_kpis["completion_rate"], 100),
+        }
+
+        user_view["session_timeline"] = _with_percent(
+            [
+                {
+                    "day": item["day"].strftime("%Y-%m-%d")
+                    if isinstance(item["day"], (datetime, date))
+                    else str(item["day"]),
+                    "total": item["total"],
+                }
+                for item in user_snapshot["session_timeline"]
+            ],
+            "total",
+        )
+        user_view["exam_types"] = _with_percent(user_snapshot["exam_types"], "total")
+        user_view["completions_by_cert"] = _with_percent(
+            user_snapshot["completions_by_cert"], "completions"
+        )
+
     plan_labels = {
         0: "Free",
         1: "Basic",
@@ -748,6 +810,7 @@ def dashboard():
         selected_plan=plan_param or "all",
         selected_cert=cert_id,
         selected_user=user_param,
+        selected_user_id=selected_user_id,
         start_date=start_date.isoformat(),
         end_date=end_date.isoformat(),
         kpis=formatted_kpis,
@@ -759,6 +822,8 @@ def dashboard():
         cert_popularity=cert_popularity,
         top_users=top_users,
         insights=insights,
+        user_matches=user_matches,
+        user_snapshot=user_view,
     )
 
 

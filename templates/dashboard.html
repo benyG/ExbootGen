@@ -127,6 +127,11 @@
     .insight-card h3 { margin: 0 0 0.4rem; font-size: 1rem; }
     .insight-card p { margin: 0; color: var(--text-muted); font-size: 0.88rem; }
 
+    .user-grid { display: grid; gap: 1.2rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .user-pill { padding: 0.85rem 1rem; border-radius: 14px; background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(148, 163, 184, 0.2); display: flex; flex-direction: column; gap: 0.3rem; text-decoration: none; color: var(--text-primary); }
+    .user-pill span { color: var(--text-muted); font-size: 0.85rem; }
+    .user-pill strong { font-size: 1rem; }
+
     .table-card { background: rgba(8, 12, 24, 0.75); border-radius: var(--radius-lg); border: 1px solid rgba(148, 163, 184, 0.16); padding: 1.4rem; box-shadow: 0 18px 40px rgba(3, 7, 18, 0.55); }
     table { width: 100%; border-collapse: collapse; border-radius: 14px; overflow: hidden; }
     thead { background: rgba(15,23,42,0.85); }
@@ -172,6 +177,9 @@
       <h1>Dashboard</h1>
       <p>Suivez les performances des utilisateurs, certifications et revenus avec des filtres avancés par période, segments et domaines. Cette vue est conçue pour piloter les objectifs marketing et l'efficacité pédagogique.</p>
       <form class="filters" method="get">
+        {% if selected_user_id %}
+        <input type="hidden" name="user_id" value="{{ selected_user_id }}">
+        {% endif %}
         <div class="filter-group">
           <label for="date-start">Du</label>
           <input id="date-start" name="start" type="date" value="{{ start_date }}">
@@ -207,6 +215,132 @@
         </div>
       </form>
     </section>
+
+    {% if user_matches and not user_snapshot %}
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>Sélectionner un utilisateur</h2>
+        <span>Choisissez une fiche pour ouvrir le dashboard ciblé</span>
+      </div>
+      <div class="user-grid">
+        {% for match in user_matches %}
+        <a class="user-pill" href="{{ url_for('dashboard', start=start_date, end=end_date, plan=selected_plan, cert_id=selected_cert, user=selected_user, user_id=match.id) }}">
+          <strong>{{ match.name }}</strong>
+          <span>{{ match.email }}</span>
+          <span>Plan: {{ match.plan }} · {{ match.account_type or '—' }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if user_snapshot %}
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>Dashboard utilisateur</h2>
+        <span>{{ user_snapshot.profile.name }} · {{ user_snapshot.profile.email }}</span>
+      </div>
+      <div class="kpi-grid">
+        <article class="kpi-card">
+          <span>Sessions</span>
+          <strong>{{ user_snapshot.kpis.sessions }}</strong>
+          <em>Sur la période</em>
+        </article>
+        <article class="kpi-card">
+          <span>Examens assignés</span>
+          <strong>{{ user_snapshot.kpis.assigned_exams }}</strong>
+          <em>Sur la période</em>
+        </article>
+        <article class="kpi-card">
+          <span>Examens complétés</span>
+          <strong>{{ user_snapshot.kpis.completed_exams }}</strong>
+          <em>Finalisés</em>
+        </article>
+        <article class="kpi-card">
+          <span>Taux de complétion</span>
+          <strong>{{ user_snapshot.kpis.completion_rate }}</strong>
+          <em>Assignés → complétés</em>
+        </article>
+        <article class="kpi-card">
+          <span>Temps moyen / examen</span>
+          <strong>{{ user_snapshot.kpis.avg_exam_duration }}</strong>
+          <em>Durée moyenne</em>
+        </article>
+        <article class="kpi-card">
+          <span>Abonnement</span>
+          <strong>{{ user_snapshot.kpis.active_subscription }}</strong>
+          <em>Statut actuel</em>
+        </article>
+      </div>
+      <div class="chart-grid" style="margin-top:1.6rem;">
+        <div class="chart-card">
+          <div class="chart-title">Complétion des examens</div>
+          <div class="chart-visual" style="align-items:center;">
+            <div style="width:100%; z-index:1;">
+              <div class="chart-progress"><span style="--size: {{ user_snapshot.completion_rate_percent }}%;"></span></div>
+              <div style="margin-top:0.8rem; font-size:0.9rem; color:var(--text-muted);">
+                {{ user_snapshot.kpis.completion_rate }} des examens assignés.
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Sessions par jour</div>
+          <div class="chart-visual" style="align-items:center;">
+            {% if user_snapshot.session_timeline %}
+            <ul class="chart-metric-list">
+              {% for item in user_snapshot.session_timeline %}
+              <li>
+                <span>{{ item.day }}</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ item.percent }}%;"></div></div>
+                <span class="bar-value">{{ item.total }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Aucune session sur la période.</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Examens par type</div>
+          <div class="chart-visual" style="align-items:center;">
+            {% if user_snapshot.exam_types %}
+            <ul class="chart-metric-list">
+              {% for item in user_snapshot.exam_types %}
+              <li>
+                <span>{{ item.type }}</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ item.percent }}%;"></div></div>
+                <span class="bar-value">{{ item.total }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Type d'examen non disponible.</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Complétions par certification</div>
+          <div class="chart-visual" style="align-items:center;">
+            {% if user_snapshot.completions_by_cert %}
+            <ul class="chart-metric-list">
+              {% for cert in user_snapshot.completions_by_cert %}
+              <li>
+                <span>{{ cert.name }}</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ cert.percent }}%;"></div></div>
+                <span class="bar-value">{{ cert.completions }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Aucune complétion sur la période.</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </section>
+    {% endif %}
 
     <section class="glass-card" data-animate>
       <div class="section-header">
