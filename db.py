@@ -971,7 +971,7 @@ def _get_table_columns(table_name):
 def _build_user_filter_clause(alias, plan, cert_id, user_query, exclude_guest=True):
     conditions = []
     params = {}
-    if exclude_guest:
+    if exclude_guest and "type" in _get_table_columns("users"):
         conditions.append(f"COALESCE({alias}.`type`, '') <> 'Guest'")
     if plan is not None:
         conditions.append(f"{alias}.ex = %(plan)s")
@@ -996,9 +996,13 @@ def search_users(user_query, limit=8):
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        user_columns = _get_table_columns("users")
+        type_select = (
+            ", COALESCE(`type`, '') AS account_type" if "type" in user_columns else ""
+        )
         cursor.execute(
-            """
-            SELECT id, name, email, ex, COALESCE(`type`, '') AS account_type
+            f"""
+            SELECT id, name, email, ex{type_select}
             FROM users
             WHERE name LIKE %(query)s OR email LIKE %(query)s OR usn LIKE %(query)s
             ORDER BY name
@@ -1012,7 +1016,7 @@ def search_users(user_query, limit=8):
                 "name": row[1],
                 "email": row[2],
                 "plan": row[3],
-                "account_type": row[4],
+                "account_type": row[4] if len(row) > 4 else None,
             }
             for row in cursor.fetchall()
         ]
@@ -1025,9 +1029,13 @@ def get_user_dashboard_snapshot(user_id, start_dt, end_dt, cert_id=None):
     conn = get_connection()
     cursor = conn.cursor()
 
+    user_columns = _get_table_columns("users")
+    account_type_select = (
+        ", COALESCE(`type`, '') AS account_type" if "type" in user_columns else ""
+    )
     cursor.execute(
-        """
-        SELECT id, name, email, ex, COALESCE(`type`, '') AS account_type, created_at
+        f"""
+        SELECT id, name, email, ex{account_type_select}, created_at
         FROM users
         WHERE id = %(user_id)s
         """,
@@ -1044,8 +1052,8 @@ def get_user_dashboard_snapshot(user_id, start_dt, end_dt, cert_id=None):
         "name": row[1],
         "email": row[2],
         "plan": row[3],
-        "account_type": row[4],
-        "created_at": row[5],
+        "account_type": row[4] if "type" in user_columns else None,
+        "created_at": row[5] if "type" in user_columns else row[4],
     }
 
     base_params = {
@@ -1299,8 +1307,14 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
         "start": start_dt,
         "end": end_dt,
     }
-    guest_condition = "COALESCE(u.`type`, '') <> 'Guest'"
-    exam_conditions = ["eu.comp_at BETWEEN %(start)s AND %(end)s", guest_condition]
+    guest_condition = (
+        "COALESCE(u.`type`, '') <> 'Guest'"
+        if "type" in _get_table_columns("users")
+        else None
+    )
+    exam_conditions = ["eu.comp_at BETWEEN %(start)s AND %(end)s"]
+    if guest_condition:
+        exam_conditions.append(guest_condition)
     if plan is not None:
         exam_params["plan"] = plan
         exam_conditions.append("u.ex = %(plan)s")
@@ -1409,7 +1423,7 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
         JOIN exams e ON e.id = eu.exam
         JOIN users u ON u.id = eu.user
         WHERE eu.added BETWEEN %(start)s AND %(end)s
-        AND {guest_condition}
+        {f"AND {guest_condition}" if guest_condition else ""}
         {"AND u.ex = %(plan)s" if plan is not None else ""}
         {"AND e.certi = %(cert_id)s" if cert_id is not None else ""}
         {"AND (u.name LIKE %(user_query)s OR u.email LIKE %(user_query)s OR u.usn LIKE %(user_query)s)" if user_query else ""}
@@ -1418,7 +1432,9 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
     )
     total_exam_assignments = cursor.fetchone()[0] or 0
 
-    cert_activity_conditions = ["eu.comp_at BETWEEN %(start)s AND %(end)s", guest_condition]
+    cert_activity_conditions = ["eu.comp_at BETWEEN %(start)s AND %(end)s"]
+    if guest_condition:
+        cert_activity_conditions.append(guest_condition)
     if cert_id is not None:
         cert_activity_conditions.append("e.certi = %(cert_id)s")
     if plan is not None:
@@ -1476,7 +1492,7 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
           ON eu.user = u.id AND eu.comp_at BETWEEN %(start)s AND %(end)s
         {"LEFT JOIN users_course uc ON uc.user = u.id" if cert_id is not None else ""}
         WHERE 1=1
-        AND {guest_condition}
+        {f"AND {guest_condition}" if guest_condition else ""}
         {"AND u.ex = %(plan)s" if plan is not None else ""}
         {"AND uc.course = %(cert_id)s" if cert_id is not None else ""}
         {"AND (u.name LIKE %(user_query)s OR u.email LIKE %(user_query)s OR u.usn LIKE %(user_query)s)" if user_query else ""}
@@ -1502,7 +1518,9 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
             }
         )
 
-    cert_popularity_conditions = ["uc.created_at BETWEEN %(start)s AND %(end)s", guest_condition]
+    cert_popularity_conditions = ["uc.created_at BETWEEN %(start)s AND %(end)s"]
+    if guest_condition:
+        cert_popularity_conditions.append(guest_condition)
     if plan is not None:
         cert_popularity_conditions.append("u.ex = %(plan)s")
     if user_query:
