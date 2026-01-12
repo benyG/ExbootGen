@@ -912,9 +912,29 @@ def add_answers(question_id, answers):
         cursor.close(); conn.close()
 
 
-def _build_user_filter_clause(alias, plan, cert_id, user_query):
+_COLUMN_CACHE = {}
+
+
+def _get_table_columns(table_name):
+    if table_name in _COLUMN_CACHE:
+        return _COLUMN_CACHE[table_name]
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(f"SHOW COLUMNS FROM {table_name}")
+        columns = {row[0] for row in cursor.fetchall()}
+        _COLUMN_CACHE[table_name] = columns
+        return columns
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def _build_user_filter_clause(alias, plan, cert_id, user_query, exclude_guest=True):
     conditions = []
     params = {}
+    if exclude_guest:
+        conditions.append(f"COALESCE({alias}.`type`, '') <> 'Guest'")
     if plan is not None:
         conditions.append(f"{alias}.ex = %(plan)s")
         params["plan"] = plan
@@ -932,6 +952,224 @@ def _build_user_filter_clause(alias, plan, cert_id, user_query):
     return clause, params
 
 
+def search_users(user_query, limit=8):
+    if not user_query:
+        return []
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT id, name, email, ex, COALESCE(`type`, '') AS account_type
+            FROM users
+            WHERE name LIKE %(query)s OR email LIKE %(query)s OR usn LIKE %(query)s
+            ORDER BY name
+            LIMIT %(limit)s
+            """,
+            {"query": f"%{user_query}%", "limit": limit},
+        )
+        return [
+            {
+                "id": row[0],
+                "name": row[1],
+                "email": row[2],
+                "plan": row[3],
+                "account_type": row[4],
+            }
+            for row in cursor.fetchall()
+        ]
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_user_dashboard_snapshot(user_id, start_dt, end_dt, cert_id=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT id, name, email, ex, COALESCE(`type`, '') AS account_type, created_at
+        FROM users
+        WHERE id = %(user_id)s
+        """,
+        {"user_id": user_id},
+    )
+    row = cursor.fetchone()
+    if not row:
+        cursor.close()
+        conn.close()
+        return None
+
+    user_profile = {
+        "id": row[0],
+        "name": row[1],
+        "email": row[2],
+        "plan": row[3],
+        "account_type": row[4],
+        "created_at": row[5],
+    }
+
+    base_params = {
+        "user_id": user_id,
+        "start": start_dt,
+        "end": end_dt,
+        "now": datetime.utcnow(),
+        "cert_id": cert_id,
+    }
+
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM journs j
+        WHERE j.user = %(user_id)s AND j.created_at BETWEEN %(start)s AND %(end)s
+        """,
+        base_params,
+    )
+    total_sessions = cursor.fetchone()[0] or 0
+
+    cursor.execute(
+        """
+        SELECT DATE(j.created_at) AS day, COUNT(*) AS total
+        FROM journs j
+        WHERE j.user = %(user_id)s AND j.created_at BETWEEN %(start)s AND %(end)s
+        GROUP BY day
+        ORDER BY day
+        """,
+        base_params,
+    )
+    session_timeline = [{"day": row[0], "total": row[1]} for row in cursor.fetchall()]
+
+    exam_filter = "AND e.certi = %(cert_id)s" if cert_id is not None else ""
+
+    cursor.execute(
+        f"""
+        SELECT COUNT(*)
+        FROM exam_users eu
+        JOIN exams e ON e.id = eu.exam
+        WHERE eu.user = %(user_id)s
+          AND eu.added BETWEEN %(start)s AND %(end)s
+          {exam_filter}
+        """,
+        base_params,
+    )
+    assigned_exams = cursor.fetchone()[0] or 0
+
+    cursor.execute(
+        f"""
+        SELECT COUNT(*)
+        FROM exam_users eu
+        JOIN exams e ON e.id = eu.exam
+        WHERE eu.user = %(user_id)s
+          AND eu.comp_at BETWEEN %(start)s AND %(end)s
+          {exam_filter}
+        """,
+        base_params,
+    )
+    completed_exams = cursor.fetchone()[0] or 0
+
+    cursor.execute(
+        f"""
+        SELECT AVG(TIMESTAMPDIFF(MINUTE, eu.start_at, eu.comp_at))
+        FROM exam_users eu
+        JOIN exams e ON e.id = eu.exam
+        WHERE eu.user = %(user_id)s
+          AND eu.start_at IS NOT NULL
+          AND eu.comp_at IS NOT NULL
+          AND eu.comp_at BETWEEN %(start)s AND %(end)s
+          {exam_filter}
+        """,
+        base_params,
+    )
+    avg_exam_duration = cursor.fetchone()[0]
+
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM orders o
+        WHERE o.user = %(user_id)s
+          AND o.type = 0
+          AND o.exp > %(now)s
+        """,
+        base_params,
+    )
+    active_subscription = (cursor.fetchone()[0] or 0) > 0
+
+    exam_user_columns = _get_table_columns("exam_users")
+    score_column = next(
+        (col for col in ("score", "result", "note") if col in exam_user_columns), None
+    )
+
+    score_select = f", AVG(eu.{score_column}) AS avg_score" if score_column else ""
+    cursor.execute(
+        f"""
+        SELECT c.id, c.name, COUNT(eu.id) AS completions{score_select}
+        FROM exam_users eu
+        JOIN exams e ON e.id = eu.exam
+        JOIN courses c ON c.id = e.certi
+        WHERE eu.user = %(user_id)s
+          AND eu.comp_at BETWEEN %(start)s AND %(end)s
+          {exam_filter}
+        GROUP BY c.id, c.name
+        ORDER BY completions DESC
+        LIMIT 6
+        """,
+        base_params,
+    )
+    completions_by_cert = []
+    for cert_row in cursor.fetchall():
+        completions_by_cert.append(
+            {
+                "id": cert_row[0],
+                "name": cert_row[1],
+                "completions": cert_row[2],
+                "avg_score": cert_row[3] if score_column else None,
+            }
+        )
+
+    exam_type_breakdown = []
+    exams_columns = _get_table_columns("exams")
+    if "type" in exams_columns:
+        cursor.execute(
+            f"""
+            SELECT e.type, COUNT(*) AS total
+            FROM exam_users eu
+            JOIN exams e ON e.id = eu.exam
+            WHERE eu.user = %(user_id)s
+              AND eu.added BETWEEN %(start)s AND %(end)s
+              {exam_filter}
+            GROUP BY e.type
+            ORDER BY total DESC
+            """,
+            base_params,
+        )
+        type_map = {0: "Test", 1: "Exam", 2: "Share"}
+        exam_type_breakdown = [
+            {"type": type_map.get(row[0], str(row[0])), "total": row[1]}
+            for row in cursor.fetchall()
+        ]
+
+    cursor.close()
+    conn.close()
+
+    completion_rate = (completed_exams / assigned_exams * 100) if assigned_exams else 0
+
+    return {
+        "profile": user_profile,
+        "kpis": {
+            "sessions": total_sessions,
+            "assigned_exams": assigned_exams,
+            "completed_exams": completed_exams,
+            "completion_rate": completion_rate,
+            "avg_exam_duration": avg_exam_duration,
+            "active_subscription": active_subscription,
+        },
+        "session_timeline": session_timeline,
+        "exam_types": exam_type_breakdown,
+        "completions_by_cert": completions_by_cert,
+    }
+
+
 def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query=None):
     conn = get_connection()
     cursor = conn.cursor()
@@ -945,9 +1183,16 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
     }
 
     def _apply_filters(base_query):
-        if user_filters:
-            return f"{base_query} AND {user_filters}"
-        return base_query
+        if not user_filters:
+            return base_query
+        insertion = f" AND {user_filters}\n"
+        if "GROUP BY" in base_query:
+            return base_query.replace("GROUP BY", f"{insertion}GROUP BY")
+        if "ORDER BY" in base_query:
+            return base_query.replace("ORDER BY", f"{insertion}ORDER BY")
+        if "LIMIT" in base_query:
+            return base_query.replace("LIMIT", f"{insertion}LIMIT")
+        return f"{base_query} AND {user_filters}"
 
     cursor.execute(
         _apply_filters(
@@ -1016,7 +1261,8 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
         "start": start_dt,
         "end": end_dt,
     }
-    exam_conditions = ["eu.comp_at BETWEEN %(start)s AND %(end)s"]
+    guest_condition = "COALESCE(u.`type`, '') <> 'Guest'"
+    exam_conditions = ["eu.comp_at BETWEEN %(start)s AND %(end)s", guest_condition]
     if plan is not None:
         exam_params["plan"] = plan
         exam_conditions.append("u.ex = %(plan)s")
@@ -1125,6 +1371,7 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
         JOIN exams e ON e.id = eu.exam
         JOIN users u ON u.id = eu.user
         WHERE eu.added BETWEEN %(start)s AND %(end)s
+        AND {guest_condition}
         {"AND u.ex = %(plan)s" if plan is not None else ""}
         {"AND e.certi = %(cert_id)s" if cert_id is not None else ""}
         {"AND (u.name LIKE %(user_query)s OR u.email LIKE %(user_query)s OR u.usn LIKE %(user_query)s)" if user_query else ""}
@@ -1133,7 +1380,7 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
     )
     total_exam_assignments = cursor.fetchone()[0] or 0
 
-    cert_activity_conditions = ["eu.comp_at BETWEEN %(start)s AND %(end)s"]
+    cert_activity_conditions = ["eu.comp_at BETWEEN %(start)s AND %(end)s", guest_condition]
     if cert_id is not None:
         cert_activity_conditions.append("e.certi = %(cert_id)s")
     if plan is not None:
@@ -1191,6 +1438,7 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
           ON eu.user = u.id AND eu.comp_at BETWEEN %(start)s AND %(end)s
         {"LEFT JOIN users_course uc ON uc.user = u.id" if cert_id is not None else ""}
         WHERE 1=1
+        AND {guest_condition}
         {"AND u.ex = %(plan)s" if plan is not None else ""}
         {"AND uc.course = %(cert_id)s" if cert_id is not None else ""}
         {"AND (u.name LIKE %(user_query)s OR u.email LIKE %(user_query)s OR u.usn LIKE %(user_query)s)" if user_query else ""}
@@ -1216,7 +1464,7 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
             }
         )
 
-    cert_popularity_conditions = ["uc.created_at BETWEEN %(start)s AND %(end)s"]
+    cert_popularity_conditions = ["uc.created_at BETWEEN %(start)s AND %(end)s", guest_condition]
     if plan is not None:
         cert_popularity_conditions.append("u.ex = %(plan)s")
     if user_query:

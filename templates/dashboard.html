@@ -108,13 +108,29 @@
     .chart-grid { display: grid; gap: 1.4rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
     .chart-card { background: rgba(8, 12, 24, 0.75); border-radius: var(--radius-lg); border: 1px solid rgba(148, 163, 184, 0.16); padding: 1.4rem; box-shadow: 0 18px 40px rgba(3, 7, 18, 0.55); display: flex; flex-direction: column; gap: 1rem; }
     .chart-title { font-size: 0.95rem; font-weight: 600; }
-    .chart-placeholder { height: 180px; border-radius: 16px; background: linear-gradient(135deg, rgba(71,245,192,0.12), rgba(124,247,255,0.12)); border: 1px dashed rgba(124,247,255,0.35); position: relative; overflow: hidden; }
-    .chart-placeholder::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgba(124,247,255,0.08), rgba(124,247,255,0.08) 12px, transparent 12px, transparent 24px); opacity: 0.6; }
+    .chart-visual { height: 180px; border-radius: 16px; background: linear-gradient(135deg, rgba(71,245,192,0.12), rgba(124,247,255,0.12)); border: 1px solid rgba(124,247,255,0.18); position: relative; overflow: hidden; padding: 1rem; display: flex; align-items: flex-end; gap: 1rem; }
+    .chart-visual::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgba(124,247,255,0.06), rgba(124,247,255,0.06) 12px, transparent 12px, transparent 24px); opacity: 0.6; pointer-events: none; }
+    .chart-vertical { display: flex; width: 100%; align-items: flex-end; gap: 1rem; z-index: 1; }
+    .chart-vertical .bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 0.5rem; align-items: center; }
+    .chart-vertical .bar-fill { width: 100%; height: var(--size, 0%); border-radius: 12px; background: linear-gradient(180deg, rgba(71,245,192,0.9), rgba(71,245,192,0.2)); box-shadow: 0 10px 20px rgba(71, 245, 192, 0.25); }
+    .chart-vertical .bar-label { font-size: 0.75rem; color: var(--text-muted); }
+    .chart-metric-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; width: 100%; z-index: 1; }
+    .chart-metric-list li { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; color: var(--text-muted); }
+    .chart-metric-list .bar-track { flex: 1; height: 10px; background: rgba(15, 23, 42, 0.7); border-radius: 999px; overflow: hidden; border: 1px solid rgba(148, 163, 184, 0.18); }
+    .chart-metric-list .bar-fill { height: 100%; width: var(--size, 0%); background: linear-gradient(90deg, rgba(124,247,255,0.9), rgba(71,245,192,0.5)); }
+    .chart-metric-list .bar-value { color: var(--text-primary); font-weight: 600; min-width: 2.5rem; text-align: right; }
+    .chart-progress { height: 12px; background: rgba(15, 23, 42, 0.7); border-radius: 999px; overflow: hidden; border: 1px solid rgba(148, 163, 184, 0.2); }
+    .chart-progress span { display: block; height: 100%; width: var(--size, 0%); background: linear-gradient(90deg, rgba(71,245,192,0.9), rgba(124,247,255,0.6)); }
 
     .insight-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
     .insight-card { padding: 1.2rem 1.4rem; border-radius: var(--radius-lg); background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(94, 234, 212, 0.28); }
     .insight-card h3 { margin: 0 0 0.4rem; font-size: 1rem; }
     .insight-card p { margin: 0; color: var(--text-muted); font-size: 0.88rem; }
+
+    .user-grid { display: grid; gap: 1.2rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .user-pill { padding: 0.85rem 1rem; border-radius: 14px; background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(148, 163, 184, 0.2); display: flex; flex-direction: column; gap: 0.3rem; text-decoration: none; color: var(--text-primary); }
+    .user-pill span { color: var(--text-muted); font-size: 0.85rem; }
+    .user-pill strong { font-size: 1rem; }
 
     .table-card { background: rgba(8, 12, 24, 0.75); border-radius: var(--radius-lg); border: 1px solid rgba(148, 163, 184, 0.16); padding: 1.4rem; box-shadow: 0 18px 40px rgba(3, 7, 18, 0.55); }
     table { width: 100%; border-collapse: collapse; border-radius: 14px; overflow: hidden; }
@@ -161,6 +177,9 @@
       <h1>Dashboard</h1>
       <p>Suivez les performances des utilisateurs, certifications et revenus avec des filtres avancés par période, segments et domaines. Cette vue est conçue pour piloter les objectifs marketing et l'efficacité pédagogique.</p>
       <form class="filters" method="get">
+        {% if selected_user_id %}
+        <input type="hidden" name="user_id" value="{{ selected_user_id }}">
+        {% endif %}
         <div class="filter-group">
           <label for="date-start">Du</label>
           <input id="date-start" name="start" type="date" value="{{ start_date }}">
@@ -196,6 +215,132 @@
         </div>
       </form>
     </section>
+
+    {% if user_matches and not user_snapshot %}
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>Sélectionner un utilisateur</h2>
+        <span>Choisissez une fiche pour ouvrir le dashboard ciblé</span>
+      </div>
+      <div class="user-grid">
+        {% for match in user_matches %}
+        <a class="user-pill" href="{{ url_for('dashboard', start=start_date, end=end_date, plan=selected_plan, cert_id=selected_cert, user=selected_user, user_id=match.id) }}">
+          <strong>{{ match.name }}</strong>
+          <span>{{ match.email }}</span>
+          <span>Plan: {{ match.plan }} · {{ match.account_type or '—' }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if user_snapshot %}
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>Dashboard utilisateur</h2>
+        <span>{{ user_snapshot.profile.name }} · {{ user_snapshot.profile.email }}</span>
+      </div>
+      <div class="kpi-grid">
+        <article class="kpi-card">
+          <span>Sessions</span>
+          <strong>{{ user_snapshot.kpis.sessions }}</strong>
+          <em>Sur la période</em>
+        </article>
+        <article class="kpi-card">
+          <span>Examens assignés</span>
+          <strong>{{ user_snapshot.kpis.assigned_exams }}</strong>
+          <em>Sur la période</em>
+        </article>
+        <article class="kpi-card">
+          <span>Examens complétés</span>
+          <strong>{{ user_snapshot.kpis.completed_exams }}</strong>
+          <em>Finalisés</em>
+        </article>
+        <article class="kpi-card">
+          <span>Taux de complétion</span>
+          <strong>{{ user_snapshot.kpis.completion_rate }}</strong>
+          <em>Assignés → complétés</em>
+        </article>
+        <article class="kpi-card">
+          <span>Temps moyen / examen</span>
+          <strong>{{ user_snapshot.kpis.avg_exam_duration }}</strong>
+          <em>Durée moyenne</em>
+        </article>
+        <article class="kpi-card">
+          <span>Abonnement</span>
+          <strong>{{ user_snapshot.kpis.active_subscription }}</strong>
+          <em>Statut actuel</em>
+        </article>
+      </div>
+      <div class="chart-grid" style="margin-top:1.6rem;">
+        <div class="chart-card">
+          <div class="chart-title">Complétion des examens</div>
+          <div class="chart-visual" style="align-items:center;">
+            <div style="width:100%; z-index:1;">
+              <div class="chart-progress"><span style="--size: {{ user_snapshot.completion_rate_percent }}%;"></span></div>
+              <div style="margin-top:0.8rem; font-size:0.9rem; color:var(--text-muted);">
+                {{ user_snapshot.kpis.completion_rate }} des examens assignés.
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Sessions par jour</div>
+          <div class="chart-visual" style="align-items:center;">
+            {% if user_snapshot.session_timeline %}
+            <ul class="chart-metric-list">
+              {% for item in user_snapshot.session_timeline %}
+              <li>
+                <span>{{ item.day }}</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ item.percent }}%;"></div></div>
+                <span class="bar-value">{{ item.total }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Aucune session sur la période.</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Examens par type</div>
+          <div class="chart-visual" style="align-items:center;">
+            {% if user_snapshot.exam_types %}
+            <ul class="chart-metric-list">
+              {% for item in user_snapshot.exam_types %}
+              <li>
+                <span>{{ item.type }}</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ item.percent }}%;"></div></div>
+                <span class="bar-value">{{ item.total }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Type d'examen non disponible.</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Complétions par certification</div>
+          <div class="chart-visual" style="align-items:center;">
+            {% if user_snapshot.completions_by_cert %}
+            <ul class="chart-metric-list">
+              {% for cert in user_snapshot.completions_by_cert %}
+              <li>
+                <span>{{ cert.name }}</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ cert.percent }}%;"></div></div>
+                <span class="bar-value">{{ cert.completions }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Aucune complétion sur la période.</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </section>
+    {% endif %}
 
     <section class="glass-card" data-animate>
       <div class="section-header">
@@ -244,7 +389,18 @@
       <div class="chart-grid">
         <div class="chart-card">
           <div class="chart-title">Nouveaux vs récurrents</div>
-          <div class="chart-placeholder"></div>
+          <div class="chart-visual">
+            <div class="chart-vertical">
+              <div class="bar">
+                <div class="bar-fill" style="--size: {{ acquisition_breakdown.new_percent }}%;"></div>
+                <span class="bar-label">Nouveaux</span>
+              </div>
+              <div class="bar">
+                <div class="bar-fill" style="--size: {{ acquisition_breakdown.returning_percent }}%;"></div>
+                <span class="bar-label">Récurrents</span>
+              </div>
+            </div>
+          </div>
           <div style="display:flex; justify-content:space-between; font-size:0.9rem; color:var(--text-muted);">
             <span>Nouveaux: <strong style="color:var(--text-primary);">{{ acquisition.new_users }}</strong></span>
             <span>Récurrents: <strong style="color:var(--text-primary);">{{ acquisition.returning_users }}</strong></span>
@@ -252,7 +408,25 @@
         </div>
         <div class="chart-card">
           <div class="chart-title">Funnel d'inscription → certification</div>
-          <div class="chart-placeholder"></div>
+          <div class="chart-visual" style="align-items:center;">
+            <ul class="chart-metric-list">
+              <li>
+                <span>Inscrits</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ acquisition_funnel.new_percent }}%;"></div></div>
+                <span class="bar-value">{{ acquisition.new_users }}</span>
+              </li>
+              <li>
+                <span>Abonnés</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ acquisition_funnel.active_percent }}%;"></div></div>
+                <span class="bar-value">{{ acquisition.active_subscriptions }}</span>
+              </li>
+              <li>
+                <span>Examens</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ acquisition_funnel.completed_percent }}%;"></div></div>
+                <span class="bar-value">{{ kpis.completed_exams }}</span>
+              </li>
+            </ul>
+          </div>
           <ul style="margin:0; padding-left:1rem; color:var(--text-muted); font-size:0.9rem;">
             <li>Nouveaux inscrits: <strong style="color:var(--text-primary);">{{ acquisition.new_users }}</strong></li>
             <li>Abonnements actifs: <strong style="color:var(--text-primary);">{{ acquisition.active_subscriptions }}</strong></li>
@@ -261,7 +435,21 @@
         </div>
         <div class="chart-card">
           <div class="chart-title">Sources d'acquisition</div>
-          <div class="chart-placeholder"></div>
+          <div class="chart-visual" style="align-items:center;">
+            {% if locations %}
+            <ul class="chart-metric-list">
+              {% for loc in locations %}
+              <li>
+                <span>{{ loc.label }}</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ loc.percent }}%;"></div></div>
+                <span class="bar-value">{{ loc.total }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Aucune localisation disponible.</span>
+            {% endif %}
+          </div>
           <ul style="margin:0; padding-left:1rem; color:var(--text-muted); font-size:0.9rem;">
             {% if locations %}
               {% for loc in locations %}
@@ -283,7 +471,21 @@
       <div class="chart-grid">
         <div class="chart-card">
           <div class="chart-title">Examens complétés par certification</div>
-          <div class="chart-placeholder"></div>
+          <div class="chart-visual" style="align-items:center;">
+            {% if performance.completions_by_cert %}
+            <ul class="chart-metric-list">
+              {% for cert in performance.completions_by_cert %}
+              <li>
+                <span>{{ cert.name }}</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ cert.percent }}%;"></div></div>
+                <span class="bar-value">{{ cert.completions }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Aucune certification complétée.</span>
+            {% endif %}
+          </div>
           <ul style="margin:0; padding-left:1rem; color:var(--text-muted); font-size:0.9rem;">
             {% if performance.completions_by_cert %}
               {% for cert in performance.completions_by_cert %}
@@ -296,21 +498,49 @@
         </div>
         <div class="chart-card">
           <div class="chart-title">Taux de complétion examens</div>
-          <div class="chart-placeholder"></div>
+          <div class="chart-visual" style="align-items:center;">
+            <div style="width:100%; z-index:1;">
+              <div class="chart-progress"><span style="--size: {{ performance.completion_rate_percent }}%;"></span></div>
+              <div style="margin-top:0.8rem; font-size:0.9rem; color:var(--text-muted);">
+                {{ performance.completion_rate_display }} des examens assignés.
+              </div>
+            </div>
+          </div>
           <div style="font-size:0.95rem; color:var(--text-muted);">
             <strong style="color:var(--text-primary);">{{ performance.completion_rate_display }}</strong> des examens assignés sont terminés.
           </div>
         </div>
         <div class="chart-card">
           <div class="chart-title">Temps moyen par examen</div>
-          <div class="chart-placeholder"></div>
+          <div class="chart-visual" style="align-items:center;">
+            <div style="width:100%; z-index:1;">
+              <div class="chart-progress"><span style="--size: {{ performance.avg_exam_duration_percent }}%;"></span></div>
+              <div style="margin-top:0.8rem; font-size:0.9rem; color:var(--text-muted);">
+                Temps moyen: <strong style="color:var(--text-primary);">{{ performance.avg_exam_duration_display }}</strong>
+              </div>
+            </div>
+          </div>
           <div style="font-size:0.95rem; color:var(--text-muted);">
             Temps moyen: <strong style="color:var(--text-primary);">{{ performance.avg_exam_duration_display }}</strong>
           </div>
         </div>
         <div class="chart-card">
           <div class="chart-title">Certifications avec le plus d'utilisateurs</div>
-          <div class="chart-placeholder"></div>
+          <div class="chart-visual" style="align-items:center;">
+            {% if cert_popularity %}
+            <ul class="chart-metric-list">
+              {% for cert in cert_popularity %}
+              <li>
+                <span>{{ cert.name }}</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ cert.percent }}%;"></div></div>
+                <span class="bar-value">{{ cert.user_count }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Aucune inscription sur la période.</span>
+            {% endif %}
+          </div>
           <ul style="margin:0; padding-left:1rem; color:var(--text-muted); font-size:0.9rem;">
             {% if cert_popularity %}
               {% for cert in cert_popularity %}
@@ -330,18 +560,12 @@
         <span>Éléments actionnables</span>
       </div>
       <div class="insight-grid">
+        {% for insight in insights %}
         <div class="insight-card">
-          <h3>Baisse de rétention</h3>
-          <p>La cohorte de nouveaux inscrits décroche de 6% après 7 jours.</p>
+          <h3>{{ insight.title }}</h3>
+          <p>{{ insight.description }}</p>
         </div>
-        <div class="insight-card">
-          <h3>Certification en tendance</h3>
-          <p>Azure Fundamentals génère 18% de conversions supplémentaires.</p>
-        </div>
-        <div class="insight-card">
-          <h3>Module critique</h3>
-          <p>Le module Networking affiche un score moyen de 54%.</p>
-        </div>
+        {% endfor %}
       </div>
     </section>
 
