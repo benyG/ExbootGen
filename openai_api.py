@@ -867,6 +867,7 @@ def generate_lab_blueprint(
     difficulty: str,
     min_steps: int,
     step_types: list[str],
+    duration_minutes: int | None = None,
 ) -> dict:
     """Generate a hands-on lab scenario compatible with the Lab Player.
 
@@ -886,6 +887,8 @@ def generate_lab_blueprint(
         Minimum amount of steps the lab must contain.
     step_types : list[str]
         Allowed step types for the lab generation prompt.
+    duration_minutes : int | None
+        Target duration in minutes for the lab timer (optional).
     """
 
     if not OPENAI_API_KEY:
@@ -898,6 +901,14 @@ def generate_lab_blueprint(
 
     step_types_json = json.dumps(step_types, ensure_ascii=False)
     domains_label = ", ".join(domains)
+    duration_clause = ""
+    timer_clause = "timer: {\"mode\": \"countdown\", \"seconds\": x} — Duration must be estimated during generation."
+    if duration_minutes:
+        duration_clause = f"- Expected duration: {duration_minutes} minutes."
+        timer_clause = (
+            f"timer: {{\"mode\": \"countdown\", \"seconds\": {duration_minutes * 60}}} — "
+            "Set the timer to match the expected duration."
+        )
     prompt_template = """You are an expert in creating interactive labs in JSON for a tool.
     These labs simulate practical scenarios tied to specific certification exam domains.
     TASK:
@@ -906,6 +917,7 @@ def generate_lab_blueprint(
     If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate informations.
     - Main domain description: {domain_descr}
     - Lab Difficulty: {difficulty}
+    {duration_clause}
     - Expected step types (JSON): {step_types_json}
     STRICT SCOPE:
     1. Only use the information that can be logically derived from the official domain objectives and description.
@@ -926,7 +938,7 @@ def generate_lab_blueprint(
     scenario_md: 2–3 Markdown paragraphs describing lab scenario context, mission, and objectives related to {provider}/{certification}.
     variables (optional): reusable definitions (type: "choice"|"string"|"number", with possible choices, min, max, etc.). Use via {{variable}}.
     scoring: {"max_points": <sum of step points>}.
-    timer: {"mode": "countdown", "seconds": x} — Duration must be estimated during generation.
+    {timer_clause}
     assets: array of realistic downloadable or inline resources (id, kind, filename, mime, inline:true, content_b64).
     steps: ordered list of detailed steps (≥ {min_steps}), following type-specific rules.
     # Reference JSON template:
@@ -1172,6 +1184,8 @@ def generate_lab_blueprint(
         .replace("{difficulty}", difficulty)
         .replace("{step_types_json}", step_types_json)
         .replace("{provider}", provider)
+        .replace("{duration_clause}", duration_clause)
+        .replace("{timer_clause}", timer_clause)
     )
     prompt = prompt.replace("{{", "{").replace("}}", "}")
 
