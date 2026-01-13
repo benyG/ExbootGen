@@ -118,7 +118,8 @@
 
     input[type="search"],
     select,
-    input[type="url"] {
+    input[type="url"],
+    textarea {
       width: 100%;
       background: rgba(12, 17, 31, 0.86);
       color: var(--text-primary);
@@ -130,7 +131,8 @@
     }
 
     input:focus,
-    select:focus {
+    select:focus,
+    textarea:focus {
       outline: none;
       border-color: rgba(71, 245, 192, 0.6);
       box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.15);
@@ -217,6 +219,14 @@
       color: var(--text-primary);
       border: 1px solid rgba(124, 247, 255, 0.28);
       box-shadow: 0 12px 30px rgba(4, 12, 24, 0.4);
+    }
+
+    .button-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      cursor: pointer;
     }
 
     .generate-exam-btn {
@@ -546,6 +556,28 @@
         </div>
       </div>
     </section>
+
+    <section>
+      <h2 style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">4. Carrousel LinkedIn</h2>
+      <div class="grid-two">
+        <div class="field-group">
+          <label for="carouselSubject">Sujet</label>
+          <input type="search" id="carouselSubject" placeholder="Ex. Accélérer la prise de décision B2B" autocomplete="off">
+        </div>
+        <div class="field-group">
+          <label for="carouselQuestion">Question à adresser</label>
+          <textarea id="carouselQuestion" rows="4" placeholder="Ex. Comment aligner marketing et sales pour réduire le cycle de vente ?" autocomplete="off"></textarea>
+        </div>
+      </div>
+      <div class="actions">
+        <div class="primary-actions">
+          <button class="primary" id="generateCarouselBtn">Générer le carrousel</button>
+          <a class="secondary button-link" id="carouselDownloadLink" href="#" target="_blank" rel="noopener" hidden>Télécharger le PDF</a>
+        </div>
+      </div>
+      <div class="status" id="carouselStatus"></div>
+      <pre class="json-output" id="carouselJsonOutput">Le contenu du carrousel apparaîtra ici après génération.</pre>
+    </section>
   </main>
 
   <script>
@@ -582,6 +614,12 @@
     const tweetOutput = document.getElementById('tweetOutput');
     const linkedinOutput = document.getElementById('linkedinOutput');
     const addImageCheckbox = document.getElementById('addImageCheckbox');
+    const carouselSubjectInput = document.getElementById('carouselSubject');
+    const carouselQuestionInput = document.getElementById('carouselQuestion');
+    const generateCarouselBtn = document.getElementById('generateCarouselBtn');
+    const carouselDownloadLink = document.getElementById('carouselDownloadLink');
+    const carouselJsonOutput = document.getElementById('carouselJsonOutput');
+    const carouselStatus = document.getElementById('carouselStatus');
 
     let providers = [];
     let certifications = [];
@@ -591,6 +629,7 @@
     const DEFAULT_COURSE_ART_TEXT = courseArtOutput.textContent;
     const DEFAULT_TWEET_TEXT = tweetOutput.textContent;
     const DEFAULT_LINKEDIN_TEXT = linkedinOutput.textContent;
+    const DEFAULT_CAROUSEL_TEXT = carouselJsonOutput.textContent;
 
     let currentArticle = '';
     let currentCourseArt = null;
@@ -598,6 +637,8 @@
     let currentLinkedinDraft = '';
     let currentBlogId = null;
     let loadingButton = null;
+    let currentCarousel = null;
+    let currentCarouselPdfUrl = '';
 
     const PLAYBOOK_PROGRESS_STEPS = [
       { label: 'Création du test Examboot…', target: 15 },
@@ -804,6 +845,14 @@
       publishCourseArtBtn.disabled = !isCourseArtTopic || !currentCourseArt;
       publishTweetBtn.disabled = !hasSelection || !currentTweetDraft;
       publishLinkedinBtn.disabled = !hasSelection || !currentLinkedinDraft;
+      updateCarouselAvailability();
+    }
+
+    function updateCarouselAvailability() {
+      const hasCarouselInput = Boolean(
+        carouselSubjectInput.value.trim() && carouselQuestionInput.value.trim()
+      );
+      generateCarouselBtn.disabled = !hasCarouselInput;
     }
 
     async function fetchProviders() {
@@ -830,6 +879,12 @@
       courseArtOutput.textContent = DEFAULT_COURSE_ART_TEXT;
       tweetOutput.textContent = DEFAULT_TWEET_TEXT;
       linkedinOutput.textContent = DEFAULT_LINKEDIN_TEXT;
+      carouselJsonOutput.textContent = DEFAULT_CAROUSEL_TEXT;
+      carouselDownloadLink.hidden = true;
+      carouselDownloadLink.href = '#';
+      carouselStatus.textContent = '';
+      currentCarousel = null;
+      currentCarouselPdfUrl = '';
       updateCourseArtSection();
       updateActionAvailability();
     }
@@ -904,6 +959,8 @@
       updateCourseArtSection();
       updateActionAvailability();
     });
+    carouselSubjectInput.addEventListener('input', updateCarouselAvailability);
+    carouselQuestionInput.addEventListener('input', updateCarouselAvailability);
 
     generateExamBtn.addEventListener('click', async () => {
       const identifiers = getSelectionIdentifiers();
@@ -1120,6 +1177,56 @@
           null
         );
         setStatus(message, true);
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    generateCarouselBtn.addEventListener('click', async () => {
+      const subject = carouselSubjectInput.value.trim();
+      const question = carouselQuestionInput.value.trim();
+
+      if (!subject || !question) {
+        carouselStatus.textContent = 'Veuillez renseigner un sujet et une question.';
+        carouselStatus.style.color = '#f87171';
+        return;
+      }
+
+      try {
+        toggleLoading(true, generateCarouselBtn);
+        carouselStatus.textContent = 'Génération du carrousel en cours…';
+        carouselStatus.style.color = 'var(--text-muted)';
+        const response = await fetch('/articles/generate-carousel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subject, question })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la génération du carrousel.');
+        }
+        currentCarousel = payload.carousel || null;
+        currentCarouselPdfUrl = payload.pdf_url || '';
+        carouselJsonOutput.textContent = currentCarousel
+          ? JSON.stringify(currentCarousel, null, 2)
+          : DEFAULT_CAROUSEL_TEXT;
+        if (currentCarouselPdfUrl) {
+          carouselDownloadLink.href = currentCarouselPdfUrl;
+          carouselDownloadLink.hidden = false;
+        } else {
+          carouselDownloadLink.hidden = true;
+        }
+        carouselStatus.textContent = 'Carrousel généré avec succès.';
+        carouselStatus.style.color = 'var(--text-muted)';
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        carouselJsonOutput.textContent = `${DEFAULT_CAROUSEL_TEXT}\n\nErreur : ${message}`;
+        carouselDownloadLink.hidden = true;
+        carouselStatus.textContent = message;
+        carouselStatus.style.color = '#f87171';
+        currentCarousel = null;
+        currentCarouselPdfUrl = '';
       } finally {
         toggleLoading(false);
         updateActionAvailability();
@@ -1452,7 +1559,8 @@
       generateCourseArtBtn,
       publishCourseArtBtn,
       publishTweetBtn,
-      publishLinkedinBtn
+      publishLinkedinBtn,
+      generateCarouselBtn
     ];
 
     function toggleLoading(state, sourceButton = null) {
@@ -1485,6 +1593,7 @@
 
     examUrlInput.value = examUrlInput.value || '';
     updateCourseArtSection();
+    updateCarouselAvailability();
     fetchProviders();
     updateActionAvailability();
   </script>
