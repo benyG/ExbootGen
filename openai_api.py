@@ -220,6 +220,108 @@ Add a link  {{exam_url}} to the shareable test and encourage users to share thei
 """,
 }
 
+LINKEDIN_CAROUSEL_PROMPT_TEMPLATE = """
+You are an expert in LinkedIn marketing, B2B copywriting, and personal branding.
+
+Objective:
+Create a 5-page LinkedIn carousel with high engagement (hook, value, clarity, call to action).
+
+User input:
+
+[QUESTION_TO_ADDRESS]
+
+General constraints:
+
+- Target audience: professionals, executives, decision-makers, tech/business profiles
+- Tone: clear, engaging, credible, value-oriented
+- Style: short, impactful sentences, easy to read on mobile
+- No excessive emojis (0 to 2 max per page)
+- Each page must encourage users to swipe to the next
+
+Required structure:
+You must ONLY answer with a valid JSON object (no text before or after).
+
+Expected JSON output format:
+
+{
+
+"pages": [
+{
+"page_number": 1,
+"role": "Highly catchy hook (question, promise, or statistic)",
+
+"headline": "",
+
+"subtext": "",
+
+"key_message": ""
+
+},
+
+{
+"page_number": 2,
+
+"role": "Main problem or tension/context, Key insight",
+
+"headline": "",
+
+"subtext": "",
+
+"key_message": ""
+
+},
+
+{
+"page_number": 3,
+
+"role": "Solution / Revelation",
+
+"headline": "",
+
+"subtext": "",
+
+"key_message": ""
+
+},
+
+{
+"page_number": 4,
+
+"role": "Solution / Revelation",
+
+"headline": "",
+
+"subtext": "",
+
+"key_message": ""
+
+},
+{
+"page_number": 5,
+
+"role": "Proof / Differentiation",
+
+"headline": "",
+
+"subtext": "",
+
+"key_message": ""
+
+}
+
+]
+
+}
+
+Quality Guidelines:
+
+- Page 1: Strong hook, scroll-stopping
+- Pages 2 to 5: Provide real value (no fluff)
+
+- Content must be actionable or thought-provoking
+- JSON must be strictly valid
+"""
+
 def clean_and_decode_json(content: str) -> dict:
     """
     Nettoie le contenu (retire les balises ```json) et décode le JSON.
@@ -348,6 +450,28 @@ def generate_certification_linkedin_post(
         exam_url,
     )
     return _run_completion(prompt)
+
+
+def generate_linkedin_carousel(subject: str, question: str) -> dict:
+    """Generate the LinkedIn carousel content as structured JSON."""
+
+    if not OPENAI_API_KEY:
+        raise Exception(
+            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un carrousel LinkedIn."
+        )
+
+    subject_clean = (subject or "").strip()
+    question_clean = (question or "").strip()
+    if not subject_clean or not question_clean:
+        raise ValueError("Le sujet et la question sont requis pour générer un carrousel.")
+
+    user_input = f"Sujet : {subject_clean}\nQuestion : {question_clean}"
+    prompt = LINKEDIN_CAROUSEL_PROMPT_TEMPLATE.replace(
+        "[QUESTION_TO_ADDRESS]",
+        user_input,
+    )
+    raw_content = _run_completion(prompt)
+    return clean_and_decode_json(raw_content)
 
 def generate_module_blueprint_excerpt(
     certification_name: str, domain_name: str

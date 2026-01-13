@@ -10,15 +10,17 @@ import mimetypes
 import random
 import secrets
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, Tuple
 from urllib.parse import ParseResult, parse_qsl, quote, urlparse
 
+import fitz
 import mysql.connector
 import requests
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, jsonify, render_template, request, send_file, url_for
 
 from config import (
     DB_CONFIG,
@@ -44,6 +46,7 @@ from openai_api import (
     generate_certification_course_art,
     generate_certification_linkedin_post,
     generate_certification_tweet,
+    generate_linkedin_carousel,
 )
 
 articles_bp = Blueprint("articles", __name__)
@@ -99,6 +102,14 @@ class SocialPostResult:
 
 SOCIAL_IMAGE_DIR = Path(__file__).resolve().parent / "images"
 SOCIAL_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_DIR = BASE_DIR / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+CAROUSEL_TEMPLATE_PATH = BASE_DIR / "docs" / "Caroussel-Template-ExamBoot.pdf"
+CAROUSEL_TEXT_PADDING = 32
+CAROUSEL_HEADLINE_RATIO = 0.28
+CAROUSEL_SUBTEXT_RATIO = 0.34
+CAROUSEL_KEY_MESSAGE_RATIO = 0.38
 
 
 class SocialImageError(RuntimeError):
@@ -364,6 +375,193 @@ def _pick_random_social_image() -> Path:
         )
 
     return random.choice(images)
+
+
+def _find_carousel_frame_rect(page: fitz.Page) -> fitz.Rect:
+    """Return the bounding rectangle for the carousel text area."""
+
+    drawings = page.get_drawings()
+    frame_candidates = []
+
+    def _is_green(color: Optional[Tuple[float, float, float]]) -> bool:
+        if not color or len(color) != 3:
+            return False
+        r, g, b = color
+        return g > 0.6 and r < 0.4 and b < 0.4
+
+    for drawing in drawings:
+        stroke = drawing.get("color")
+        fill = drawing.get("fill")
+        rect = drawing.get("rect")
+        width = drawing.get("width") or 0
+        if rect and stroke and not fill and _is_green(stroke) and width >= 2:
+            frame_candidates.append(fitz.Rect(rect))
+
+    if not frame_candidates:
+        raise ValueError("Zone de texte introuvable dans le template du carrousel.")
+
+    return max(frame_candidates, key=lambda r: r.get_area())
+
+
+def _fit_font_size(
+    text: str,
+    target_rect: fitz.Rect,
+    fontname: str,
+    max_size: int,
+    min_size: int,
+) -> int:
+    """Return the largest font size that fits within the target rectangle."""
+
+    clean_text = (text or "").strip()
+    if not clean_text:
+        return max_size
+
+    for size in range(max_size, min_size - 1, -1):
+        temp_doc = fitz.open()
+        temp_page = temp_doc.new_page(width=target_rect.width, height=target_rect.height)
+        test_rect = fitz.Rect(0, 0, target_rect.width, target_rect.height)
+        result = temp_page.insert_textbox(
+            test_rect,
+            clean_text,
+            fontsize=size,
+            fontname=fontname,
+            align=0,
+        )
+        temp_doc.close()
+        if result >= 0:
+            return size
+
+    return min_size
+
+
+def _insert_text_block(
+    page: fitz.Page,
+    rect: fitz.Rect,
+    text: str,
+    fontname: str,
+    max_size: int,
+    min_size: int,
+) -> None:
+    """Insert text into the page ensuring it fits within the rectangle."""
+
+    clean_text = (text or "").strip()
+    if not clean_text:
+        return
+
+    font_size = _fit_font_size(clean_text, rect, fontname, max_size, min_size)
+    page.insert_textbox(
+        rect,
+        clean_text,
+        fontsize=font_size,
+        fontname=fontname,
+        align=0,
+        color=(0, 0, 0),
+    )
+
+
+def _build_carousel_pdf(pages: list[dict]) -> Path:
+    """Render the LinkedIn carousel pages into the PDF template."""
+
+    if not CAROUSEL_TEMPLATE_PATH.exists():
+        raise FileNotFoundError("Template PDF du carrousel introuvable.")
+
+    template = fitz.open(CAROUSEL_TEMPLATE_PATH)
+    output = fitz.open()
+    output.insert_pdf(template)
+
+    if template.page_count < 6:
+        template.close()
+        output.close()
+        raise ValueError("Le template du carrousel ne contient pas assez de pages.")
+
+    frame_rect = _find_carousel_frame_rect(template.load_page(1))
+    content_rect = fitz.Rect(
+        frame_rect.x0 + CAROUSEL_TEXT_PADDING,
+        frame_rect.y0 + CAROUSEL_TEXT_PADDING,
+        frame_rect.x1 - CAROUSEL_TEXT_PADDING,
+        frame_rect.y1 - CAROUSEL_TEXT_PADDING,
+    )
+
+    total_height = content_rect.height
+    headline_height = total_height * CAROUSEL_HEADLINE_RATIO
+    subtext_height = total_height * CAROUSEL_SUBTEXT_RATIO
+
+    headline_rect = fitz.Rect(
+        content_rect.x0,
+        content_rect.y0,
+        content_rect.x1,
+        content_rect.y0 + headline_height,
+    )
+    subtext_rect = fitz.Rect(
+        content_rect.x0,
+        headline_rect.y1,
+        content_rect.x1,
+        headline_rect.y1 + subtext_height,
+    )
+    key_message_rect = fitz.Rect(
+        content_rect.x0,
+        subtext_rect.y1,
+        content_rect.x1,
+        content_rect.y1,
+    )
+
+    for idx, page_payload in enumerate(pages, start=1):
+        if idx >= output.page_count:
+            break
+        page = output.load_page(idx)
+        _insert_text_block(
+            page,
+            headline_rect,
+            page_payload.get("headline", ""),
+            fontname="helvetica-bold",
+            max_size=36,
+            min_size=18,
+        )
+        _insert_text_block(
+            page,
+            subtext_rect,
+            page_payload.get("subtext", ""),
+            fontname="helvetica",
+            max_size=24,
+            min_size=14,
+        )
+        _insert_text_block(
+            page,
+            key_message_rect,
+            page_payload.get("key_message", ""),
+            fontname="helvetica",
+            max_size=22,
+            min_size=12,
+        )
+
+    filename = f"carousel_{uuid.uuid4().hex}.pdf"
+    output_path = UPLOAD_DIR / filename
+    output.save(output_path)
+    output.close()
+    template.close()
+    return output_path
+
+
+def _normalize_carousel_pages(payload: dict) -> list[dict]:
+    """Normalize and validate the carousel payload structure."""
+
+    pages = payload.get("pages") if isinstance(payload, dict) else None
+    if not isinstance(pages, list) or len(pages) != 5:
+        raise ValueError("Le carrousel doit contenir exactement 5 pages.")
+
+    normalized_pages = []
+    for page in pages:
+        if not isinstance(page, dict):
+            raise ValueError("Chaque page du carrousel doit être un objet JSON.")
+        normalized_pages.append(
+            {
+                "headline": str(page.get("headline", "")).strip(),
+                "subtext": str(page.get("subtext", "")).strip(),
+                "key_message": str(page.get("key_message", "")).strip(),
+            }
+        )
+
+    return normalized_pages
 
 
 def render_x_callback() -> str:
@@ -1709,6 +1907,47 @@ def generate_linkedin():
         return jsonify({"error": str(exc)}), 500
 
     return jsonify({"linkedin_post": linkedin_post, "exam_url": exam_url})
+
+
+@articles_bp.route("/generate-carousel", methods=["POST"])
+def generate_carousel():
+    """Generate a LinkedIn carousel PDF based on a subject and question."""
+
+    data = request.get_json() or {}
+    subject = (data.get("subject") or "").strip()
+    question = (data.get("question") or "").strip()
+    if not subject or not question:
+        return jsonify({"error": "Le sujet et la question sont requis."}), 400
+
+    try:
+        carousel_payload = generate_linkedin_carousel(subject, question)
+        pages = _normalize_carousel_pages(carousel_payload)
+        pdf_path = _build_carousel_pdf(pages)
+    except Exception as exc:  # pragma: no cover - external API issues
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify(
+        {
+            "carousel": carousel_payload,
+            "pdf_url": url_for("articles.download_carousel", filename=pdf_path.name),
+        }
+    )
+
+
+@articles_bp.route("/carousel/<path:filename>")
+def download_carousel(filename: str):
+    """Download the generated carousel PDF."""
+
+    file_path = UPLOAD_DIR / filename
+    if not file_path.exists() or not file_path.is_file():
+        return jsonify({"error": "Fichier introuvable."}), 404
+
+    return send_file(
+        file_path,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=file_path.name,
+    )
 
 
 @articles_bp.route("/generate-course-art", methods=["POST"])
