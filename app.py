@@ -573,7 +573,8 @@ def dashboard():
     end_param = request.args.get("end")
     plan_param = request.args.get("plan")
     cert_param = request.args.get("cert_id")
-    user_param = (request.args.get("user") or "").strip()
+    context_param = (request.args.get("context") or "global").strip().lower()
+    user_param_raw = (request.args.get("user") or "").strip()
     user_id_param = request.args.get("user_id")
 
     def _parse_date(value, fallback):
@@ -603,6 +604,11 @@ def dashboard():
             cert_id = int(cert_param)
         except ValueError:
             cert_id = None
+
+    context_mode = context_param if context_param in {"global", "user"} else "global"
+    user_param = user_param_raw if context_mode == "user" else ""
+    if context_mode != "user":
+        user_id_param = None
 
     dashboard_snapshot = db.get_dashboard_snapshot(
         start_dt,
@@ -648,6 +654,7 @@ def dashboard():
     def _format_currency(value):
         return f"€{_format_number(value)}"
 
+    guest_metrics = dashboard_snapshot.get("guests", {})
     kpis = dashboard_snapshot["kpis"]
     formatted_kpis = {
         "active_users": _format_number(kpis["active_users"]),
@@ -656,6 +663,10 @@ def dashboard():
         "completed_exams": _format_number(kpis["completed_exams"]),
         "revenue": _format_currency(kpis["revenue"]),
         "engagement": f"{kpis['engagement']:.1f}",
+        "guest_users": _format_number(guest_metrics.get("new_users")),
+        "guest_active": _format_number(guest_metrics.get("active_users")),
+        "guest_sessions": _format_number(guest_metrics.get("sessions")),
+        "guest_completed_exams": _format_number(guest_metrics.get("completed_exams")),
     }
 
     performance = dashboard_snapshot["performance"]
@@ -701,11 +712,33 @@ def dashboard():
             item["percent"] = round((value / max_value * 100) if max_value else 0, 1)
         return values
 
+    def _with_pie(values, key):
+        palette = ["#7cf7ff", "#47f5c0", "#f472b6", "#38bdf8", "#a78bfa"]
+        total = sum(item.get(key) or 0 for item in values)
+        running = 0.0
+        for idx, item in enumerate(values):
+            value = item.get(key) or 0
+            share = (value / total * 100) if total else 0
+            if idx == len(values) - 1:
+                end = 100 if total else 0
+            else:
+                end = min(running + round(share, 1), 100)
+            item["share_percent"] = round(share, 1) if total else 0
+            item["slice_start"] = round(running, 1)
+            item["slice_end"] = round(end, 1)
+            item["slice_color"] = palette[idx % len(palette)]
+            running = end
+        return values
+
     locations = _with_percent(dashboard_snapshot["locations"], "total")
     performance["completions_by_cert"] = _with_percent(
         performance["completions_by_cert"], "completions"
     )
     cert_popularity = _with_percent(dashboard_snapshot["cert_popularity"], "user_count")
+    performance["completions_by_cert"] = _with_pie(
+        performance["completions_by_cert"], "completions"
+    )
+    cert_popularity = _with_pie(cert_popularity, "user_count")
 
     top_cert = performance["completions_by_cert"][0] if performance["completions_by_cert"] else None
     insights = [
@@ -778,6 +811,21 @@ def dashboard():
             user_snapshot["completions_by_cert"], "completions"
         )
 
+    user_select_options = []
+    if user_matches:
+        user_select_options.extend(user_matches)
+    elif user_snapshot:
+        profile = user_snapshot["profile"]
+        user_select_options.append(
+            {
+                "id": profile["id"],
+                "name": profile["name"],
+                "email": profile["email"],
+                "plan": profile.get("plan"),
+                "account_type": profile.get("account_type"),
+            }
+        )
+
     plan_labels = {
         0: "Free",
         1: "Basic",
@@ -811,6 +859,7 @@ def dashboard():
         selected_cert=cert_id,
         selected_user=user_param,
         selected_user_id=selected_user_id,
+        context_mode=context_mode,
         start_date=start_date.isoformat(),
         end_date=end_date.isoformat(),
         kpis=formatted_kpis,
@@ -824,6 +873,7 @@ def dashboard():
         insights=insights,
         user_matches=user_matches,
         user_snapshot=user_view,
+        user_select_options=user_select_options,
     )
 
 
