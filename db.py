@@ -527,6 +527,52 @@ def get_domains_missing_answers_by_type():
     )
 
 
+def get_question_activity_by_day(days: int = 30):
+    """Return question activity totals per day and certification over recent days."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT activity_day,
+               cert_id,
+               cert_name,
+               COUNT(*) AS total_questions
+        FROM (
+            SELECT q.id AS question_id,
+                   c.id AS cert_id,
+                   c.name AS cert_name,
+                   DATE(
+                       GREATEST(
+                           q.created_at,
+                           COALESCE(q.updated_at, q.created_at),
+                           COALESCE(MAX(a.updated_at), MAX(a.created_at), q.created_at)
+                       )
+                   ) AS activity_day
+            FROM questions q
+            JOIN modules m ON q.module = m.id
+            JOIN courses c ON m.course = c.id
+            LEFT JOIN quest_ans qa ON qa.question = q.id
+            LEFT JOIN answers a ON a.id = qa.answer
+            GROUP BY q.id, c.id, c.name, q.created_at, q.updated_at
+        ) AS activity
+        WHERE activity_day >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+        GROUP BY activity_day, cert_id, cert_name
+        ORDER BY activity_day DESC, cert_name
+    """
+    cursor.execute(query, (max(days, 1),))
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [
+        {
+            "day": row[0],
+            "certification_id": row[1],
+            "certification_name": row[2],
+            "total": int(row[3] or 0),
+        }
+        for row in rows
+    ]
+
+
 def count_total_questions(domain_id):
     """
     Renvoie le nombre total de questions dans le domaine (module) donné.

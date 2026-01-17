@@ -2620,6 +2620,7 @@ def reports():
         ),
         "missing_answers": db.execute_async(db.get_domains_missing_answers_by_type),
         "missing_domains": db.execute_async(db.get_certifications_without_domains),
+        "question_activity": db.execute_async(db.get_question_activity_by_day, 30),
     }
 
     domain_counts = futures["domain_counts"].result()
@@ -2627,6 +2628,35 @@ def reports():
     missing_correct_domains = futures["missing_correct_domains"].result()
     missing_answers = futures["missing_answers"].result()
     missing_domains = futures["missing_domains"].result()
+    question_activity_rows = futures["question_activity"].result()
+
+    today = datetime.now().date()
+    last_days = [today - timedelta(days=offset) for offset in range(0, 30)]
+    activity_by_day = {day.isoformat(): [] for day in last_days}
+
+    for row in question_activity_rows:
+        raw_day = row.get("day")
+        if isinstance(raw_day, (datetime, date)):
+            day_key = raw_day.date().isoformat() if isinstance(raw_day, datetime) else raw_day.isoformat()
+        else:
+            day_key = str(raw_day)
+        if day_key not in activity_by_day:
+            continue
+        activity_by_day[day_key].append(row)
+
+    question_activity = []
+    for day in last_days:
+        day_key = day.isoformat()
+        day_rows = sorted(
+            activity_by_day.get(day_key, []),
+            key=lambda item: (item.get("certification_name") or "").lower(),
+        )
+        question_activity.append(
+            {
+                "day": day.strftime("%d/%m/%Y"),
+                "certifications": day_rows,
+            }
+        )
 
     return render_template(
         "reports.html",
@@ -2636,6 +2666,7 @@ def reports():
         missing_correct_domains=missing_correct_domains,
         missing_answers=missing_answers,
         missing_domains=missing_domains,
+        question_activity=question_activity,
     )
 
 

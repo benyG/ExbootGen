@@ -219,6 +219,53 @@
       <article class="report-panel" data-panel>
         <div class="panel-header" role="button" aria-expanded="false">
           <div>
+            <span>Activité 30 jours</span>
+            <h2>Questions ajoutées ou modifiées par jour et certification</h2>
+          </div>
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="panel-content">
+          {% if question_activity %}
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Certification</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for day in question_activity %}
+                  {% if day.certifications %}
+                    {% for cert in day.certifications %}
+                    <tr>
+                      {% if loop.first %}
+                      <td rowspan="{{ day.certifications|length }}">{{ day.day }}</td>
+                      {% endif %}
+                      <td>{{ cert.certification_name }}</td>
+                      <td>{{ cert.total }}</td>
+                    </tr>
+                    {% endfor %}
+                  {% else %}
+                    <tr>
+                      <td>{{ day.day }}</td>
+                      <td colspan="2" style="color: var(--text-muted);">Aucune activité</td>
+                    </tr>
+                  {% endif %}
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p style="color: var(--text-muted);">Aucune activité récente à afficher.</p>
+          {% endif %}
+        </div>
+      </article>
+
+      <article class="report-panel" data-panel>
+        <div class="panel-header" role="button" aria-expanded="false">
+          <div>
             <span>Anomalies</span>
             <h2>Certifications sans réponse correcte</h2>
           </div>
