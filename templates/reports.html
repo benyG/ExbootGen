@@ -99,6 +99,11 @@
     th { font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(226,232,240,0.65); }
     tbody tr:nth-child(even) { background: rgba(15,23,42,0.5); }
     tbody tr:hover { background: rgba(71,245,192,0.1); }
+    .table-link { color: var(--accent-strong); text-decoration: none; font-weight: 600; }
+    .table-link:hover { text-decoration: underline; }
+    .link-muted { color: var(--text-muted); font-size: 0.85rem; }
+    .provider-block { margin-bottom: 1.2rem; }
+    .provider-block h3 { margin: 0 0 0.6rem; font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.03em; }
 
     footer { color: rgba(226, 232, 240, 0.55); text-align: center; padding: 2.4rem 0 3rem; font-size: 0.85rem; }
 
@@ -148,6 +153,57 @@
     </section>
 
     <section class="report-grid" data-animate>
+      <article class="report-panel" data-panel>
+        <div class="panel-header" role="button" aria-expanded="false">
+          <div>
+            <span>Publication</span>
+            <h2>Certifications non publiées & domaines par défaut</h2>
+          </div>
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="panel-content">
+          {% if unpublished_providers %}
+            {% for provider in unpublished_providers %}
+            <div class="provider-block">
+              <h3>{{ provider.provider_name }}</h3>
+              <div class="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Certification</th>
+                      <th>Total questions</th>
+                      <th>Questions domaine default</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for cert in provider.certifications %}
+                    <tr>
+                      <td>
+                        <a class="table-link" href="{{ url_for('dom.index') }}?provider_id={{ provider.provider_id }}&cert_id={{ cert.id }}">{{ cert.name }}</a>
+                      </td>
+                      <td>{{ cert.total_questions }}</td>
+                      <td>{{ cert.default_questions }}</td>
+                      <td>
+                        {% if cert.default_module_id and cert.default_cert_id and cert.default_provider_id %}
+                          <a class="table-link" href="{{ url_for('pdf.index') }}?provider_id={{ cert.default_provider_id }}&cert_id={{ cert.default_cert_id }}&module_id={{ cert.default_module_id }}">Go to default</a>
+                        {% else %}
+                          <span class="link-muted">Domaine default introuvable</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p style="color: var(--text-muted);">Aucune certification non publiée pour le moment.</p>
+          {% endif %}
+        </div>
+      </article>
+
       <article class="report-panel" data-panel>
         <div class="panel-header" role="button" aria-expanded="false">
           <div>

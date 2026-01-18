@@ -278,11 +278,8 @@ def api_certifications(provider_id):
         cur = conn.cursor(dictionary=True)
         cur.execute(
             """
-            SELECT c.id, c.name, m.code_cert
+            SELECT c.id, c.name, c.descr2 AS code_cert
             FROM courses c
-            LEFT JOIN modules m
-              ON m.course = 23
-             AND m.name   = LEFT(CONCAT(c.name, '-default'), 255)
             WHERE c.prov = %s
             ORDER BY c.name
             """,
@@ -311,6 +308,34 @@ def api_modules(cert_id):
         try: cur.close()
         except Exception: pass
         conn.close()
+
+
+@pdf_bp.route("/api/update-code-cert", methods=["POST"])
+def api_update_code_cert():
+    data = request.get_json(silent=True) or {}
+    cert_id = data.get("cert_id")
+    module_id = data.get("module_id")
+    code_cert = (data.get("code_cert") or "").strip()
+
+    if not cert_id or not module_id or not code_cert:
+        return jsonify({"status": "error", "message": "cert_id, module_id et code_cert requis."}), 400
+
+    conn = db_conn()
+    try:
+        cur = conn.cursor()
+        try:
+            cur.execute("UPDATE courses SET descr2 = %s WHERE id = %s", (code_cert, cert_id))
+            cur.execute("UPDATE modules SET code_cert = %s WHERE id = %s", (code_cert, module_id))
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            return jsonify({"status": "error", "message": str(exc)}), 500
+        finally:
+            cur.close()
+    finally:
+        conn.close()
+
+    return jsonify({"status": "ok", "code_cert": code_cert})
 
 # -------------------- Search PDFs --------------------
 
