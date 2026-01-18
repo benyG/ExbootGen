@@ -527,6 +527,57 @@ def get_domains_missing_answers_by_type():
     )
 
 
+def get_unpublished_certifications_report():
+    """Return unpublished certifications with question counts and default domain metrics."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT
+            p.id AS provider_id,
+            p.name AS provider_name,
+            c.id AS cert_id,
+            c.name AS cert_name,
+            COUNT(q.id) AS total_questions,
+            SUM(
+                CASE
+                    WHEN m.name LIKE CONCAT('%', c.name, '%') THEN 1
+                    ELSE 0
+                END
+            ) AS default_questions,
+            MAX(
+                CASE
+                    WHEN m.name LIKE CONCAT('%', c.name, '%') THEN m.id
+                    ELSE NULL
+                END
+            ) AS default_module_id
+        FROM courses c
+        JOIN provs p ON p.id = c.prov
+        LEFT JOIN modules m ON m.course = c.id
+        LEFT JOIN questions q ON q.module = m.id
+        WHERE c.pub = 0
+        GROUP BY p.id, p.name, c.id, c.name
+        ORDER BY p.name, c.name
+    """
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    results = []
+    for row in rows:
+        results.append(
+            {
+                "provider_id": row[0],
+                "provider_name": row[1],
+                "cert_id": row[2],
+                "cert_name": row[3],
+                "total_questions": int(row[4] or 0),
+                "default_questions": int(row[5] or 0),
+                "default_module_id": row[6],
+            }
+        )
+    return results
+
+
 def get_question_activity_by_day(days: int = 30):
     """Return question activity totals per day and certification over recent days."""
     conn = get_connection()
