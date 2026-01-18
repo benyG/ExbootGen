@@ -356,6 +356,17 @@ def get_certifications_by_provider(provider_id):
     return certifications
 
 
+def get_certifications_by_provider_with_code(provider_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "SELECT id, name, descr2 FROM courses WHERE prov = %s"
+    cursor.execute(query, (provider_id,))
+    certifications = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return certifications
+
+
 def get_certifications_without_domains():
     """Return certifications that do not have any associated domains."""
 
@@ -525,6 +536,60 @@ def get_domains_missing_answers_by_type():
     return sorted(
         results.values(), key=lambda d: (d['certification_name'], d['name'])
     )
+
+
+def get_unpublished_certifications_report():
+    """Return unpublished certifications with question counts and default domain metrics."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT
+            p.id AS provider_id,
+            p.name AS provider_name,
+            c.id AS cert_id,
+            c.name AS cert_name,
+            (
+                SELECT COUNT(q_all.id)
+                FROM questions q_all
+                JOIN modules m_all ON m_all.id = q_all.module
+                WHERE m_all.course = c.id
+            ) AS total_questions,
+            (
+                SELECT COUNT(q_def.id)
+                FROM questions q_def
+                JOIN modules m_def ON m_def.id = q_def.module
+                WHERE m_def.code_cert = c.descr2
+            ) AS default_questions,
+            (
+                SELECT m_def.id
+                FROM modules m_def
+                WHERE m_def.code_cert = c.descr2
+                ORDER BY m_def.id DESC
+                LIMIT 1
+            ) AS default_module_id
+        FROM courses c
+        JOIN provs p ON p.id = c.prov
+        WHERE c.pub = 0
+        ORDER BY p.name, c.name
+    """
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    results = []
+    for row in rows:
+        results.append(
+            {
+                "provider_id": row[0],
+                "provider_name": row[1],
+                "cert_id": row[2],
+                "cert_name": row[3],
+                "total_questions": int(row[4] or 0),
+                "default_questions": int(row[5] or 0),
+                "default_module_id": row[6],
+            }
+        )
+    return results
 
 
 def get_question_activity_by_day(days: int = 30):

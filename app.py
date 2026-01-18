@@ -1937,6 +1937,7 @@ def reports():
         "missing_answers": db.execute_async(db.get_domains_missing_answers_by_type),
         "missing_domains": db.execute_async(db.get_certifications_without_domains),
         "question_activity": db.execute_async(db.get_question_activity_by_day, 30),
+        "unpublished_report": db.execute_async(db.get_unpublished_certifications_report),
     }
 
     domain_counts = futures["domain_counts"].result()
@@ -1945,6 +1946,7 @@ def reports():
     missing_answers = futures["missing_answers"].result()
     missing_domains = futures["missing_domains"].result()
     question_activity_rows = futures["question_activity"].result()
+    unpublished_rows = futures["unpublished_report"].result()
 
     today = datetime.now().date()
     last_days = [today - timedelta(days=offset) for offset in range(0, 30)]
@@ -1974,6 +1976,34 @@ def reports():
             }
         )
 
+    unpublished_by_provider = {}
+    for row in unpublished_rows:
+        provider_key = row["provider_id"]
+        provider_entry = unpublished_by_provider.setdefault(
+            provider_key,
+            {
+                "provider_id": row["provider_id"],
+                "provider_name": row["provider_name"],
+                "certifications": [],
+            },
+        )
+        provider_entry["certifications"].append(
+            {
+                "id": row["cert_id"],
+                "name": row["cert_name"],
+                "total_questions": row["total_questions"],
+                "default_questions": row["default_questions"],
+                "default_module_id": row["default_module_id"],
+            }
+        )
+
+    unpublished_providers = sorted(
+        unpublished_by_provider.values(),
+        key=lambda item: (item["provider_name"] or "").lower(),
+    )
+    for provider in unpublished_providers:
+        provider["certifications"].sort(key=lambda item: (item["name"] or "").lower())
+
     return render_template(
         "reports.html",
         certification_id=certification_id,
@@ -1983,6 +2013,7 @@ def reports():
         missing_answers=missing_answers,
         missing_domains=missing_domains,
         question_activity=question_activity,
+        unpublished_providers=unpublished_providers,
     )
 
 
@@ -2067,8 +2098,11 @@ def fix_index():
 @app.route("/fix/get_certifications", methods=["POST"])
 def fix_get_certifications():
     provider_id = int(request.form.get("provider_id"))
-    certs = db.get_certifications_by_provider(provider_id)
-    cert_list = [{"id": cert[0], "name": cert[1]} for cert in certs]
+    certs = db.get_certifications_by_provider_with_code(provider_id)
+    cert_list = [
+        {"id": cert[0], "name": cert[1], "code_cert": cert[2] or ""}
+        for cert in certs
+    ]
     return jsonify(cert_list)
 
 

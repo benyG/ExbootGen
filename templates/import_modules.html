@@ -402,6 +402,21 @@
       position: relative;
     }
 
+    .jump-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: var(--accent-strong);
+      text-decoration: none;
+      font-weight: 600;
+      margin-top: 0.8rem;
+    }
+
+    .jump-link.disabled {
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
     #bar {
       height: 100%;
       width: 0;
@@ -489,6 +504,7 @@
           <span>Provider & certification sélectionnés</span>
           <span id="selectionLabel">—</span>
         </div>
+        <a id="jumpToDefault" class="jump-link disabled" href="#" aria-disabled="true">Jump to Default</a>
         <div class="module-inventory">
           <h3>Domaines existants</h3>
           <p id="modulesEmpty">Sélectionnez une certification pour afficher ses domaines.</p>
@@ -559,6 +575,7 @@
     const selectionLabel = document.getElementById('selectionLabel');
     const modulesList = document.getElementById('modulesList');
     const modulesEmpty = document.getElementById('modulesEmpty');
+    const jumpLink = document.getElementById('jumpToDefault');
     const generateBtn = document.getElementById('generate-json-btn');
     const generationStatus = document.getElementById('generationStatus');
 
@@ -584,6 +601,12 @@
     updateStats();
 
     const base = '{{ url_for('dom.index') }}';
+    const pdfBase = '{{ url_for('pdf.index') }}';
+    const params = new URLSearchParams(window.location.search);
+    const preselectProviderId = Number(params.get('provider_id'));
+    const preselectCertId = Number(params.get('cert_id'));
+    let pendingCertId = Number.isFinite(preselectCertId) ? preselectCertId : null;
+    let currentModules = [];
 
     async function loadJSON(url, options = {}) {
       const res = await fetch(url, options);
@@ -598,13 +621,23 @@
     function fill(select, items) {
       const helper = select && select.__searchableSelect;
       if (helper) {
-        helper.setOptions((items || []).map(item => ({ value: item.id, label: item.name })), { keepSearch: false });
+        helper.setOptions(
+          (items || []).map(item => ({
+            value: item.id,
+            label: item.name,
+            dataset: { codeCert: item.code_cert || '' }
+          })),
+          { keepSearch: false }
+        );
       } else {
         select.innerHTML = '';
         (items || []).forEach(item => {
           const option = document.createElement('option');
           option.value = item.id;
           option.textContent = item.name;
+          if (item.code_cert) {
+            option.dataset.codeCert = item.code_cert;
+          }
           select.appendChild(option);
         });
       }
@@ -630,6 +663,7 @@
       }
 
       modulesEmpty.style.display = 'none';
+      currentModules = modules;
       modules.forEach(module => {
         const li = document.createElement('li');
         li.className = 'module-chip';
@@ -646,11 +680,36 @@
       });
     }
 
+    function updateJumpLink() {
+      if (!jumpLink) return;
+      const certSel = document.getElementById('cert');
+      const provSel = document.getElementById('prov');
+      const certId = certSel?.value;
+      const providerId = provSel?.value;
+      const selectedCert = certSel?.options[certSel.selectedIndex];
+      const certCode = (selectedCert?.dataset?.codeCert || '').toLowerCase();
+      const candidates = (currentModules || []).filter(
+        module => (module.code_cert || '').toLowerCase() === certCode
+      );
+      const match = candidates[0];
+      if (match && certId && providerId) {
+        jumpLink.href = `${pdfBase}?provider_id=${providerId}&cert_id=${certId}&module_id=${match.id}`;
+        jumpLink.classList.remove('disabled');
+        jumpLink.setAttribute('aria-disabled', 'false');
+      } else {
+        jumpLink.href = '#';
+        jumpLink.classList.add('disabled');
+        jumpLink.setAttribute('aria-disabled', 'true');
+      }
+    }
+
     async function refreshModules(certId) {
       if (!certId) {
         modulesList.innerHTML = '';
         modulesEmpty.textContent = 'Sélectionnez une certification pour afficher ses domaines.';
         modulesEmpty.style.display = 'block';
+        currentModules = [];
+        updateJumpLink();
         return;
       }
 
@@ -660,10 +719,13 @@
       try {
         const modules = await loadJSON(`${base}api/certifications/${certId}/modules`);
         renderModules(modules);
+        updateJumpLink();
       } catch (err) {
         modulesList.innerHTML = '';
         modulesEmpty.textContent = err.message || 'Impossible de récupérer les domaines actuels.';
         modulesEmpty.style.display = 'block';
+        currentModules = [];
+        updateJumpLink();
       }
     }
 
@@ -684,7 +746,9 @@
           fill(certSel, certs);
           certSearch && certSearch.setSearchTerm('');
           if (certs.length) {
-            certSel.value = certs[0].id;
+            const preferred = pendingCertId && certs.find(item => item.id === pendingCertId);
+            certSel.value = preferred ? preferred.id : certs[0].id;
+            pendingCertId = null;
             updateSelectionLabel();
             refreshModules(certSel.value);
           } else {
@@ -696,6 +760,8 @@
           modulesList.innerHTML = '';
           modulesEmpty.textContent = err.message || 'Impossible de charger les certifications.';
           modulesEmpty.style.display = 'block';
+          currentModules = [];
+          updateJumpLink();
         }
       }
 
@@ -704,7 +770,10 @@
         fill(provSel, providers);
         provSearch && provSearch.setSearchTerm('');
         if (providers.length) {
-          provSel.value = providers[0].id;
+          const preferredProvider = Number.isFinite(preselectProviderId)
+            ? providers.find(item => item.id === preselectProviderId)
+            : null;
+          provSel.value = preferredProvider ? preferredProvider.id : providers[0].id;
           await refreshProviderCertifications();
         } else {
           updateSelectionLabel();
@@ -714,6 +783,8 @@
         selectionLabel.textContent = '—';
         modulesEmpty.textContent = err.message || 'Impossible de charger les providers.';
         modulesEmpty.style.display = 'block';
+        currentModules = [];
+        updateJumpLink();
       }
 
       provSel.addEventListener('change', refreshProviderCertifications);
