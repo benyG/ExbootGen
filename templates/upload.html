@@ -141,6 +141,18 @@
     .report-metrics { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; font-size: 0.88rem; }
     .report-metrics span { color: #c5d6f0; }
     .report-highlight { color: #9ad1ff; font-weight: 600; }
+    .action-link {
+      color: var(--accent-strong);
+      text-decoration: none;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .action-link.disabled {
+      color: var(--text-muted);
+      pointer-events: none;
+    }
 
     #loadingOverlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(4,7,17,0.72); backdrop-filter: blur(10px); display:none; align-items:center; justify-content:center; z-index:50; }
     #loadingOverlay.show { display:flex; }
@@ -231,6 +243,9 @@
           <button type="button" id="syncBtn" class="stellar-button secondary" title="Synchroniser les domaines">Synchro</button>
           <button type="submit" id="analyzeBtn" class="stellar-button">Analyser le PDF</button>
         </div>
+        <div style="grid-column:1 / -1; display:flex; justify-content:flex-end;">
+          <a id="relocateLink" class="action-link disabled" href="#" aria-disabled="true">Relocate now</a>
+        </div>
       </form>
 
       <div class="json-preview" id="jsonContainer">
@@ -298,14 +313,44 @@
 
     const providerSelect = document.getElementById("providerSelect");
     const certSelect = document.getElementById("certSelect");
+    const relocateLink = document.getElementById("relocateLink");
+    const params = new URLSearchParams(window.location.search);
+    const preselectProviderId = Number(params.get('provider_id'));
+    const preselectCertId = Number(params.get('cert_id'));
+    let pendingCertId = Number.isFinite(preselectCertId) ? preselectCertId : null;
+    let pendingModuleId = Number(params.get('module_id'));
     const providerSearch = window.makeSelectSearchable ? window.makeSelectSearchable(providerSelect, { placeholder: 'Rechercher un provider…' }) : null;
     const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certSelect, { placeholder: 'Rechercher une certification…' }) : null;
+    const relocateBase = '{{ url_for('reloc.index') }}';
+
+    function updateRelocateLink() {
+        const moduleSelect = document.getElementById("moduleSelect");
+        const certId = certSelect.value;
+        const providerId = providerSelect.value;
+        const certName = (certSelect.selectedOptions[0]?.text || '').toLowerCase();
+        const moduleOptions = Array.from(moduleSelect.options);
+        const matchingOptions = moduleOptions.filter(opt => opt.text.toLowerCase().includes(certName));
+        const defaultOption = matchingOptions.find(opt => opt.text.toLowerCase().includes('default')) || matchingOptions[0];
+        const moduleId = defaultOption?.value || moduleSelect.value;
+        if (relocateLink && moduleId && certId && providerId) {
+            relocateLink.href = `${relocateBase}?source_module_id=${moduleId}&source_provider_id=${providerId}&source_cert_id=${certId}&destination_provider_id=${providerId}&destination_cert_id=${certId}`;
+            relocateLink.classList.remove("disabled");
+            relocateLink.setAttribute("aria-disabled", "false");
+        } else if (relocateLink) {
+            relocateLink.href = "#";
+            relocateLink.classList.add("disabled");
+            relocateLink.setAttribute("aria-disabled", "true");
+        }
+    }
 
     fetch(apiBase + "api/providers").then(r => r.json()).then(data => {
         const items = (data || []).map(p => ({ value: p.id, label: p.name }));
         const defProv = items.find(p => Number(p.value) === 169);
+        const preferredProv = Number.isFinite(preselectProviderId)
+            ? items.find(p => Number(p.value) === preselectProviderId)
+            : null;
         const list = items.length ? items : [{ value: '', label: '— Aucun provider —' }];
-        const selectedValue = defProv ? defProv.value : (list[0]?.value ?? '');
+        const selectedValue = preferredProv ? preferredProv.value : (defProv ? defProv.value : (list[0]?.value ?? ''));
         if (providerSearch) {
             providerSearch.setOptions(list, { keepSearch: false, selectedValue });
             providerSearch.select.dispatchEvent(new Event("change"));
@@ -338,6 +383,7 @@
                 certSelect.appendChild(option(fallbackCert.label, fallbackCert.value, fallbackCert.dataset));
             }
             modSelect.appendChild(option("— Aucun module —", ""));
+            updateRelocateLink();
             return;
         }
 
@@ -348,25 +394,17 @@
                 dataset: { code_cert: c.code_cert || '' }
             }));
             let list = items.length ? items : [{ value: '', label: '— Aucune certification —' }];
-            if (items.length && Number(prov_id) === 169) {
+            let selectedValue = list[0]?.value ?? '';
+            const preferredCert = pendingCertId && items.find(c => Number(c.value) === pendingCertId);
+            if (preferredCert) {
+                selectedValue = preferredCert.value;
+                pendingCertId = null;
+            } else if (items.length && Number(prov_id) === 169) {
                 const defCert = items.find(c => Number(c.value) === 23);
                 if (defCert) {
-                    list = items;
-                    const selectedValue = defCert.value;
-                    if (certSearch) {
-                        certSearch.setOptions(list, { keepSearch: false, selectedValue });
-                        certSearch.select.dispatchEvent(new Event("change"));
-                    } else {
-                        certSelect.innerHTML = "";
-                        list.forEach(opt => certSelect.appendChild(option(opt.label, opt.value, opt.dataset)));
-                        certSelect.value = selectedValue;
-                        certSelect.dispatchEvent(new Event("change"));
-                    }
-                    return;
+                    selectedValue = defCert.value;
                 }
             }
-
-            const selectedValue = list[0]?.value ?? '';
             if (certSearch) {
                 certSearch.setOptions(list, { keepSearch: false, selectedValue });
                 certSearch.select.dispatchEvent(new Event("change"));
@@ -387,6 +425,7 @@
             }
             modSelect.innerHTML = "";
             modSelect.appendChild(option("— Aucun module —", ""));
+            updateRelocateLink();
         });
     });
 
@@ -478,6 +517,7 @@
         const cert_id = this.value;
         const modSelect = document.getElementById("moduleSelect");
 
+        updateRelocateLink();
         const selectedOption = this.selectedOptions[0];
         const defaultQuery = (selectedOption?.dataset?.code_cert || '').trim();
         fileSearch.value = defaultQuery || '';
@@ -493,13 +533,23 @@
             modSelect.innerHTML = "";
             if (!data || data.length === 0) {
                 modSelect.appendChild(option("— Aucun module —", ""));
+                updateRelocateLink();
                 return;
             }
             data.forEach(m => modSelect.appendChild(option(m.name, m.id, { code_cert: m.code_cert || '' })));
+            if (Number.isFinite(pendingModuleId)) {
+                const match = data.find(m => Number(m.id) === pendingModuleId);
+                if (match) {
+                    modSelect.value = match.id;
+                    pendingModuleId = null;
+                }
+            }
             modSearch.value = "";
             modSearch.dispatchEvent(new Event('input'));
+            updateRelocateLink();
         }).catch(() => {
             modSelect.appendChild(option("— Erreur chargement —", ""));
+            updateRelocateLink();
         });
     });
 
@@ -508,6 +558,7 @@
         const defaultQuery = (selectedOption?.dataset?.code_cert || '').trim();
         fileSearch.value = defaultQuery || fileSearch.value;
         refreshPdfList();
+        updateRelocateLink();
     });
 
     const selectedFiles = [];

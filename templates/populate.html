@@ -354,6 +354,10 @@
       const certEl = document.getElementById('cert_id');
       const providerSearch = window.makeSelectSearchable ? window.makeSelectSearchable(providerEl, { placeholder: 'Rechercher un provider…' }) : null;
       const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certEl, { placeholder: 'Rechercher une certification…' }) : null;
+      const params = new URLSearchParams(window.location.search);
+      const preselectProviderId = params.get('provider_id');
+      const preselectCertId = params.get('cert_id');
+      let pendingCertId = preselectCertId;
       const distributionInput = document.getElementById('distributionInput');
       const applyAdditionInput = document.getElementById('applyAdditionInput');
       const applyAdditionCheckbox = document.getElementById('applyAdditionCheckbox');
@@ -459,19 +463,30 @@
         closeDistributionPanel();
       });
 
+      if (preselectProviderId) {
+        providerEl.value = preselectProviderId;
+      }
+
       $("#provider_id").change(function(){
         $.post("{{ url_for('get_certifications') }}", { provider_id: $(this).val() }, function(data){
           const items = (data || []).map(item => ({ value: item.id, label: item.name }));
           if (certSearch) {
             const list = items.length ? items : [{ value: '', label: '— Aucune certification —' }];
-            certSearch.setOptions(list, { keepSearch: false, selectedValue: list[0]?.value ?? '' });
+            const preferred = pendingCertId ? list.find(item => String(item.value) === String(pendingCertId)) : null;
+            const selectedValue = preferred ? preferred.value : (list[0]?.value ?? '');
+            certSearch.setOptions(list, { keepSearch: false, selectedValue });
             certSearch.select.dispatchEvent(new Event('change'));
+            pendingCertId = null;
           } else {
             const $cert = $("#cert_id");
             $cert.empty();
             $.each(items.length ? items : [{ value: '', label: '— Aucune certification —' }], function(_, optionData){
               $cert.append($("<option>", { value: optionData.value, text : optionData.label }));
             });
+            if (pendingCertId) {
+              $cert.val(pendingCertId);
+              pendingCertId = null;
+            }
             $cert.trigger('change');
           }
         }, "json");
