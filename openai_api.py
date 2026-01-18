@@ -48,25 +48,16 @@ writing_rules = """
 """
 
 writing_rules_linkedin = """ 
-- First sentence should be shocking to drive attention.
-- Formulates complete, non-robotic sentences
-- Target length: 500–1100 words.
-- Tone: motivating, factual, without unexplained jargon.
-- Improve overall writing quality. Be clear and impactful. Simplify language for broader accessibility.
-- Add relevant emojis with moderation and at least 5 hashtags for increased engagement.
-- Return only the LinkedIn post body without extra commentary.
-"""
-
-writing_rules_linkedin = """ 
 - First sentence must be a strong hook that challenges an assumption, highlights a surprising fact, or creates tension.
 - Target audience: Professionals preparing for certifications, Students, recent graduates, HR professionals, Recruiters, Training & Development managers, Educators, trainers, Engineers, Project managers, Consultants, Technical specialists, Career advancement seekers, Learning & Development executives, Educational program directors
 - Target length: 180–400 words.
 - Use short paragraphs (1–3 lines) for mobile readability.
 - Tone: motivating, factual, confident, without unexplained jargon.
 - Use concrete examples or observations (not generic advice).
-- Emojis: optional, relevant, no more than 1 per 3–4 paragraphs,
+- Emojis: optional, relevant, no more than 1 per 1–2 paragraphs,
   placed only at paragraph starts or line breaks (never mid-sentence).
 - Include 5–8 relevant hashtags at the end, not embedded in the text.
+- always put @ before the name of the vendor to tag him.
 - End with a light engagement prompt (question or reflection).
 - Return only the LinkedIn post body, with no commentary or metadata.
 """
@@ -77,6 +68,7 @@ writing_rules_tweet = """
 - First line must contain a strong hook (bold claim, insight, or contrast).
 - Focus on a single clear idea (no multi-topic tweets).
 - Tone: concise, confident, human (no corporate or robotic phrasing).
+- always put @ before the name of the vendor to tag him.
 - Add relevant emojis sparingly (0–2 max), never mid-sentence.
 - Include exactly 2–3 relevant hashtags at the end of the tweet.
 """
