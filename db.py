@@ -540,13 +540,13 @@ def get_unpublished_certifications_report():
             COUNT(q.id) AS total_questions,
             SUM(
                 CASE
-                    WHEN m.name = LEFT(CONCAT(c.name, '-default'), 255) THEN 1
+                    WHEN m.name LIKE CONCAT('%', c.name, '%') THEN 1
                     ELSE 0
                 END
             ) AS default_questions,
             MAX(
                 CASE
-                    WHEN m.name = LEFT(CONCAT(c.name, '-default'), 255) THEN m.id
+                    WHEN m.name LIKE CONCAT('%', c.name, '%') THEN m.id
                     ELSE NULL
                 END
             ) AS default_module_id

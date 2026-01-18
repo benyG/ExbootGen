@@ -327,9 +327,10 @@
         const moduleSelect = document.getElementById("moduleSelect");
         const certId = certSelect.value;
         const providerId = providerSelect.value;
-        const certName = certSelect.selectedOptions[0]?.text || '';
-        const defaultName = `${certName}-default`;
-        const defaultOption = Array.from(moduleSelect.options).find(opt => opt.text === defaultName);
+        const certName = (certSelect.selectedOptions[0]?.text || '').toLowerCase();
+        const moduleOptions = Array.from(moduleSelect.options);
+        const matchingOptions = moduleOptions.filter(opt => opt.text.toLowerCase().includes(certName));
+        const defaultOption = matchingOptions.find(opt => opt.text.toLowerCase().includes('default')) || matchingOptions[0];
         const moduleId = defaultOption?.value || moduleSelect.value;
         if (relocateLink && moduleId && certId && providerId) {
             relocateLink.href = `${relocateBase}?source_module_id=${moduleId}&source_provider_id=${providerId}&source_cert_id=${certId}&destination_provider_id=${providerId}&destination_cert_id=${certId}`;

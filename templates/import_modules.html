@@ -676,11 +676,11 @@
       const provSel = document.getElementById('prov');
       const certId = certSel?.value;
       const providerId = provSel?.value;
-      const certName = certSel?.options[certSel.selectedIndex]?.text || '';
-      const defaultName = `${certName}-default`.toLowerCase();
-      const match = (currentModules || []).find(
-        module => (module.name || '').toLowerCase() === defaultName
+      const certName = (certSel?.options[certSel.selectedIndex]?.text || '').toLowerCase();
+      const candidates = (currentModules || []).filter(
+        module => (module.name || '').toLowerCase().includes(certName)
       );
+      const match = candidates.find(module => (module.name || '').toLowerCase().includes('default')) || candidates[0];
       if (match && certId && providerId) {
         jumpLink.href = `${pdfBase}?provider_id=${providerId}&cert_id=${certId}&module_id=${match.id}`;
         jumpLink.classList.remove('disabled');
