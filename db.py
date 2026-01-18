@@ -710,29 +710,30 @@ def insert_questions(domain_id, questions_json, scenario_type_str):
                     logging.info("Duplicate question skipped")
                     q_skipped += 1
 
-                    # If the existing question has no source file recorded yet,
-                    # update it with the current file name to keep provenance.
-                    if src_file:
-                        try:
-                            cursor.execute(
-                                "SELECT id, src_file FROM questions WHERE text = %s AND module = %s LIMIT 1",
-                                (question_text, domain_id),
-                            )
-                            row = cursor.fetchone()
-                            if row:
-                                existing_id, existing_src_file = row
-                                if not (existing_src_file or "").strip():
-                                    cursor.execute(
-                                        "UPDATE questions SET src_file = %s WHERE id = %s",
-                                        (src_file, existing_id),
-                                    )
-                                    logging.info(
-                                        f"Updated empty src_file for duplicate question ID: {existing_id}"
-                                    )
-                        except Exception as update_err:
-                            logging.warning(
-                                "Failed to update src_file for duplicate question: %s", update_err
-                            )
+                    # Always update existing question metadata (src_file + module).
+                    try:
+                        cursor.execute(
+                            "SELECT id, module, src_file FROM questions WHERE text = %s LIMIT 1",
+                            (question_text,),
+                        )
+                        row = cursor.fetchone()
+                        if row:
+                            existing_id, existing_module, existing_src_file = row
+                            if (existing_module != domain_id) or (existing_src_file != src_file):
+                                cursor.execute(
+                                    "UPDATE questions SET module = %s, src_file = %s WHERE id = %s",
+                                    (domain_id, src_file, existing_id),
+                                )
+                                logging.info(
+                                    "Updated duplicate question ID %s with module=%s src_file=%s",
+                                    existing_id,
+                                    domain_id,
+                                    src_file,
+                                )
+                    except Exception as update_err:
+                        logging.warning(
+                            "Failed to update duplicate question metadata: %s", update_err
+                        )
                     continue
                 else:
                     raise
