@@ -15,6 +15,8 @@ from config import (
     OPENAI_TIMEOUT_SECONDS,
 )
 
+OPENAI_SEARCH_MODEL = "gpt-5-search-api"
+
 DOMAIN_PROMPT_TEMPLATE = (
     "Retrieve the official domains of the exam outline course for the certification "
     "{{NAME_OF_CERTIFICATION}} along with their descriptions.\n"
@@ -352,9 +354,14 @@ def clean_and_decode_json(content: str) -> dict:
     setattr(err, "raw_content", cleaned)
     raise err
 
-def _run_completion(prompt: str) -> str:
+def _run_completion(
+    prompt: str,
+    *,
+    model: Optional[str] = None,
+    web_search_options: Optional[dict] = None,
+) -> str:
     payload = {
-        "model": OPENAI_MODEL,
+        "model": model or OPENAI_MODEL,
         "messages": [
             {
                 "role": "user",
@@ -362,6 +369,8 @@ def _run_completion(prompt: str) -> str:
             }
         ],
     }
+    if web_search_options is not None:
+        payload["web_search_options"] = web_search_options
 
     response = _post_with_retry(payload)
     resp_json = response.json()
@@ -467,7 +476,7 @@ def generate_linkedin_carousel(subject: str, question: str) -> dict:
 
 def generate_module_blueprint_excerpt(
     certification_name: str, domain_name: str
- ) -> str:
+) -> str:
     """Generate a textual blueprint excerpt for a certification domain."""
 
     if not OPENAI_API_KEY:
@@ -492,7 +501,11 @@ def generate_module_blueprint_excerpt(
         "- Key focus areas from the official exam guide."
     )
 
-    return _run_completion(prompt)
+    return _run_completion(
+        prompt,
+        model=OPENAI_SEARCH_MODEL,
+        web_search_options={},
+    )
 
 def _build_course_art_prompt(certification: str, vendor: str) -> str:
     """Return the course art prompt even if the template constant is missing."""
@@ -628,13 +641,14 @@ def generate_domains_outline(certification: str) -> dict:
         )
     prompt = DOMAIN_PROMPT_TEMPLATE.replace("{{NAME_OF_CERTIFICATION}}", certification)
     payload = {
-        "model": OPENAI_MODEL,
+        "model": OPENAI_SEARCH_MODEL,
         "messages": [
             {
                 "role": "user",
                 "content": prompt,
             }
         ],
+        "web_search_options": {},
     }
 
     response = _post_with_retry(payload)
