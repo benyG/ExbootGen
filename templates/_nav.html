@@ -13,7 +13,6 @@
   <a href="{{ url_for('edit_question.index') }}" data-route="{{ url_for('edit_question.index') }}"{% if active_page|default('') == 'edit_question' %} class="active"{% endif %}>Edit Question</a>
   <a href="{{ url_for('articles.index') }}" data-route="{{ url_for('articles.index') }}"{% if active_page|default('') == 'articles' %} class="active"{% endif %}>Article Builder(AI)</a>
   <a href="{{ url_for('schedule') }}" data-route="{{ url_for('schedule') }}"{% if active_page|default('') == 'schedule' %} class="active"{% endif %}>Schedule</a>
-  <a href="{{ url_for('automation_index') }}" data-route="{{ url_for('automation_index') }}"{% if active_page|default('') == 'automation' %} class="active"{% endif %}>Automation</a>
   <a href="{{ url_for('hol.player') }}" data-route="{{ url_for('hol.player') }}"{% if active_page|default('') == 'hol_player' %} class="active"{% endif %}>Hands-on Labs</a>
   <a href="{{ url_for('hol.labs_generator') }}" data-route="{{ url_for('hol.labs_generator') }}"{% if active_page|default('') == 'hol_generator' %} class="active"{% endif %}>Labs Generator(AI)</a>
   <a href="{{ url_for('pdf.export_index') }}" data-route="{{ url_for('pdf.export_index') }}"{% if active_page|default('') == 'pdf_export' %} class="active"{% endif %}>PDF Export</a>  
