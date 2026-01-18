@@ -58,6 +58,16 @@ def api_certifications(prov_id):
     return jsonify(rows)
 
 
+@edit_question_bp.route('/api/modules/<int:cert_id>')
+def api_modules(cert_id):
+    db = get_db()
+    cur = db.cursor(dictionary=True)
+    cur.execute("SELECT id, name FROM modules WHERE course = %s ORDER BY name", (cert_id,))
+    rows = cur.fetchall()
+    cur.close()
+    return jsonify(rows)
+
+
 @edit_question_bp.route('/api/search')
 def api_search():
     query = (request.args.get('q') or '').strip()
@@ -108,6 +118,94 @@ def api_search():
         })
 
     return jsonify({'results': results})
+
+
+@edit_question_bp.route('/api/questions', methods=['POST'])
+def api_create_question():
+    payload = request.get_json() or {}
+    module_id = payload.get('module_id')
+    text = (payload.get('text') or '').strip()
+    descr = (payload.get('descr') or '').strip() or None
+    src_file = (payload.get('src_file') or '').strip() or None
+    answers = payload.get('answers') or []
+
+    if not module_id:
+        return jsonify({'error': 'Le module est requis'}), 400
+    if not text:
+        return jsonify({'error': 'Le texte de la question est requis'}), 400
+
+    sanitized_answers = []
+    for answer in answers:
+        value = (answer.get('value') or '').strip()
+        if not value:
+            continue
+        meta = answer.get('meta') or {}
+        if not isinstance(meta, dict):
+            meta = {}
+        sanitized_answers.append({
+            'value': value,
+            'meta': meta,
+            'isok': 1 if int(answer.get('isok') or 0) == 1 else 0,
+        })
+
+    if not sanitized_answers:
+        return jsonify({'error': 'Au moins une réponse est requise'}), 400
+
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT COUNT(*) FROM modules WHERE id = %s", (module_id,))
+    module_exists = cur.fetchone()[0]
+    if not module_exists:
+        cur.close()
+        return jsonify({'error': 'Module introuvable'}), 404
+
+    try:
+        cur.execute(
+            """
+            INSERT INTO questions (text, descr, module, src_file, level, nature, ty, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+            """,
+            (text, descr, module_id, src_file, 1, 1, 1),
+        )
+        question_id = cur.lastrowid
+
+        for answer in sanitized_answers:
+            answer_data = {k: v for k, v in (answer.get('meta') or {}).items() if k != 'value'}
+            answer_data['value'] = answer['value']
+            answer_json = json.dumps(answer_data, ensure_ascii=False)[:700]
+            isok = answer['isok']
+
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO answers (text, created_at, updated_at)
+                    VALUES (%s, NOW(), NOW())
+                    """,
+                    (answer_json,),
+                )
+                answer_id = cur.lastrowid
+            except mysql.connector.Error as err:
+                if err.errno == 1062:
+                    cur.execute("SELECT id FROM answers WHERE text = %s LIMIT 1", (answer_json,))
+                    row = cur.fetchone()
+                    answer_id = row[0] if row else None
+                else:
+                    raise
+
+            if answer_id:
+                cur.execute(
+                    "INSERT INTO quest_ans (question, answer, isok) VALUES (%s, %s, %s)",
+                    (question_id, answer_id, isok),
+                )
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        cur.close()
+        raise
+
+    cur.close()
+    return jsonify({'status': 'created', 'id': question_id, 'answers': len(sanitized_answers)}), 201
 
 
 @edit_question_bp.route('/api/questions/<int:question_id>')

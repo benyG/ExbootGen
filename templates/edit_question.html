@@ -160,6 +160,7 @@
     .answer-item .meta { color: var(--muted); font-size: 0.9rem; }
 
     .status { font-size: 0.95rem; color: var(--muted); }
+    .hidden { display: none; }
 
     @media (max-width: 800px) {
       .stellar-nav { display: none; }
@@ -207,9 +208,17 @@
           <label for="certificationSelect">Certification</label>
           <select id="certificationSelect"></select>
         </div>
+        <div id="moduleSelectWrap" class="hidden">
+          <label for="moduleSelect">Module</label>
+          <select id="moduleSelect"></select>
+        </div>
       </div>
-      <div style="margin-top: 0.8rem; display: flex; gap: 0.6rem; align-items: center;">
+      <div style="margin-top: 0.8rem; display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;">
         <button class="primary" id="searchBtn">Lancer la recherche</button>
+        <label style="display:flex; align-items:center; gap:0.4rem; color: var(--muted); font-size: 0.95rem;">
+          <input type="checkbox" id="addModeToggle">
+          Mode ajout
+        </label>
         <span class="status" id="searchStatus">Saisissez au moins un mot-clé.</span>
       </div>
     </section>
@@ -288,8 +297,9 @@
       </div>
       <div class="answers" id="answers"></div>
 
-      <div style="margin-top: 1rem; display: flex; gap: 0.75rem;">
+      <div style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
         <button class="primary" id="saveBtn" disabled>Enregistrer les modifications</button>
+        <button class="primary hidden" id="addBtn">Ajouter</button>
         <span class="status" id="saveStatus"></span>
       </div>
     </section>
@@ -305,10 +315,15 @@
 
     const providerSelect = document.getElementById('providerSelect');
     const certificationSelect = document.getElementById('certificationSelect');
+    const moduleSelect = document.getElementById('moduleSelect');
+    const moduleSelectWrap = document.getElementById('moduleSelectWrap');
+    const addModeToggle = document.getElementById('addModeToggle');
+    const addBtn = document.getElementById('addBtn');
     const resultsContainer = document.getElementById('results');
     const resultsCount = document.getElementById('resultsCount');
     const searchStatus = document.getElementById('searchStatus');
     const searchText = document.getElementById('searchText');
+    const searchBtn = document.getElementById('searchBtn');
     const questionEditor = document.getElementById('questionEditor');
     const uploadStatus = document.getElementById('uploadStatus');
     const srcFileInput = document.getElementById('srcFile');
@@ -320,6 +335,7 @@
     const saveStatus = document.getElementById('saveStatus');
 
     let currentQuestionId = null;
+    let isAddMode = false;
 
     const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
     nav?.querySelectorAll('a[data-route]').forEach(link => {
@@ -360,13 +376,27 @@
     async function loadCertifications() {
       const provId = providerSelect.value;
       setSelectOptions(certificationSelect, '— Toutes —', []);
+      setSelectOptions(moduleSelect, '— Sélectionner —', []);
       if (!provId) return;
       const res = await fetch(`/edit-question/api/certifications/${provId}`);
       const certs = await res.json();
       setSelectOptions(certificationSelect, '— Toutes —', certs);
     }
 
+    async function loadModules() {
+      const certId = certificationSelect.value;
+      setSelectOptions(moduleSelect, '— Sélectionner —', []);
+      if (!certId) return;
+      const res = await fetch(`/edit-question/api/modules/${certId}`);
+      const modules = await res.json();
+      setSelectOptions(moduleSelect, '— Sélectionner —', modules);
+    }
+
     async function searchQuestions() {
+      if (isAddMode) {
+        searchStatus.textContent = 'Mode ajout activé : la recherche est désactivée.';
+        return;
+      }
       const q = searchText.value.trim();
       if (!q) {
         searchStatus.textContent = 'Veuillez saisir un mot-clé.';
@@ -394,6 +424,9 @@
     }
 
     async function loadQuestion(questionId) {
+      if (isAddMode) {
+        setAddMode(false);
+      }
       const res = await fetch(`/edit-question/api/questions/${questionId}`);
       if (!res.ok) {
         editorStatus.textContent = 'Impossible de charger la question.';
@@ -443,6 +476,34 @@
       `;
       wrapper.querySelector('.remove-answer').addEventListener('click', () => wrapper.remove());
       answersContainer.appendChild(wrapper);
+    }
+
+    function setAddMode(enabled) {
+      isAddMode = enabled;
+      addModeToggle.checked = enabled;
+      moduleSelectWrap.classList.toggle('hidden', !enabled);
+      addBtn.classList.toggle('hidden', !enabled);
+      saveBtn.classList.toggle('hidden', enabled);
+      searchBtn.disabled = enabled;
+      searchText.disabled = enabled;
+      resultsContainer.classList.toggle('hidden', enabled);
+      resultsCount.classList.toggle('hidden', enabled);
+      if (enabled) {
+        currentQuestionId = null;
+        questionEditor.innerHTML = '';
+        srcFileInput.value = '';
+        descrInput.value = '';
+        editorStatus.textContent = 'Mode ajout : saisissez une nouvelle question.';
+        contextInfo.textContent = '';
+        renderAnswers([]);
+        saveStatus.textContent = '';
+        searchStatus.textContent = 'Sélectionnez un provider et une certification pour commencer.';
+        loadModules();
+      } else {
+        editorStatus.textContent = 'Sélectionnez une question pour l\'éditer.';
+        searchStatus.textContent = 'Saisissez au moins un mot-clé.';
+        addBtn.disabled = false;
+      }
     }
 
     function applyCommand(command, value = null) {
@@ -575,8 +636,20 @@
 
     document.getElementById('searchBtn').addEventListener('click', searchQuestions);
     searchText.addEventListener('keyup', (e) => { if (e.key === 'Enter') searchQuestions(); });
-    providerSelect.addEventListener('change', () => { loadCertifications(); searchQuestions(); });
-    certificationSelect.addEventListener('change', searchQuestions);
+    providerSelect.addEventListener('change', () => { loadCertifications(); if (!isAddMode) searchQuestions(); });
+    certificationSelect.addEventListener('change', () => {
+      if (isAddMode) {
+        loadModules();
+        return;
+      }
+      searchQuestions();
+    });
+    addModeToggle.addEventListener('change', (event) => {
+      setAddMode(event.target.checked);
+    });
+    moduleSelect?.addEventListener('change', () => {
+      saveStatus.textContent = '';
+    });
 
     saveBtn.addEventListener('click', async () => {
       if (!currentQuestionId) return;
@@ -614,6 +687,65 @@
         const err = await res.json().catch(() => ({}));
         saveStatus.textContent = err.error || 'Erreur pendant la sauvegarde.';
       }
+    });
+
+    addBtn.addEventListener('click', async () => {
+      saveStatus.textContent = '';
+      const moduleId = moduleSelect.value;
+      if (!moduleId) {
+        saveStatus.textContent = 'Sélectionnez un module pour ajouter la question.';
+        return;
+      }
+      const text = questionEditor.innerHTML.trim();
+      if (!text) {
+        saveStatus.textContent = 'Le texte de la question est requis.';
+        return;
+      }
+      const answers = Array.from(document.querySelectorAll('.answer-item')).map(item => {
+        const baseMeta = item.dataset.meta ? JSON.parse(item.dataset.meta) : {};
+        const value = item.querySelector('.answer-value')?.value.trim() || '';
+        const target = item.querySelector('.answer-target')?.value.trim() || '';
+        const meta = { ...baseMeta };
+        if (target) {
+          meta.target = target;
+        } else {
+          delete meta.target;
+        }
+        return {
+          value,
+          isok: item.querySelector('input[type="checkbox"]').checked,
+          meta,
+        };
+      }).filter(item => item.value);
+      if (!answers.length) {
+        saveStatus.textContent = 'Ajoutez au moins une réponse.';
+        return;
+      }
+      addBtn.disabled = true;
+      saveStatus.textContent = 'Ajout de la question…';
+      const payload = {
+        module_id: moduleId,
+        text,
+        src_file: srcFileInput.value.trim(),
+        descr: descrInput.value.trim(),
+        answers,
+      };
+      const res = await fetch('/edit-question/api/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        saveStatus.textContent = 'Question ajoutée avec succès.';
+        questionEditor.innerHTML = '';
+        srcFileInput.value = '';
+        descrInput.value = '';
+        renderAnswers([]);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        saveStatus.textContent = err.error || 'Erreur pendant l’ajout.';
+      }
+      addBtn.disabled = false;
     });
 
     loadProviders();
