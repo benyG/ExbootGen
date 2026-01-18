@@ -421,6 +421,9 @@
       .modules-toolbar { flex-direction: column; align-items: stretch; }
       .modules-toolbar button.inline-button { width: 100%; }
     }
+
+    .action-link { color: var(--accent-strong); text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 0.35rem; }
+    .action-link.disabled { color: var(--text-muted); pointer-events: none; }
   </style>
 </head>
 <body>
@@ -470,6 +473,7 @@
         </div>
       </div>
       <p class="selection-summary">Sélection actuelle : <strong id="selectionLabel">—</strong></p>
+      <a id="populateLink" class="action-link disabled" href="#" aria-disabled="true">Generate questions (Populate)</a>
       <div class="actions-row">
         <button id="generateBlueprintsBtn" class="primary" type="button">Générer les blueprints (IA)</button>
         <label class="toggle">
@@ -535,6 +539,12 @@
     const forceAllToggle = document.getElementById('forceAllToggle');
     const generationStatus = document.getElementById('generationStatus');
     const generationLog = document.getElementById('generationLog');
+    const populateLink = document.getElementById('populateLink');
+    const populateBase = "{{ url_for('populate_index') }}";
+    const params = new URLSearchParams(window.location.search);
+    const preselectProviderId = Number(params.get('provider_id'));
+    const preselectCertId = Number(params.get('cert_id'));
+    let pendingCertId = Number.isFinite(preselectCertId) ? preselectCertId : null;
     generationLog.style.display = 'none';
 
     function setGenerationStatus(message, tone = 'muted') {
@@ -591,13 +601,23 @@
     function fillSelect(select, items) {
       const helper = select && select.__searchableSelect;
       if (helper) {
-        helper.setOptions((items || []).map(item => ({ value: item.id, label: item.name })), { keepSearch: false });
+        helper.setOptions(
+          (items || []).map(item => ({
+            value: item.id,
+            label: item.name,
+            dataset: { codeCert: item.code_cert || '' }
+          })),
+          { keepSearch: false }
+        );
       } else {
         select.innerHTML = '';
         (items || []).forEach(item => {
           const option = document.createElement('option');
           option.value = item.id;
           option.textContent = item.name;
+          if (item.code_cert) {
+            option.dataset.codeCert = item.code_cert;
+          }
           select.appendChild(option);
         });
       }
@@ -678,6 +698,28 @@
       lastRefresh.textContent = new Date().toLocaleTimeString('fr-FR');
     }
 
+    function updatePopulateLink() {
+      if (!populateLink) return;
+      const provSel = document.getElementById('prov');
+      const certSel = document.getElementById('cert');
+      const providerId = provSel?.value;
+      const selectedOption = certSel?.selectedOptions?.[0];
+      const codeCert = selectedOption?.dataset?.codeCert || '';
+      const match = Array.from(certSel.options).find(
+        opt => (opt.dataset?.codeCert || '') === codeCert
+      );
+      const certId = match?.value || certSel?.value;
+      if (providerId && certId) {
+        populateLink.href = `${populateBase}?provider_id=${providerId}&cert_id=${certId}`;
+        populateLink.classList.remove('disabled');
+        populateLink.setAttribute('aria-disabled', 'false');
+      } else {
+        populateLink.href = '#';
+        populateLink.classList.add('disabled');
+        populateLink.setAttribute('aria-disabled', 'true');
+      }
+    }
+
     async function refreshModules(certId) {
       if (!certId) {
         modulesContainer.innerHTML = '';
@@ -721,6 +763,7 @@
           fillSelect(certSel, []);
           updateSelectionLabel();
           refreshModules(null);
+          updatePopulateLink();
           return;
         }
 
@@ -729,12 +772,16 @@
           fillSelect(certSel, certifications);
           certSearch && certSearch.setSearchTerm('');
           if (certifications.length) {
-            certSel.value = certifications[0].id;
+            const preferred = pendingCertId && certifications.find(item => item.id === pendingCertId);
+            certSel.value = preferred ? preferred.id : certifications[0].id;
+            pendingCertId = null;
             updateSelectionLabel();
             refreshModules(certSel.value);
+            updatePopulateLink();
           } else {
             updateSelectionLabel();
             refreshModules(null);
+            updatePopulateLink();
           }
         } catch (err) {
           fillSelect(certSel, []);
@@ -742,6 +789,7 @@
           modulesContainer.innerHTML = '';
           modulesEmpty.style.display = 'block';
           modulesEmpty.textContent = err.message || 'Impossible de charger les certifications.';
+          updatePopulateLink();
         }
       }
 
@@ -750,7 +798,10 @@
         fillSelect(provSel, providers);
         provSearch && provSearch.setSearchTerm('');
         if (providers.length) {
-          provSel.value = providers[0].id;
+          const preferredProvider = Number.isFinite(preselectProviderId)
+            ? providers.find(item => item.id === preselectProviderId)
+            : null;
+          provSel.value = preferredProvider ? preferredProvider.id : providers[0].id;
           await refreshProviderCertifications();
         } else {
           updateSelectionLabel();
@@ -759,12 +810,14 @@
         selectionLabel.textContent = '—';
         modulesEmpty.style.display = 'block';
         modulesEmpty.textContent = err.message || 'Impossible de charger les providers.';
+        updatePopulateLink();
       }
 
       provSel.addEventListener('change', refreshProviderCertifications);
       certSel.addEventListener('change', () => {
         updateSelectionLabel();
         refreshModules(certSel.value);
+        updatePopulateLink();
       });
 
       modulesContainer.addEventListener('input', (event) => {
