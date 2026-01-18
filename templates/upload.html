@@ -608,6 +608,12 @@
             }
             modSearch.value = "";
             modSearch.dispatchEvent(new Event('input'));
+            const selectedModule = modSelect.selectedOptions[0];
+            const moduleCode = (selectedModule?.dataset?.codeCert || '').trim();
+            if (moduleCode) {
+                fileSearch.value = moduleCode;
+                refreshPdfList();
+            }
             updateRelocateLink();
             syncCodeCertInput();
         }).catch(() => {
