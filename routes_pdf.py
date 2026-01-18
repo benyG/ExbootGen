@@ -3,7 +3,7 @@ import re
 import json
 import uuid
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 import fitz  # PyMuPDF
 import pytesseract
@@ -94,8 +94,27 @@ def extract_text_from_pdf(pdf_path: str,
 # --- Helpers: segmentation & parsing ---
 
 _NEWQ_RE = re.compile(r'(?im)^\s*NEW\s+QUESTION\s+(\d+)\b')  # ancre prioritaire
+_QUESTION_RE = re.compile(r'(?im)^\s*QUESTION\s*\d+\b')
+_NUMBERED_Q_RE = re.compile(r'(?m)^\s*\d+\s*[.)]\s+\S')
 _OPT_RE  = re.compile(r'^\s*([A-Oa-o])[\.\)]\s*(.+)$')        # A. / B) / c. ...
 _ANS_RE  = re.compile(r'(?im)^\s*Answer\s*:\s*(.+)$')
+
+
+def analyze_question_markers(text: str) -> dict:
+    """Pré-analyse : compte les marqueurs de questions pour estimer le total."""
+    counts = {
+        "new_question": len(_NEWQ_RE.findall(text)),
+        "question_label": len(_QUESTION_RE.findall(text)),
+        "numbered": len(_NUMBERED_Q_RE.findall(text)),
+    }
+    method = "unknown"
+    total_expected = 0
+    for key in ("new_question", "question_label", "numbered"):
+        if counts[key] > 0:
+            method = key
+            total_expected = counts[key]
+            break
+    return {"counts": counts, "method": method, "total_expected": total_expected}
 
 def _split_blocks(text: str) -> list[tuple[str, str]]:
     """
@@ -136,7 +155,7 @@ def _strip_after_explanation(block: str) -> str:
 
 # --- Fonction principale: détecter les questions ---
 
-def detect_questions(text: str, module_id: int) -> dict:
+def detect_questions(text: str, module_id: int, analysis: Optional[dict] = None) -> dict:
     """
     Parse le texte en questions/réponses.
     Priorités :
@@ -148,6 +167,8 @@ def detect_questions(text: str, module_id: int) -> dict:
       - Pour les autres questions : au moins 2 réponses
     """
     questions = []
+    if analysis is None:
+        analysis = analyze_question_markers(text)
 
     for qnum, raw_block in _split_blocks(text):
         block = _strip_after_explanation(raw_block)
@@ -227,11 +248,13 @@ def detect_questions(text: str, module_id: int) -> dict:
                     {"value": "False", "target": None, "isok": 1 if "FALSE" in correct_tokens else 0},
                 ]
             else:
-                # pas exploitable → on ignore
-                continue
+                question_text = " ".join(lines).strip()
+                answers = []
         else:
             # Énoncé
             question_text = " ".join(lines[:first_opt_idx]).strip()
+            if not question_text:
+                question_text = " ".join(lines).strip()
 
             # Réponses multi-lignes
             cur_letter = None
@@ -261,9 +284,6 @@ def detect_questions(text: str, module_id: int) -> dict:
                         cur_text_parts.append(l.strip())
             flush_current()
 
-        # Filtre : au moins 2 réponses pour les cas "classiques"
-        if len(answers) < 2:
-            continue
         if not question_text:
             continue
 
@@ -276,7 +296,19 @@ def detect_questions(text: str, module_id: int) -> dict:
             "answers": answers
         })
 
-    return {"module_id": module_id, "questions": questions}
+    extracted_count = len(questions)
+    expected_count = analysis.get("total_expected") or extracted_count
+    gap = expected_count - extracted_count
+    report = {
+        "expected_questions": expected_count,
+        "extracted_questions": extracted_count,
+        "gap": gap,
+        "method": analysis.get("method"),
+        "marker_counts": analysis.get("counts", {}),
+        "questions_without_answers": sum(1 for q in questions if not q.get("answers")),
+    }
+
+    return {"module_id": module_id, "questions": questions, "analysis": report}
 
 # ---------------------- Routes optionnelles (Blueprint) ----------------------
 
