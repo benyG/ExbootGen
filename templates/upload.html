@@ -127,6 +127,21 @@
     .json-preview.active { display: flex; }
     .json-preview textarea { min-height: 320px; background: rgba(15, 23, 42, 0.75); font-family: 'JetBrains Mono', 'Fira Code', monospace; color: rgba(226, 232, 240, 0.85); border: 1px solid rgba(148,163,184,0.2); }
 
+    #reportContainer { margin-top: 1.2rem; }
+    .report-preview { display: grid; gap: 0.8rem; font-size: 0.92rem; color: #d4e2f7; }
+    .report-card {
+      padding: 0.9rem 1rem;
+      border-radius: 14px;
+      background: rgba(12, 18, 33, 0.55);
+      border: 1px solid rgba(120, 160, 220, 0.2);
+      display: grid;
+      gap: 0.4rem;
+    }
+    .report-card strong { color: #f2f6ff; font-size: 0.95rem; }
+    .report-metrics { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; font-size: 0.88rem; }
+    .report-metrics span { color: #c5d6f0; }
+    .report-highlight { color: #9ad1ff; font-weight: 600; }
+
     #loadingOverlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(4,7,17,0.72); backdrop-filter: blur(10px); display:none; align-items:center; justify-content:center; z-index:50; }
     #loadingOverlay.show { display:flex; }
     .loader { border:6px solid rgba(148,163,184,0.2); border-top:6px solid rgba(71,245,192,0.8); border-radius:50%; width:70px; height:70px; animation:spin 1s linear infinite; }
@@ -225,6 +240,11 @@
           <button id="confirmImport" class="stellar-button">Confirmer l'import</button>
           <button type="button" id="resetPreview" class="stellar-button secondary">Effacer l'aperçu</button>
         </div>
+      </div>
+
+      <div class="json-preview" id="reportContainer">
+        <div class="note">Rapport d'extraction</div>
+        <div id="reportPreview" class="report-preview"></div>
       </div>
     </section>
   </main>
@@ -583,6 +603,50 @@
     });
 
     let currentSession = null;
+    const reportContainer = document.getElementById("reportContainer");
+    const reportPreview = document.getElementById("reportPreview");
+
+    const renderReport = (files) => {
+        reportPreview.innerHTML = "";
+        if (!files || !files.length) {
+            reportPreview.textContent = "Aucun rapport disponible.";
+            return;
+        }
+        files.forEach(file => {
+            const analysis = file?.json_data?.analysis;
+            const card = document.createElement("div");
+            card.className = "report-card";
+            const title = document.createElement("strong");
+            title.textContent = file.filename || "Fichier PDF";
+            card.appendChild(title);
+
+            if (!analysis) {
+                const msg = document.createElement("div");
+                msg.textContent = "Aucune analyse détectée pour ce fichier.";
+                card.appendChild(msg);
+                reportPreview.appendChild(card);
+                return;
+            }
+
+            const metrics = document.createElement("div");
+            metrics.className = "report-metrics";
+            metrics.innerHTML = `
+                <span>Attendu: <span class="report-highlight">${analysis.expected_questions}</span></span>
+                <span>Extrait: <span class="report-highlight">${analysis.extracted_questions}</span></span>
+                <span>Écart: <span class="report-highlight">${analysis.gap}</span></span>
+                <span>Méthode: ${analysis.method || '—'}</span>
+                <span>Sans réponses: ${analysis.questions_without_answers}</span>
+            `;
+            card.appendChild(metrics);
+
+            const markers = document.createElement("div");
+            const counts = analysis.marker_counts || {};
+            markers.textContent = `Marqueurs: NEW QUESTION=${counts.new_question ?? 0}, QUESTION=${counts.question_label ?? 0}, Numérotés=${counts.numbered ?? 0}`;
+            card.appendChild(markers);
+
+            reportPreview.appendChild(card);
+        });
+    };
     document.getElementById("uploadForm").addEventListener("submit", async function(e) {
         e.preventDefault();
         const btn = document.getElementById("analyzeBtn");
@@ -602,9 +666,16 @@
             const data = await res.json();
             if (data.status === "ok") {
                 currentSession = data.session_id;
-                document.getElementById("jsonPreview").value = JSON.stringify({ files: data.files }, null, 4);
+                const sanitizedFiles = (data.files || []).map(file => {
+                    const jsonData = { ...(file.json_data || {}) };
+                    delete jsonData.analysis;
+                    return { ...file, json_data: jsonData };
+                });
+                document.getElementById("jsonPreview").value = JSON.stringify({ files: sanitizedFiles }, null, 4);
                 document.getElementById("jsonTitle").textContent = `Aperçu JSON extrait (${data.files.length} fichier(s))`;
                 document.getElementById("jsonContainer").classList.add("active");
+                reportContainer.classList.add("active");
+                renderReport(data.files);
             } else {
                 alert("Erreur : " + (data.message || "analyse impossible"));
             }
@@ -669,6 +740,8 @@
       currentSession = null;
       document.getElementById("jsonPreview").value = '';
       document.getElementById("jsonContainer").classList.remove("active");
+      reportContainer.classList.remove("active");
+      reportPreview.innerHTML = '';
     });
 
     renderSelectedFiles();
