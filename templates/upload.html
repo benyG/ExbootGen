@@ -357,6 +357,12 @@
         return (moduleSelect.selectedOptions[0]?.dataset?.codeCert || '').trim();
     }
 
+    function syncFileSearchDefault() {
+        const moduleCode = getSelectedModuleCode();
+        fileSearch.value = moduleCode || '';
+        refreshPdfList();
+    }
+
     function syncCodeCertInput() {
         const moduleCode = getSelectedModuleCode();
         const certCode = getSelectedCertCode();
@@ -557,10 +563,7 @@
 
         updateRelocateLink();
         syncCodeCertInput();
-        const selectedOption = this.selectedOptions[0];
-        const defaultQuery = (selectedOption?.dataset?.codeCert || '').trim();
-        fileSearch.value = defaultQuery || '';
-        refreshPdfList();
+        syncFileSearchDefault();
 
         modSelect.innerHTML = "";
         if (!cert_id) {
@@ -586,6 +589,7 @@
             }
             modSearch.value = "";
             modSearch.dispatchEvent(new Event('input'));
+            syncFileSearchDefault();
             updateRelocateLink();
             syncCodeCertInput();
         }).catch(() => {
@@ -596,10 +600,7 @@
     });
 
     document.getElementById("moduleSelect").addEventListener("change", function () {
-        const selectedOption = this.selectedOptions[0];
-        const defaultQuery = (selectedOption?.dataset?.codeCert || '').trim();
-        fileSearch.value = defaultQuery || fileSearch.value;
-        refreshPdfList();
+        syncFileSearchDefault();
         updateRelocateLink();
         syncCodeCertInput();
     });
