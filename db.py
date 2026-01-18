@@ -367,6 +367,28 @@ def get_certifications_by_provider_with_code(provider_id):
     return certifications
 
 
+def get_certifications_by_provider_with_code(provider_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "SELECT id, name, descr2 FROM courses WHERE prov = %s"
+    cursor.execute(query, (provider_id,))
+    certifications = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return certifications
+
+
+def get_certifications_by_provider_with_code(provider_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "SELECT id, name, descr2 FROM courses WHERE prov = %s"
+    cursor.execute(query, (provider_id,))
+    certifications = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return certifications
+
+
 def get_certifications_without_domains():
     """Return certifications that do not have any associated domains."""
 
