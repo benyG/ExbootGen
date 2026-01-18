@@ -191,7 +191,14 @@ def api_update_question(question_id: int):
 
     try:
         cur.execute(
-            "UPDATE questions SET text = %s, descr = %s, src_file = %s WHERE id = %s",
+            """
+            UPDATE questions
+               SET text = %s,
+                   descr = %s,
+                   src_file = %s,
+                   updated_at = NOW()
+             WHERE id = %s
+            """,
             (text, descr, src_file, question_id),
         )
         cur.execute("DELETE FROM quest_ans WHERE question = %s", (question_id,))
@@ -211,7 +218,10 @@ def api_update_question(question_id: int):
 
             try:
                 cur.execute(
-                    "INSERT INTO answers (text, created_at) VALUES (%s, NOW())",
+                    """
+                    INSERT INTO answers (text, created_at, updated_at)
+                    VALUES (%s, NOW(), NOW())
+                    """,
                     (answer_json,),
                 )
                 answer_id = cur.lastrowid
