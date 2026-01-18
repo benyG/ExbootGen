@@ -126,6 +126,18 @@
 
     .search-field { display: flex; flex-direction: column; gap: 0.75rem; }
     .search-field input { background: rgba(10, 15, 28, 0.7); }
+    .action-link {
+      color: var(--accent-strong);
+      text-decoration: none;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .action-link.disabled {
+      color: var(--text-muted);
+      pointer-events: none;
+    }
 
     [data-animate] { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; }
     [data-animate].is-visible { opacity: 1; transform: translateY(0); }
@@ -206,7 +218,10 @@
     </section>
 
     <section class="glass-card" data-animate>
-      <button id="reloc-btn">Relocaliser maintenant</button>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap;">
+        <button id="reloc-btn">Relocaliser maintenant</button>
+        <a id="fixQuestionLink" class="action-link disabled" href="#" aria-disabled="true">Fix question</a>
+      </div>
       <div id="progress"><div id="bar"></div></div>
       <div id="log" aria-live="polite"></div>
     </section>
@@ -262,11 +277,12 @@
       }
     }
 
-    async function initPanel(pref, hasModule, defProv=null, defCert=null){
+    async function initPanel(pref, hasModule, defProv=null, defCert=null, defModule=null){
       const p = document.getElementById(pref+'-prov');
       const c = document.getElementById(pref+'-cert');
       const m = hasModule && document.getElementById(pref+'-mod');
       const s = hasModule && document.getElementById(pref+'-mod-search');
+      let pendingModuleId = defModule;
 
       const provSearch = window.makeSelectSearchable ? window.makeSelectSearchable(p, { placeholder: 'Rechercher un provider…' }) : null;
       const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(c, { placeholder: 'Rechercher une certification…' }) : null;
@@ -277,10 +293,8 @@
         fill(c, cs);
         certSearch && certSearch.setSearchTerm('');
         let sel = cs[0]?.id;
-        if(Number(p.value) === defProv){
-          const found = cs.find(x=>x.id===defCert);
-          if(found) sel = found.id;
-        }
+        const found = defCert ? cs.find(x=>x.id===defCert) : null;
+        if(found) sel = found.id;
         c.value = sel;
         c.dispatchEvent(new Event('change'));
       });
@@ -296,6 +310,13 @@
         c.addEventListener('change', async()=>{
           const ms = await loadJSON(`${base}api/modules/${c.value}`);
           fill(m, ms);
+          if(pendingModuleId){
+            const match = ms.find(item => item.id === pendingModuleId);
+            if(match){
+              m.value = match.id;
+              pendingModuleId = null;
+            }
+          }
           s.value='';
           s.dispatchEvent(new Event('input'));
         });
@@ -309,8 +330,32 @@
     }
 
     document.addEventListener('DOMContentLoaded', ()=>{
-      initPanel('src', true, 169, 23);
-      initPanel('dst', false, 169, 23);
+      const params = new URLSearchParams(window.location.search);
+      const sourceProviderId = Number(params.get('source_provider_id')) || 169;
+      const sourceCertId = Number(params.get('source_cert_id')) || 23;
+      const sourceModuleId = Number(params.get('source_module_id')) || null;
+      const destinationProviderId = Number(params.get('destination_provider_id')) || 169;
+      const destinationCertId = Number(params.get('destination_cert_id')) || 23;
+
+      initPanel('src', true, sourceProviderId, sourceCertId, sourceModuleId);
+      initPanel('dst', false, destinationProviderId, destinationCertId);
+
+      const fixLink = document.getElementById('fixQuestionLink');
+      const fixBase = '{{ url_for('fix_index') }}';
+
+      function updateFixLink(){
+        const dstProv = document.getElementById('dst-prov').value;
+        const dstCert = document.getElementById('dst-cert').value;
+        if(dstProv && dstCert){
+          fixLink.href = `${fixBase}?provider_id=${dstProv}&cert_id=${dstCert}`;
+          fixLink.classList.remove('disabled');
+          fixLink.setAttribute('aria-disabled', 'false');
+        } else {
+          fixLink.href = '#';
+          fixLink.classList.add('disabled');
+          fixLink.setAttribute('aria-disabled', 'true');
+        }
+      }
 
       const base = '{{ url_for('reloc.index') }}';
       const bar  = document.getElementById('bar');
@@ -370,6 +415,10 @@
         log.textContent = '';
         startReloc(srcMod, dstCert);
       };
+
+      document.getElementById('dst-prov').addEventListener('change', updateFixLink);
+      document.getElementById('dst-cert').addEventListener('change', updateFixLink);
+      updateFixLink();
     });
   </script>
 </body>

@@ -113,6 +113,8 @@
     .stellar-button:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 18px 42px rgba(71, 245, 192, 0.38); }
 
     .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.4rem; margin-top: 1.6rem; }
+    .action-link { color: var(--accent-strong); text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 0.35rem; }
+    .action-link.disabled { color: var(--text-muted); pointer-events: none; }
 
     .progress-area { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.6rem; margin-top: 2.4rem; }
     .progress-card { border-radius: var(--radius-lg); padding: 1.6rem; background: rgba(8, 12, 24, 0.75); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: 0 16px 34px rgba(8, 12, 23, 0.48); display: flex; flex-direction: column; gap: 0.35rem; }
@@ -176,6 +178,7 @@
     <section class="glass-card hero-intro" data-animate>
       <h1>Réparez vos questions en un éclair</h1>
       <p>Sélectionnez une certification et un type de traitement pour corriger automatiquement les réponses manquantes, les drag-n-drop ou les matchings.</p>
+      <a id="verifyBlueprintLink" class="action-link disabled" href="#" aria-disabled="true">Verify Blueprint</a>
     </section>
 
     <section class="glass-card" data-animate>
@@ -278,6 +281,8 @@
       const $jobStatus = $("#job-status");
       const $jobIdLabel = $("#job-id-label");
       const $jobLogList = $("#job-log-list");
+      const verifyLink = document.getElementById('verifyBlueprintLink');
+      const blueprintBase = "{{ url_for('module_blueprints.index') }}";
 
       const providerSearch = window.makeSelectSearchable ? window.makeSelectSearchable($provider[0], { placeholder: 'Rechercher un provider…' }) : null;
       const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable($cert[0], { placeholder: 'Rechercher une certification…' }) : null;
@@ -290,6 +295,20 @@
       let poller = null;
       let currentJobId = null;
       let lastLogIndex = 0;
+
+      function updateVerifyLink(){
+        const providerId = $provider.val();
+        const certId = $cert.val();
+        if(providerId && certId){
+          verifyLink.href = `${blueprintBase}?provider_id=${providerId}&cert_id=${certId}`;
+          verifyLink.classList.remove('disabled');
+          verifyLink.setAttribute('aria-disabled', 'false');
+        } else {
+          verifyLink.href = '#';
+          verifyLink.classList.add('disabled');
+          verifyLink.setAttribute('aria-disabled', 'true');
+        }
+      }
 
       function parseValue(val){
         const num = Number(val);
@@ -457,6 +476,7 @@
             });
             $cert.trigger('change');
           }
+          updateVerifyLink();
         }, "json");
       }
 
@@ -468,12 +488,14 @@
 
       $cert.on('change', function(){
         $cert.removeData('selected-cert');
+        updateVerifyLink();
         updateProgress();
       });
 
       $action.on('change', updateProgress);
 
       $provider.trigger('change');
+      updateVerifyLink();
 
       $("#fix-form").on('submit', function(e){
         e.preventDefault();
