@@ -337,6 +337,32 @@ def api_update_code_cert():
 
     return jsonify({"status": "ok", "code_cert": code_cert})
 
+
+@pdf_bp.route("/api/resolve-cert-by-code")
+def api_resolve_cert_by_code():
+    code_cert = (request.args.get("code_cert") or "").strip()
+    if not code_cert:
+        return jsonify({"cert_id": None, "provider_id": None})
+
+    conn = db_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            "SELECT id AS cert_id, prov AS provider_id FROM courses WHERE descr2 = %s LIMIT 1",
+            (code_cert,),
+        )
+        row = cur.fetchone()
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        conn.close()
+
+    if not row:
+        return jsonify({"cert_id": None, "provider_id": None})
+    return jsonify(row)
+
 # -------------------- Search PDFs --------------------
 
 @pdf_bp.route("/api/search-pdfs")

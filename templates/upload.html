@@ -231,7 +231,7 @@
         </div>
         <div class="inline-field">
           <div style="flex:1;">
-            <label for="codeCertInput">Code</label>
+            <label for="codeCertInput">Code certification (descr2 / code_cert)</label>
             <input type="text" id="codeCertInput" placeholder="Ex: CCNA" maxlength="120">
           </div>
           <button type="button" id="saveCodeCert" class="stellar-button secondary">Save</button>
@@ -340,27 +340,16 @@
     const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certSelect, { placeholder: 'Rechercher une certification…' }) : null;
     const relocateBase = '{{ url_for('reloc.index') }}';
     const updateCodeCertUrl = `${apiBase}api/update-code-cert`;
+    const resolveCertUrl = `${apiBase}api/resolve-cert-by-code`;
+    let destinationLookup = { certId: '', providerId: '' };
 
     function getSelectedCertCode() {
         return (certSelect.selectedOptions[0]?.dataset?.codeCert || '').trim();
     }
 
-    function findCertIdByCodeCert(codeCert) {
-        const match = Array.from(certSelect.options).find(
-            opt => (opt.dataset?.codeCert || '') === codeCert
-        );
-        return match?.value || '';
-    }
-
     function getSelectedModuleCode() {
         const moduleSelect = document.getElementById("moduleSelect");
         return (moduleSelect.selectedOptions[0]?.dataset?.codeCert || '').trim();
-    }
-
-    function syncFileSearchDefault() {
-        const moduleCode = getSelectedModuleCode();
-        fileSearch.value = moduleCode || '';
-        refreshPdfList();
     }
 
     function syncCodeCertInput() {
@@ -369,15 +358,42 @@
         codeCertInput.value = moduleCode || certCode || '';
     }
 
-    function updateRelocateLink() {
+    async function resolveDestinationByCode(codeCert) {
+        if (!codeCert) {
+            destinationLookup = { certId: '', providerId: '' };
+            return destinationLookup;
+        }
+        try {
+            const res = await fetch(`${resolveCertUrl}?code_cert=${encodeURIComponent(codeCert)}`);
+            const data = await res.json();
+            destinationLookup = {
+                certId: data?.cert_id || '',
+                providerId: data?.provider_id || ''
+            };
+        } catch (err) {
+            destinationLookup = { certId: '', providerId: '' };
+        }
+        return destinationLookup;
+    }
+
+    async function updateRelocateLink() {
         const moduleSelect = document.getElementById("moduleSelect");
-        const providerId = providerSelect.value;
+        const sourceProviderId = providerSelect.value;
         const moduleCode = getSelectedModuleCode();
         const sourceCertId = certSelect.value;
-        const destinationCertId = findCertIdByCodeCert(moduleCode) || certSelect.value;
         const moduleId = moduleSelect.value;
-        if (relocateLink && moduleId && sourceCertId && destinationCertId && providerId) {
-            relocateLink.href = `${relocateBase}?source_module_id=${moduleId}&source_provider_id=${providerId}&source_cert_id=${sourceCertId}&destination_provider_id=${providerId}&destination_cert_id=${destinationCertId}`;
+        await resolveDestinationByCode(moduleCode);
+        const destinationCertId = destinationLookup.certId;
+        const destinationProviderId = destinationLookup.providerId;
+        if (
+            relocateLink &&
+            moduleId &&
+            sourceCertId &&
+            sourceProviderId &&
+            destinationCertId &&
+            destinationProviderId
+        ) {
+            relocateLink.href = `${relocateBase}?source_module_id=${moduleId}&source_provider_id=${sourceProviderId}&source_cert_id=${sourceCertId}&destination_provider_id=${destinationProviderId}&destination_cert_id=${destinationCertId}`;
             relocateLink.classList.remove("disabled");
             relocateLink.setAttribute("aria-disabled", "false");
         } else if (relocateLink) {
@@ -563,7 +579,10 @@
 
         updateRelocateLink();
         syncCodeCertInput();
-        syncFileSearchDefault();
+        const selectedOption = this.selectedOptions[0];
+        const defaultQuery = (selectedOption?.dataset?.codeCert || '').trim();
+        fileSearch.value = defaultQuery || '';
+        refreshPdfList();
 
         modSelect.innerHTML = "";
         if (!cert_id) {
@@ -589,7 +608,6 @@
             }
             modSearch.value = "";
             modSearch.dispatchEvent(new Event('input'));
-            syncFileSearchDefault();
             updateRelocateLink();
             syncCodeCertInput();
         }).catch(() => {
@@ -600,7 +618,10 @@
     });
 
     document.getElementById("moduleSelect").addEventListener("change", function () {
-        syncFileSearchDefault();
+        const selectedOption = this.selectedOptions[0];
+        const defaultQuery = (selectedOption?.dataset?.codeCert || '').trim();
+        fileSearch.value = defaultQuery || fileSearch.value;
+        refreshPdfList();
         updateRelocateLink();
         syncCodeCertInput();
     });
