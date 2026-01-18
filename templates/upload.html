@@ -153,6 +153,14 @@
       color: var(--text-muted);
       pointer-events: none;
     }
+    .inline-field {
+      display: flex;
+      gap: 0.6rem;
+      align-items: flex-end;
+    }
+    .inline-field input {
+      flex: 1;
+    }
 
     #loadingOverlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(4,7,17,0.72); backdrop-filter: blur(10px); display:none; align-items:center; justify-content:center; z-index:50; }
     #loadingOverlay.show { display:flex; }
@@ -220,6 +228,13 @@
           <label>Module</label>
           <input type="text" id="moduleSearch" placeholder="Rechercher...">
           <select name="module_id" id="moduleSelect" required></select>
+        </div>
+        <div class="inline-field">
+          <div style="flex:1;">
+            <label for="codeCertInput">Code certification (descr2 / code_cert)</label>
+            <input type="text" id="codeCertInput" placeholder="Ex: CCNA" maxlength="120">
+          </div>
+          <button type="button" id="saveCodeCert" class="stellar-button secondary">Save</button>
         </div>
         <div>
           <label>Dossier PDF</label>
@@ -314,6 +329,8 @@
     const providerSelect = document.getElementById("providerSelect");
     const certSelect = document.getElementById("certSelect");
     const relocateLink = document.getElementById("relocateLink");
+    const codeCertInput = document.getElementById("codeCertInput");
+    const saveCodeCertBtn = document.getElementById("saveCodeCert");
     const params = new URLSearchParams(window.location.search);
     const preselectProviderId = Number(params.get('provider_id'));
     const preselectCertId = Number(params.get('cert_id'));
@@ -322,16 +339,36 @@
     const providerSearch = window.makeSelectSearchable ? window.makeSelectSearchable(providerSelect, { placeholder: 'Rechercher un provider…' }) : null;
     const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certSelect, { placeholder: 'Rechercher une certification…' }) : null;
     const relocateBase = '{{ url_for('reloc.index') }}';
+    const updateCodeCertUrl = `${apiBase}api/update-code-cert`;
+
+    function getSelectedCertCode() {
+        return (certSelect.selectedOptions[0]?.dataset?.codeCert || '').trim();
+    }
+
+    function findCertIdByCodeCert(codeCert) {
+        const match = Array.from(certSelect.options).find(
+            opt => (opt.dataset?.codeCert || '') === codeCert
+        );
+        return match?.value || '';
+    }
+
+    function getSelectedModuleCode() {
+        const moduleSelect = document.getElementById("moduleSelect");
+        return (moduleSelect.selectedOptions[0]?.dataset?.codeCert || '').trim();
+    }
+
+    function syncCodeCertInput() {
+        const moduleCode = getSelectedModuleCode();
+        const certCode = getSelectedCertCode();
+        codeCertInput.value = moduleCode || certCode || '';
+    }
 
     function updateRelocateLink() {
         const moduleSelect = document.getElementById("moduleSelect");
-        const certId = certSelect.value;
         const providerId = providerSelect.value;
-        const certName = (certSelect.selectedOptions[0]?.text || '').toLowerCase();
-        const moduleOptions = Array.from(moduleSelect.options);
-        const matchingOptions = moduleOptions.filter(opt => opt.text.toLowerCase().includes(certName));
-        const defaultOption = matchingOptions.find(opt => opt.text.toLowerCase().includes('default')) || matchingOptions[0];
-        const moduleId = defaultOption?.value || moduleSelect.value;
+        const moduleCode = getSelectedModuleCode();
+        const certId = findCertIdByCodeCert(moduleCode) || certSelect.value;
+        const moduleId = moduleSelect.value;
         if (relocateLink && moduleId && certId && providerId) {
             relocateLink.href = `${relocateBase}?source_module_id=${moduleId}&source_provider_id=${providerId}&source_cert_id=${certId}&destination_provider_id=${providerId}&destination_cert_id=${certId}`;
             relocateLink.classList.remove("disabled");
@@ -391,7 +428,7 @@
             const items = (data || []).map(c => ({
                 value: c.id,
                 label: c.name,
-                dataset: { code_cert: c.code_cert || '' }
+                dataset: { codeCert: c.code_cert || '' }
             }));
             let list = items.length ? items : [{ value: '', label: '— Aucune certification —' }];
             let selectedValue = list[0]?.value ?? '';
@@ -518,8 +555,9 @@
         const modSelect = document.getElementById("moduleSelect");
 
         updateRelocateLink();
+        syncCodeCertInput();
         const selectedOption = this.selectedOptions[0];
-        const defaultQuery = (selectedOption?.dataset?.code_cert || '').trim();
+        const defaultQuery = (selectedOption?.dataset?.codeCert || '').trim();
         fileSearch.value = defaultQuery || '';
         refreshPdfList();
 
@@ -534,9 +572,10 @@
             if (!data || data.length === 0) {
                 modSelect.appendChild(option("— Aucun module —", ""));
                 updateRelocateLink();
+                syncCodeCertInput();
                 return;
             }
-            data.forEach(m => modSelect.appendChild(option(m.name, m.id, { code_cert: m.code_cert || '' })));
+            data.forEach(m => modSelect.appendChild(option(m.name, m.id, { codeCert: m.code_cert || '' })));
             if (Number.isFinite(pendingModuleId)) {
                 const match = data.find(m => Number(m.id) === pendingModuleId);
                 if (match) {
@@ -547,19 +586,60 @@
             modSearch.value = "";
             modSearch.dispatchEvent(new Event('input'));
             updateRelocateLink();
+            syncCodeCertInput();
         }).catch(() => {
             modSelect.appendChild(option("— Erreur chargement —", ""));
             updateRelocateLink();
+            syncCodeCertInput();
         });
     });
 
     document.getElementById("moduleSelect").addEventListener("change", function () {
         const selectedOption = this.selectedOptions[0];
-        const defaultQuery = (selectedOption?.dataset?.code_cert || '').trim();
+        const defaultQuery = (selectedOption?.dataset?.codeCert || '').trim();
         fileSearch.value = defaultQuery || fileSearch.value;
         refreshPdfList();
         updateRelocateLink();
+        syncCodeCertInput();
     });
+
+    if (saveCodeCertBtn) {
+        saveCodeCertBtn.addEventListener("click", async () => {
+            const certId = certSelect.value;
+            const moduleId = document.getElementById("moduleSelect").value;
+            const codeCert = (codeCertInput.value || '').trim();
+            if (!certId || !moduleId || !codeCert) {
+                alert("Sélectionnez une certification, un module et renseignez le code certification.");
+                return;
+            }
+            saveCodeCertBtn.disabled = true;
+            try {
+                const res = await fetch(updateCodeCertUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ cert_id: certId, module_id: moduleId, code_cert: codeCert })
+                });
+                const data = await res.json();
+                if (data.status !== "ok") {
+                    throw new Error(data.message || "Erreur lors de la mise à jour.");
+                }
+                const certOption = certSelect.selectedOptions[0];
+                if (certOption) {
+                    certOption.dataset.codeCert = codeCert;
+                }
+                const moduleOption = document.getElementById("moduleSelect").selectedOptions[0];
+                if (moduleOption) {
+                    moduleOption.dataset.codeCert = codeCert;
+                }
+                updateRelocateLink();
+                alert("✅ Code certification mis à jour.");
+            } catch (err) {
+                alert(err.message || "Erreur lors de la mise à jour.");
+            } finally {
+                saveCodeCertBtn.disabled = false;
+            }
+        });
+    }
 
     const selectedFiles = [];
 

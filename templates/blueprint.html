@@ -601,13 +601,23 @@
     function fillSelect(select, items) {
       const helper = select && select.__searchableSelect;
       if (helper) {
-        helper.setOptions((items || []).map(item => ({ value: item.id, label: item.name })), { keepSearch: false });
+        helper.setOptions(
+          (items || []).map(item => ({
+            value: item.id,
+            label: item.name,
+            dataset: { codeCert: item.code_cert || '' }
+          })),
+          { keepSearch: false }
+        );
       } else {
         select.innerHTML = '';
         (items || []).forEach(item => {
           const option = document.createElement('option');
           option.value = item.id;
           option.textContent = item.name;
+          if (item.code_cert) {
+            option.dataset.codeCert = item.code_cert;
+          }
           select.appendChild(option);
         });
       }
@@ -693,7 +703,12 @@
       const provSel = document.getElementById('prov');
       const certSel = document.getElementById('cert');
       const providerId = provSel?.value;
-      const certId = certSel?.value;
+      const selectedOption = certSel?.selectedOptions?.[0];
+      const codeCert = selectedOption?.dataset?.codeCert || '';
+      const match = Array.from(certSel.options).find(
+        opt => (opt.dataset?.codeCert || '') === codeCert
+      );
+      const certId = match?.value || certSel?.value;
       if (providerId && certId) {
         populateLink.href = `${populateBase}?provider_id=${providerId}&cert_id=${certId}`;
         populateLink.classList.remove('disabled');

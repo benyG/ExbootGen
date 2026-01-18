@@ -266,12 +266,22 @@
     function fill(el, items){
       const helper = el && el.__searchableSelect;
       if (helper) {
-        helper.setOptions((items || []).map(i => ({ value: i.id, label: i.name })), { keepSearch: false });
+        helper.setOptions(
+          (items || []).map(i => ({
+            value: i.id,
+            label: i.name,
+            dataset: { codeCert: i.code_cert || '' }
+          })),
+          { keepSearch: false }
+        );
       } else {
         el.innerHTML = '';
         (items || []).forEach(i=>{
           const o = document.createElement('option');
           o.value = i.id; o.text = i.name;
+          if (i.code_cert) {
+            o.dataset.codeCert = i.code_cert;
+          }
           el.appendChild(o);
         });
       }
@@ -345,7 +355,13 @@
 
       function updateFixLink(){
         const dstProv = document.getElementById('dst-prov').value;
-        const dstCert = document.getElementById('dst-cert').value;
+        const dstCertSelect = document.getElementById('dst-cert');
+        const srcModule = document.getElementById('src-mod').selectedOptions[0];
+        const codeCert = srcModule?.dataset?.codeCert || '';
+        const matchingCert = Array.from(dstCertSelect.options).find(
+          opt => (opt.dataset?.codeCert || '') === codeCert
+        );
+        const dstCert = matchingCert?.value || dstCertSelect.value;
         if(dstProv && dstCert){
           fixLink.href = `${fixBase}?provider_id=${dstProv}&cert_id=${dstCert}`;
           fixLink.classList.remove('disabled');
@@ -418,6 +434,7 @@
 
       document.getElementById('dst-prov').addEventListener('change', updateFixLink);
       document.getElementById('dst-cert').addEventListener('change', updateFixLink);
+      document.getElementById('src-mod').addEventListener('change', updateFixLink);
       updateFixLink();
     });
   </script>

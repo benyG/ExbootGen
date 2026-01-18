@@ -2098,8 +2098,11 @@ def fix_index():
 @app.route("/fix/get_certifications", methods=["POST"])
 def fix_get_certifications():
     provider_id = int(request.form.get("provider_id"))
-    certs = db.get_certifications_by_provider(provider_id)
-    cert_list = [{"id": cert[0], "name": cert[1]} for cert in certs]
+    certs = db.get_certifications_by_provider_with_code(provider_id)
+    cert_list = [
+        {"id": cert[0], "name": cert[1], "code_cert": cert[2] or ""}
+        for cert in certs
+    ]
     return jsonify(cert_list)
 
 

@@ -356,6 +356,17 @@ def get_certifications_by_provider(provider_id):
     return certifications
 
 
+def get_certifications_by_provider_with_code(provider_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "SELECT id, name, descr2 FROM courses WHERE prov = %s"
+    cursor.execute(query, (provider_id,))
+    certifications = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return certifications
+
+
 def get_certifications_without_domains():
     """Return certifications that do not have any associated domains."""
 
@@ -537,25 +548,28 @@ def get_unpublished_certifications_report():
             p.name AS provider_name,
             c.id AS cert_id,
             c.name AS cert_name,
-            COUNT(q.id) AS total_questions,
-            SUM(
-                CASE
-                    WHEN m.name LIKE CONCAT('%', c.name, '%') THEN 1
-                    ELSE 0
-                END
+            (
+                SELECT COUNT(q_all.id)
+                FROM questions q_all
+                JOIN modules m_all ON m_all.id = q_all.module
+                WHERE m_all.course = c.id
+            ) AS total_questions,
+            (
+                SELECT COUNT(q_def.id)
+                FROM questions q_def
+                JOIN modules m_def ON m_def.id = q_def.module
+                WHERE m_def.code_cert = c.descr2
             ) AS default_questions,
-            MAX(
-                CASE
-                    WHEN m.name LIKE CONCAT('%', c.name, '%') THEN m.id
-                    ELSE NULL
-                END
+            (
+                SELECT m_def.id
+                FROM modules m_def
+                WHERE m_def.code_cert = c.descr2
+                ORDER BY m_def.id DESC
+                LIMIT 1
             ) AS default_module_id
         FROM courses c
         JOIN provs p ON p.id = c.prov
-        LEFT JOIN modules m ON m.course = c.id
-        LEFT JOIN questions q ON q.module = m.id
         WHERE c.pub = 0
-        GROUP BY p.id, p.name, c.id, c.name
         ORDER BY p.name, c.name
     """
     cursor.execute(query)

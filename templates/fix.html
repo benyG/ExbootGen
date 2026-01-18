@@ -298,7 +298,12 @@
 
       function updateVerifyLink(){
         const providerId = $provider.val();
-        const certId = $cert.val();
+        const selectedOption = $cert[0]?.selectedOptions?.[0];
+        const codeCert = selectedOption?.dataset?.codeCert || '';
+        const match = Array.from($cert[0].options).find(
+          opt => (opt.dataset?.codeCert || '') === codeCert
+        );
+        const certId = match?.value || $cert.val();
         if(providerId && certId){
           verifyLink.href = `${blueprintBase}?provider_id=${providerId}&cert_id=${certId}`;
           verifyLink.classList.remove('disabled');
@@ -458,7 +463,8 @@
           const items = (data || []).map(item => ({
             value: item.id,
             label: item.name,
-            selected: Number(selectedCertId) === Number(item.id)
+            selected: Number(selectedCertId) === Number(item.id),
+            dataset: { codeCert: item.code_cert || '' }
           }));
           if (certSearch) {
             const list = items.length ? items : [{ value: '', label: '— Aucune certification —' }];
@@ -469,6 +475,7 @@
             $cert.empty();
             $.each(items.length ? items : [{ value: '', label: '— Aucune certification —' }], function(_, optionData){
               const option = $("<option>", { value: optionData.value, text: optionData.label });
+              option.attr('data-code-cert', optionData.dataset?.codeCert || '');
               if (optionData.selected) {
                 option.prop('selected', true);
               }
