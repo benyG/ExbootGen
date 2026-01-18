@@ -367,6 +367,17 @@ def get_certifications_by_provider_with_code(provider_id):
     return certifications
 
 
+def get_certifications_by_provider_with_code(provider_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "SELECT id, name, descr2 FROM courses WHERE prov = %s"
+    cursor.execute(query, (provider_id,))
+    certifications = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return certifications
+
+
 def get_certifications_without_domains():
     """Return certifications that do not have any associated domains."""
 
@@ -567,6 +578,24 @@ def get_unpublished_certifications_report():
                 ORDER BY m_def.id DESC
                 LIMIT 1
             ) AS default_module_id
+            ,
+            (
+                SELECT c_def.id
+                FROM modules m_def
+                JOIN courses c_def ON c_def.id = m_def.course
+                WHERE m_def.code_cert = c.descr2
+                ORDER BY m_def.id DESC
+                LIMIT 1
+            ) AS default_cert_id
+            ,
+            (
+                SELECT c_def.prov
+                FROM modules m_def
+                JOIN courses c_def ON c_def.id = m_def.course
+                WHERE m_def.code_cert = c.descr2
+                ORDER BY m_def.id DESC
+                LIMIT 1
+            ) AS default_provider_id
         FROM courses c
         JOIN provs p ON p.id = c.prov
         WHERE c.pub = 0
@@ -587,6 +616,8 @@ def get_unpublished_certifications_report():
                 "total_questions": int(row[4] or 0),
                 "default_questions": int(row[5] or 0),
                 "default_module_id": row[6],
+                "default_cert_id": row[7],
+                "default_provider_id": row[8],
             }
         )
     return results

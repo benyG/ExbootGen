@@ -42,6 +42,32 @@ def api_modules_for_cert(cert_id):
     cur.close(); conn.close()
     return jsonify(rows)
 
+
+@dom_bp.route('/api/default-module')
+def api_default_module():
+    code_cert = (request.args.get('code_cert') or '').strip()
+    if not code_cert:
+        return jsonify({"error": "code_cert requis"}), 400
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        """
+        SELECT m.id AS module_id, m.course AS cert_id, c.prov AS provider_id
+        FROM modules m
+        JOIN courses c ON c.id = m.course
+        WHERE m.code_cert = %s
+        ORDER BY m.id DESC
+        LIMIT 1
+        """,
+        (code_cert,),
+    )
+    row = cur.fetchone()
+    cur.close(); conn.close()
+    if not row:
+        return jsonify({"module_id": None, "cert_id": None, "provider_id": None})
+    return jsonify(row)
+
 # --- API pour créer un domaine (module) ---
 @dom_bp.route('/api/modules', methods=['POST'])
 def api_create_module():

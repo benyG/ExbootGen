@@ -1994,6 +1994,8 @@ def reports():
                 "total_questions": row["total_questions"],
                 "default_questions": row["default_questions"],
                 "default_module_id": row["default_module_id"],
+                "default_cert_id": row.get("default_cert_id"),
+                "default_provider_id": row.get("default_provider_id"),
             }
         )
 

@@ -367,10 +367,11 @@
         const moduleSelect = document.getElementById("moduleSelect");
         const providerId = providerSelect.value;
         const moduleCode = getSelectedModuleCode();
-        const certId = findCertIdByCodeCert(moduleCode) || certSelect.value;
+        const sourceCertId = certSelect.value;
+        const destinationCertId = findCertIdByCodeCert(moduleCode) || certSelect.value;
         const moduleId = moduleSelect.value;
-        if (relocateLink && moduleId && certId && providerId) {
-            relocateLink.href = `${relocateBase}?source_module_id=${moduleId}&source_provider_id=${providerId}&source_cert_id=${certId}&destination_provider_id=${providerId}&destination_cert_id=${certId}`;
+        if (relocateLink && moduleId && sourceCertId && destinationCertId && providerId) {
+            relocateLink.href = `${relocateBase}?source_module_id=${moduleId}&source_provider_id=${providerId}&source_cert_id=${sourceCertId}&destination_provider_id=${providerId}&destination_cert_id=${destinationCertId}`;
             relocateLink.classList.remove("disabled");
             relocateLink.setAttribute("aria-disabled", "false");
         } else if (relocateLink) {

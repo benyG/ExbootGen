@@ -680,23 +680,29 @@
       });
     }
 
-    function updateJumpLink() {
+    async function updateJumpLink() {
       if (!jumpLink) return;
       const certSel = document.getElementById('cert');
-      const provSel = document.getElementById('prov');
-      const certId = certSel?.value;
-      const providerId = provSel?.value;
       const selectedCert = certSel?.options[certSel.selectedIndex];
-      const certCode = (selectedCert?.dataset?.codeCert || '').toLowerCase();
-      const candidates = (currentModules || []).filter(
-        module => (module.code_cert || '').toLowerCase() === certCode
-      );
-      const match = candidates[0];
-      if (match && certId && providerId) {
-        jumpLink.href = `${pdfBase}?provider_id=${providerId}&cert_id=${certId}&module_id=${match.id}`;
-        jumpLink.classList.remove('disabled');
-        jumpLink.setAttribute('aria-disabled', 'false');
-      } else {
+      const certCode = (selectedCert?.dataset?.codeCert || '').trim();
+      if (!certCode) {
+        jumpLink.href = '#';
+        jumpLink.classList.add('disabled');
+        jumpLink.setAttribute('aria-disabled', 'true');
+        return;
+      }
+      try {
+        const payload = await loadJSON(`${base}api/default-module?code_cert=${encodeURIComponent(certCode)}`);
+        if (payload && payload.module_id && payload.cert_id && payload.provider_id) {
+          jumpLink.href = `${pdfBase}?provider_id=${payload.provider_id}&cert_id=${payload.cert_id}&module_id=${payload.module_id}`;
+          jumpLink.classList.remove('disabled');
+          jumpLink.setAttribute('aria-disabled', 'false');
+        } else {
+          jumpLink.href = '#';
+          jumpLink.classList.add('disabled');
+          jumpLink.setAttribute('aria-disabled', 'true');
+        }
+      } catch (err) {
         jumpLink.href = '#';
         jumpLink.classList.add('disabled');
         jumpLink.setAttribute('aria-disabled', 'true');
@@ -792,6 +798,7 @@
       certSel.addEventListener('change', () => {
         updateSelectionLabel();
         refreshModules(certSel.value);
+        updateJumpLink();
       });
     });
 

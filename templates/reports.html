@@ -185,8 +185,8 @@
                       <td>{{ cert.total_questions }}</td>
                       <td>{{ cert.default_questions }}</td>
                       <td>
-                        {% if cert.default_module_id %}
-                          <a class="table-link" href="{{ url_for('pdf.index') }}?provider_id={{ provider.provider_id }}&cert_id={{ cert.id }}&module_id={{ cert.default_module_id }}">Go to default</a>
+                        {% if cert.default_module_id and cert.default_cert_id and cert.default_provider_id %}
+                          <a class="table-link" href="{{ url_for('pdf.index') }}?provider_id={{ cert.default_provider_id }}&cert_id={{ cert.default_cert_id }}&module_id={{ cert.default_module_id }}">Go to default</a>
                         {% else %}
                           <span class="link-muted">Domaine default introuvable</span>
                         {% endif %}
