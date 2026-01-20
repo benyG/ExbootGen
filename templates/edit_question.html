@@ -74,6 +74,8 @@
     button.primary { background: linear-gradient(135deg, #5cf1c7, #7cf7ff); border: none; color: #071026; font-weight: 700; padding: 0.9rem 1.2rem; border-radius: 12px; cursor: pointer; box-shadow: 0 15px 35px rgba(92,241,199,0.35); }
     button.primary:disabled { opacity: 0.6; cursor: not-allowed; }
     button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 0.75rem 1rem; border-radius: 10px; cursor: pointer; }
+    button.danger { background: rgba(248, 113, 113, 0.18); border: 1px solid rgba(248, 113, 113, 0.55); color: #fecaca; padding: 0.75rem 1rem; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; min-width: 48px; }
+    button.danger:hover { border-color: #f87171; color: #fee2e2; }
 
     .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0.9rem; }
     .result-card { background: var(--panel-soft); border: 1px solid var(--border); border-radius: 14px; padding: 0.9rem 1rem; cursor: pointer; transition: 0.2s ease; }
@@ -249,6 +251,16 @@
           <label for="descrInput">Description / diagramme</label>
           <input type="text" id="descrInput" placeholder="Description facultative de la question">
         </div>
+        <div>
+          <label for="natureSelect">Type de question</label>
+          <select id="natureSelect">
+            <option value="1">QCM</option>
+            <option value="2">True_False</option>
+            <option value="3">Réponse écrite</option>
+            <option value="4">Matching</option>
+            <option value="5">Drag-and-Drop</option>
+          </select>
+        </div>
       </div>
 
       <div class="toolbar" id="editorToolbar" role="toolbar" aria-label="Outils de mise en forme">
@@ -300,6 +312,7 @@
       <div style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
         <button class="primary" id="saveBtn" disabled>Enregistrer les modifications</button>
         <button class="primary hidden" id="addBtn">Ajouter</button>
+        <button class="danger" id="deleteBtn" type="button" aria-label="Supprimer la question" title="Supprimer la question" disabled>🗑️</button>
         <span class="status" id="saveStatus"></span>
       </div>
     </section>
@@ -328,11 +341,13 @@
     const uploadStatus = document.getElementById('uploadStatus');
     const srcFileInput = document.getElementById('srcFile');
     const descrInput = document.getElementById('descrInput');
+    const natureSelect = document.getElementById('natureSelect');
     const editorStatus = document.getElementById('editorStatus');
     const contextInfo = document.getElementById('contextInfo');
     const answersContainer = document.getElementById('answers');
     const saveBtn = document.getElementById('saveBtn');
     const saveStatus = document.getElementById('saveStatus');
+    const deleteBtn = document.getElementById('deleteBtn');
 
     let currentQuestionId = null;
     let isAddMode = false;
@@ -437,9 +452,11 @@
       questionEditor.innerHTML = q.text || '';
       srcFileInput.value = q.src_file || '';
       descrInput.value = q.descr || '';
+      natureSelect.value = String(q.nature ?? 1);
       contextInfo.textContent = `${q.provider_name || ''} → ${q.certification_name || ''} → ${q.module_name || ''}`;
       editorStatus.textContent = `Édition de la question #${q.id}`;
       saveBtn.disabled = false;
+      deleteBtn.disabled = false;
       renderAnswers(q.answers || []);
     }
 
@@ -484,6 +501,7 @@
       moduleSelectWrap.classList.toggle('hidden', !enabled);
       addBtn.classList.toggle('hidden', !enabled);
       saveBtn.classList.toggle('hidden', enabled);
+      deleteBtn.classList.toggle('hidden', enabled);
       searchBtn.disabled = enabled;
       searchText.disabled = enabled;
       resultsContainer.classList.toggle('hidden', enabled);
@@ -493,16 +511,19 @@
         questionEditor.innerHTML = '';
         srcFileInput.value = '';
         descrInput.value = '';
+        natureSelect.value = '1';
         editorStatus.textContent = 'Mode ajout : saisissez une nouvelle question.';
         contextInfo.textContent = '';
         renderAnswers([]);
         saveStatus.textContent = '';
+        deleteBtn.disabled = true;
         searchStatus.textContent = 'Sélectionnez un provider et une certification pour commencer.';
         loadModules();
       } else {
         editorStatus.textContent = 'Sélectionnez une question pour l\'éditer.';
         searchStatus.textContent = 'Saisissez au moins un mot-clé.';
         addBtn.disabled = false;
+        deleteBtn.disabled = !currentQuestionId;
       }
     }
 
@@ -674,6 +695,7 @@
         text: questionEditor.innerHTML.trim(),
         src_file: srcFileInput.value.trim(),
         descr: descrInput.value.trim(),
+        nature: Number.parseInt(natureSelect.value || '1', 10),
         answers,
       };
       const res = await fetch(`/edit-question/api/questions/${currentQuestionId}`, {
@@ -686,6 +708,34 @@
       } else {
         const err = await res.json().catch(() => ({}));
         saveStatus.textContent = err.error || 'Erreur pendant la sauvegarde.';
+      }
+    });
+
+    deleteBtn.addEventListener('click', async () => {
+      if (!currentQuestionId) return;
+      const confirmDelete = window.confirm(`Supprimer définitivement la question #${currentQuestionId} ?`);
+      if (!confirmDelete) return;
+      deleteBtn.disabled = true;
+      saveStatus.textContent = 'Suppression en cours…';
+      const res = await fetch(`/edit-question/api/questions/${currentQuestionId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        saveStatus.textContent = 'Question supprimée.';
+        currentQuestionId = null;
+        questionEditor.innerHTML = '';
+        srcFileInput.value = '';
+        descrInput.value = '';
+        natureSelect.value = '1';
+        renderAnswers([]);
+        editorStatus.textContent = 'Sélectionnez une question pour l\'éditer.';
+        contextInfo.textContent = '';
+        saveBtn.disabled = true;
+        deleteBtn.disabled = true;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        saveStatus.textContent = err.error || 'Erreur pendant la suppression.';
+        deleteBtn.disabled = false;
       }
     });
 
@@ -728,6 +778,7 @@
         text,
         src_file: srcFileInput.value.trim(),
         descr: descrInput.value.trim(),
+        nature: Number.parseInt(natureSelect.value || '1', 10),
         answers,
       };
       const res = await fetch('/edit-question/api/questions', {
