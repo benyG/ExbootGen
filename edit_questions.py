@@ -127,12 +127,19 @@ def api_create_question():
     text = (payload.get('text') or '').strip()
     descr = (payload.get('descr') or '').strip() or None
     src_file = (payload.get('src_file') or '').strip() or None
+    nature = payload.get('nature', 1)
     answers = payload.get('answers') or []
 
     if not module_id:
         return jsonify({'error': 'Le module est requis'}), 400
     if not text:
         return jsonify({'error': 'Le texte de la question est requis'}), 400
+    try:
+        nature = int(nature)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Le type de question est invalide'}), 400
+    if nature not in {1, 2, 3, 4, 5}:
+        return jsonify({'error': 'Le type de question est invalide'}), 400
 
     sanitized_answers = []
     for answer in answers:
@@ -165,7 +172,7 @@ def api_create_question():
             INSERT INTO questions (text, descr, module, src_file, level, nature, ty, created_at, updated_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
             """,
-            (text, descr, module_id, src_file, 1, 1, 1),
+            (text, descr, module_id, src_file, 1, nature, 1),
         )
         question_id = cur.lastrowid
 
@@ -216,6 +223,7 @@ def api_get_question(question_id: int):
     cur.execute(
         """
         SELECT q.id, q.text, q.descr, q.src_file,
+               q.nature,
                m.id AS module_id, m.name AS module_name,
                c.id AS certification_id, c.name AS certification_name,
                p.id AS provider_id, p.name AS provider_name
@@ -274,6 +282,7 @@ def api_update_question(question_id: int):
     text = (payload.get('text') or '').strip()
     descr = (payload.get('descr') or '').strip() or None
     src_file = (payload.get('src_file') or '').strip() or None
+    nature = payload.get('nature')
     answers = payload.get('answers') or []
 
     if not text:
@@ -281,11 +290,21 @@ def api_update_question(question_id: int):
 
     db = get_db()
     cur = db.cursor()
-    cur.execute("SELECT COUNT(*) FROM questions WHERE id = %s", (question_id,))
-    exists = cur.fetchone()[0]
-    if not exists:
+    cur.execute("SELECT nature FROM questions WHERE id = %s", (question_id,))
+    row = cur.fetchone()
+    if not row:
         cur.close()
         return jsonify({'error': 'Question introuvable'}), 404
+    current_nature = row[0]
+
+    if nature is None:
+        nature = current_nature
+    try:
+        nature = int(nature)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Le type de question est invalide'}), 400
+    if nature not in {1, 2, 3, 4, 5}:
+        return jsonify({'error': 'Le type de question est invalide'}), 400
 
     try:
         cur.execute(
@@ -294,10 +313,11 @@ def api_update_question(question_id: int):
                SET text = %s,
                    descr = %s,
                    src_file = %s,
+                   nature = %s,
                    updated_at = NOW()
              WHERE id = %s
             """,
-            (text, descr, src_file, question_id),
+            (text, descr, src_file, nature, question_id),
         )
         cur.execute("DELETE FROM quest_ans WHERE question = %s", (question_id,))
 
@@ -345,6 +365,29 @@ def api_update_question(question_id: int):
 
     cur.close()
     return jsonify({'status': 'updated', 'answers': len(answers)})
+
+
+@edit_question_bp.route('/api/questions/<int:question_id>', methods=['DELETE'])
+def api_delete_question(question_id: int):
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT COUNT(*) FROM questions WHERE id = %s", (question_id,))
+    exists = cur.fetchone()[0]
+    if not exists:
+        cur.close()
+        return jsonify({'error': 'Question introuvable'}), 404
+
+    try:
+        cur.execute("DELETE FROM quest_ans WHERE question = %s", (question_id,))
+        cur.execute("DELETE FROM questions WHERE id = %s", (question_id,))
+        db.commit()
+    except Exception:
+        db.rollback()
+        cur.close()
+        raise
+
+    cur.close()
+    return jsonify({'status': 'deleted', 'id': question_id})
 
 
 @edit_question_bp.route('/api/upload-image', methods=['POST'])
