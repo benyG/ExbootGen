@@ -23,13 +23,18 @@ DOMAIN_PROMPT_TEMPLATE = (
     "Reference Sources: only from official website of the specified certification vendor.\n"
     "If direct browsing is not available, rely on your most accurate and up-to-date knowledge of the vendor's official exam outline to provide accurate domains and descriptions, without mentioning any limitations.\n"
     "Each domain must correspond to a section from the official outline and include a concise vendor-aligned description.\n"
+    "If you include sources, they must be listed only in a top-level \"sources\" array.\n"
+    "Do not include URLs or citations anywhere else in the JSON.\n"
     "Format your response as a decodable JSON object in a single line without line breaks.\n"
     "Your answer MUST only be the requested JSON, nothing else.\n"
     "EXPECTED RESPONSE FORMAT (JSON only, no additional text):\n"
-    "["
-    "  {name:Domaine A,descr:Description…},"
-    "  {name:Domaine B,descr:Description…} "
-    "]"
+    "{"
+    "  \"modules\": ["
+    "    {\"name\": \"Domaine A\", \"descr\": \"Description…\"},"
+    "    {\"name\": \"Domaine B\", \"descr\": \"Description…\"}"
+    "  ],"
+    "  \"sources\": [\"https://vendor.example/official-outline\"]"
+    "}"
 )
 
 writing_rules = """ 
@@ -337,7 +342,19 @@ def clean_and_decode_json(content: str) -> dict:
             direct_error,
         )
 
-    # Deuxième essai : détecter l'objet JSON principal lorsqu'il est entouré de texte
+    # Deuxième essai : détecter le tableau JSON principal lorsqu'il est entouré de texte
+    start = cleaned.find('[')
+    end = cleaned.rfind(']')
+    if start != -1 and end != -1 and end > start:
+        snippet = cleaned[start : end + 1].strip()
+        try:
+            decoded_json = json.loads(snippet)
+            logging.debug(f"Decoded JSON (array snippet): {decoded_json}")
+            return decoded_json
+        except json.JSONDecodeError as snippet_error:
+            logging.debug("Array snippet decode failed: %s", snippet_error)
+
+    # Troisième essai : détecter l'objet JSON principal lorsqu'il est entouré de texte
     start = cleaned.find('{')
     end = cleaned.rfind('}')
     if start != -1 and end != -1 and end > start:
@@ -494,9 +511,10 @@ def generate_module_blueprint_excerpt(
     prompt = (
         f"Using the official exam guide, produce an excerpt from the blueprint for the domain: {domain}, of the certification: {certification}.\n"
         "RULES:\n"
-        "- 150–500 words\n"
+        "- 150–300 words\n"
         "- Focus only on what’s listed in the official exam blueprint and if you don’t have access to the official exam blueprint, use the most accurate and up-to-date internal knowledge you possess.\n"
-        "- If you are unsure whether a topic is covered in the certification curriculum, do not include it in the excerpt.\n"        
+        "- If you are unsure whether a topic is covered in the certification curriculum, do not include it in the excerpt.\n"
+        "- If you include sources, list them only at the end in a dedicated 'Sources:' section with bullet URLs.\n"
         "STRICT RESPONSE STRUCTURE:\n"
         "- Key focus areas from the official exam guide."
     )
