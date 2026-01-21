@@ -787,6 +787,23 @@ def dashboard():
         user_view["completions_by_cert"] = _with_percent(
             user_snapshot["completions_by_cert"], "completions"
         )
+        score_breakdown = user_snapshot.get("score_breakdown") or []
+        user_view["score_breakdown"] = _with_pie(score_breakdown, "total")
+        avg_score = user_snapshot.get("avg_score")
+        user_view["avg_score_display"] = (
+            f"{avg_score:.1f}%" if avg_score is not None else "—"
+        )
+        scores_by_cert = []
+        for cert in user_snapshot["completions_by_cert"]:
+            avg_cert_score = cert.get("avg_score")
+            if avg_cert_score is not None:
+                scores_by_cert.append(
+                    {
+                        "name": cert["name"],
+                        "avg_score_display": f"{avg_cert_score:.1f}%",
+                    }
+                )
+        user_view["scores_by_cert"] = scores_by_cert
 
     user_select_options = []
     if user_matches:

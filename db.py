@@ -1235,7 +1235,9 @@ def get_user_dashboard_snapshot(user_id, start_dt, end_dt, cert_id=None):
         """
         SELECT COUNT(*)
         FROM journs j
-        WHERE j.user = %(user_id)s AND j.created_at BETWEEN %(start)s AND %(end)s
+        WHERE j.user = %(user_id)s
+          AND j.created_at BETWEEN %(start)s AND %(end)s
+          AND j.fen = 'login'
         """,
         base_params,
     )
@@ -1245,7 +1247,9 @@ def get_user_dashboard_snapshot(user_id, start_dt, end_dt, cert_id=None):
         """
         SELECT DATE(j.created_at) AS day, COUNT(*) AS total
         FROM journs j
-        WHERE j.user = %(user_id)s AND j.created_at BETWEEN %(start)s AND %(end)s
+        WHERE j.user = %(user_id)s
+          AND j.created_at BETWEEN %(start)s AND %(end)s
+          AND j.fen = 'login'
         GROUP BY day
         ORDER BY day
         """,
@@ -1340,6 +1344,38 @@ def get_user_dashboard_snapshot(user_id, start_dt, end_dt, cert_id=None):
             }
         )
 
+    score_breakdown = []
+    avg_score = None
+    if score_column:
+        cursor.execute(
+            f"""
+            SELECT AVG(eu.{score_column}) AS avg_score,
+                   SUM(CASE WHEN eu.{score_column} >= 80 THEN 1 ELSE 0 END) AS high_scores,
+                   SUM(
+                     CASE
+                       WHEN eu.{score_column} >= 60 AND eu.{score_column} < 80
+                       THEN 1 ELSE 0
+                     END
+                   ) AS mid_scores,
+                   SUM(CASE WHEN eu.{score_column} < 60 THEN 1 ELSE 0 END) AS low_scores
+            FROM exam_users eu
+            JOIN exams e ON e.id = eu.exam
+            WHERE eu.user = %(user_id)s
+              AND eu.comp_at BETWEEN %(start)s AND %(end)s
+              AND eu.{score_column} IS NOT NULL
+              {exam_filter}
+            """,
+            base_params,
+        )
+        score_row = cursor.fetchone()
+        avg_score = score_row[0] if score_row else None
+        if score_row:
+            score_breakdown = [
+                {"label": "Excellent (≥ 80%)", "total": score_row[1] or 0},
+                {"label": "Correct (60–79%)", "total": score_row[2] or 0},
+                {"label": "À renforcer (< 60%)", "total": score_row[3] or 0},
+            ]
+
     exam_type_breakdown = []
     exams_columns = _get_table_columns("exams")
     if "type" in exams_columns:
@@ -1380,6 +1416,8 @@ def get_user_dashboard_snapshot(user_id, start_dt, end_dt, cert_id=None):
         "session_timeline": session_timeline,
         "exam_types": exam_type_breakdown,
         "completions_by_cert": completions_by_cert,
+        "score_breakdown": score_breakdown,
+        "avg_score": avg_score,
     }
 
 
@@ -1529,6 +1567,7 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
             FROM journs j
             JOIN users u ON u.id = j.user
             WHERE j.created_at BETWEEN %(start)s AND %(end)s
+              AND j.fen = 'login'
             """,
             user_filters,
         ),
@@ -1668,7 +1707,7 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
         f"""
         SELECT u.id, u.name, u.email, u.ex,
                MAX(j.created_at) AS last_activity,
-               COUNT(DISTINCT j.id) AS sessions,
+               COUNT(DISTINCT CASE WHEN j.fen = 'login' THEN j.id END) AS sessions,
                COUNT(DISTINCT eu.id) AS exams_completed
         FROM users u
         LEFT JOIN journs j
@@ -1770,6 +1809,7 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
             FROM journs j
             JOIN users u ON u.id = j.user
             WHERE j.created_at BETWEEN %(start)s AND %(end)s
+              AND j.fen = 'login'
             """,
             guest_filters,
         ),
