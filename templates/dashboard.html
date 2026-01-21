@@ -356,6 +356,39 @@
           </div>
         </div>
         <div class="chart-card">
+          <div class="chart-title">Scores aux examens</div>
+          <div class="chart-visual chart-visual--pie">
+            {% if user_snapshot.score_breakdown %}
+            <div class="pie-chart" style="background: conic-gradient({% for score in user_snapshot.score_breakdown %}{{ score.slice_color }} {{ score.slice_start }}% {{ score.slice_end }}%{% if not loop.last %}, {% endif %}{% endfor %});">
+              <div class="pie-hole"></div>
+            </div>
+            <ul class="pie-legend">
+              {% for score in user_snapshot.score_breakdown %}
+              <li>
+                <span style="display:flex; align-items:center; gap:0.5rem;">
+                  <span class="pie-dot" style="--dot-color: {{ score.slice_color }}"></span>
+                  {{ score.label }}
+                </span>
+                <span><strong>{{ score.share_percent }}%</strong> · {{ score.total }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Scores indisponibles sur la période.</span>
+            {% endif %}
+          </div>
+          <ul style="margin:0; padding-left:1rem; color:var(--text-muted); font-size:0.9rem;">
+            <li>Score moyen: <strong style="color:var(--text-primary);">{{ user_snapshot.avg_score_display }}</strong></li>
+            {% if user_snapshot.scores_by_cert %}
+              {% for cert in user_snapshot.scores_by_cert %}
+              <li>{{ cert.name }} <strong style="color:var(--text-primary);">({{ cert.avg_score_display }})</strong></li>
+              {% endfor %}
+            {% else %}
+              <li>Pas de score détaillé par certification.</li>
+            {% endif %}
+          </ul>
+        </div>
+        <div class="chart-card">
           <div class="chart-title">Examens par type</div>
           <div class="chart-visual" style="align-items:center;">
             {% if user_snapshot.exam_types %}
