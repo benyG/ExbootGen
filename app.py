@@ -1941,6 +1941,25 @@ def schedule_execute():
     return jsonify(_enqueue_schedule_job(date, entries))
 
 
+@app.route("/api/mcp/schedule", methods=["POST"])
+def mcp_schedule_execute():
+    """Trigger planned actions via MCP."""
+
+    payload = request.get_json(silent=True) or {}
+    date = (payload.get("date") or "").strip() or "date-inconnue"
+    entries = payload.get("entries") or []
+    if not isinstance(entries, list) or not entries:
+        return jsonify({"error": "Aucune action planifiée transmise."}), 400
+    return jsonify(_enqueue_schedule_job(date, entries))
+
+
+@app.route("/api/mcp/schedule/status/<job_id>", methods=["GET"])
+def mcp_schedule_status(job_id: str):
+    """Return status for a scheduled MCP job."""
+
+    return schedule_status(job_id)
+
+
 @app.route("/reports")
 def reports():
     certification_id = 23
@@ -2034,6 +2053,18 @@ def reports():
         question_activity=question_activity,
         unpublished_providers=unpublished_providers,
     )
+
+
+@app.route("/mcp")
+def mcp_monitoring():
+    return render_template("mcp.html")
+
+
+@app.route("/api/mcp/unpublished-certifications")
+def mcp_unpublished_certifications():
+    """Return unpublished certifications with default domain metrics for MCP."""
+
+    return jsonify(db.get_unpublished_certifications_report())
 
 
 @app.route("/populate", methods=["GET", "POST"])
@@ -2447,6 +2478,270 @@ def fix_status(job_id):
     if error_response is not None:
         return error_response, status
     return jsonify(data)
+
+
+@app.route("/api/mcp/fix", methods=["POST"])
+def mcp_fix_process():
+    """Trigger the fix workflow for MCP automation."""
+
+    payload = request.get_json(silent=True) or {}
+    provider_id = payload.get("provider_id")
+    cert_id = payload.get("cert_id")
+    action = payload.get("action", "assign") or "assign"
+
+    try:
+        provider_id = int(provider_id)
+        cert_id = int(cert_id)
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "provider_id et cert_id requis"}), 400
+
+    if action not in {"assign", "drag", "matching"}:
+        return jsonify({"status": "error", "message": "action invalide"}), 400
+
+    job_id = uuid.uuid4().hex
+    try:
+        run_fix_job.apply_async(args=(provider_id, cert_id, action), task_id=job_id)
+        return jsonify({"status": "queued", "job_id": job_id})
+    except Exception:  # pragma: no cover - fallback when celery is unavailable
+        return _start_fix_job_inline(job_id, provider_id, cert_id, action)
+
+
+@app.route("/api/mcp/fix/status/<job_id>", methods=["GET"])
+def mcp_fix_status(job_id):
+    """Return the status of a fix job for MCP."""
+
+    return fix_status(job_id)
+
+
+MCP_TOOLS = {
+    "unpublished_certifications": {"method": "GET", "endpoint": "/api/mcp/unpublished-certifications"},
+    "sync_domains": {"method": "POST", "endpoint": "/modules/api/mcp/certifications/{cert_id}/sync-domains"},
+    "import_local_pdfs": {"method": "POST", "endpoint": "/pdf/api/mcp/import-local"},
+    "relocate_questions": {"method": "POST", "endpoint": "/reloc/api/mcp/relocate"},
+    "fix_questions": {"method": "POST", "endpoint": "/api/mcp/fix"},
+    "generate_blueprints": {
+        "method": "POST",
+        "endpoint": "/blueprints/api/mcp/certifications/{cert_id}/generate-blueprints",
+    },
+}
+
+MCP_RUN_HISTORY: list[dict] = []
+
+
+def _call_internal(endpoint: str, method: str, payload: dict | None = None) -> tuple[dict, int]:
+    payload = payload or {}
+    with app.test_client() as client:
+        if method.upper() == "GET":
+            response = client.get(endpoint, query_string=payload)
+        else:
+            response = client.post(endpoint, json=payload)
+        try:
+            data = response.get_json()
+        except Exception:
+            data = {"raw": response.get_data(as_text=True)}
+    return data, response.status_code
+
+
+@app.route("/api/mcp/orchestrate", methods=["POST"])
+def mcp_orchestrate():
+    """Return an orchestration plan for MCP automation."""
+
+    payload = request.get_json(silent=True) or {}
+    cert_id = payload.get("cert_id")
+    provider_id = payload.get("provider_id")
+    source_module_id = payload.get("source_module_id")
+    code_cert = (payload.get("code_cert") or "").strip()
+
+    try:
+        cert_id = int(cert_id)
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "cert_id requis"}), 400
+
+    if provider_id is not None:
+        try:
+            provider_id = int(provider_id)
+        except (TypeError, ValueError):
+            return jsonify({"status": "error", "message": "provider_id invalide"}), 400
+
+    if source_module_id is not None:
+        try:
+            source_module_id = int(source_module_id)
+        except (TypeError, ValueError):
+            return jsonify({"status": "error", "message": "source_module_id invalide"}), 400
+
+    reports = db.get_unpublished_certifications_report()
+    target = next((row for row in reports if row["cert_id"] == cert_id), None)
+    if not target:
+        return jsonify({"status": "error", "message": "Certification introuvable"}), 404
+
+    if provider_id is not None and target.get("provider_id") != provider_id:
+        return jsonify({"status": "error", "message": "provider_id incohérent"}), 400
+
+    if not target.get("automation_eligible"):
+        return jsonify(
+            {
+                "status": "error",
+                "message": "Certification non éligible (pub != 2).",
+                "pub_status": target.get("pub_status"),
+            }
+        ), 409
+
+    plan = [
+        {
+            "step": 3,
+            "name": "sync_domains",
+            "endpoint": f"/modules/api/mcp/certifications/{cert_id}/sync-domains",
+            "method": "POST",
+            "payload": {},
+        },
+        {
+            "step": 4,
+            "name": "import_pdf_local",
+            "endpoint": "/pdf/api/mcp/import-local",
+            "method": "POST",
+            "payload": {
+                "cert_id": cert_id,
+                "code_cert": code_cert or target.get("cert_name"),
+                "file_paths": payload.get("file_paths"),
+                "search_root": payload.get("search_root"),
+            },
+        },
+        {
+            "step": 5,
+            "name": "relocate_questions",
+            "endpoint": "/reloc/api/mcp/relocate",
+            "method": "POST",
+            "payload": {
+                "source_module_id": source_module_id,
+                "destination_cert_id": cert_id,
+                "batch_size": payload.get("batch_size", 10),
+                "workers": payload.get("workers"),
+            },
+        },
+        {
+            "step": 6,
+            "name": "fix_questions",
+            "endpoint": "/api/mcp/fix",
+            "method": "POST",
+            "payload": {
+                "provider_id": target.get("provider_id"),
+                "cert_id": cert_id,
+                "action": payload.get("fix_action", "assign"),
+            },
+        },
+        {
+            "step": 7,
+            "name": "generate_blueprints",
+            "endpoint": f"/blueprints/api/mcp/certifications/{cert_id}/generate-blueprints",
+            "method": "POST",
+            "payload": {
+                "mode": payload.get("blueprint_mode", "missing"),
+                "module_ids": payload.get("blueprint_module_ids"),
+            },
+        },
+    ]
+
+    return jsonify(
+        {
+            "status": "ok",
+            "certification": target,
+            "plan": plan,
+        }
+    )
+
+
+@app.route("/api/mcp/tools", methods=["GET"])
+def mcp_tools():
+    """List MCP tools exposed by the API."""
+
+    return jsonify(
+        {
+            "tools": [
+                {"name": name, **config} for name, config in MCP_TOOLS.items()
+            ]
+        }
+    )
+
+
+@app.route("/api/mcp/call", methods=["POST"])
+def mcp_call():
+    """Call a registered MCP tool by name."""
+
+    payload = request.get_json(silent=True) or {}
+    tool = payload.get("tool")
+    tool_payload = payload.get("payload") or {}
+
+    if tool not in MCP_TOOLS:
+        return jsonify({"status": "error", "message": "tool inconnu"}), 400
+
+    config = MCP_TOOLS[tool]
+    endpoint = config["endpoint"]
+    if "{cert_id}" in endpoint:
+        cert_id = tool_payload.get("cert_id")
+        try:
+            cert_id = int(cert_id)
+        except (TypeError, ValueError):
+            return jsonify({"status": "error", "message": "cert_id requis"}), 400
+        endpoint = endpoint.format(cert_id=cert_id)
+
+    data, status = _call_internal(endpoint, config["method"], tool_payload)
+    return jsonify({"status": "ok", "result": data, "status_code": status})
+
+
+@app.route("/api/mcp/run", methods=["POST"])
+def mcp_run():
+    """Execute the MCP plan sequentially."""
+
+    payload = request.get_json(silent=True) or {}
+    stop_on_error = payload.get("stop_on_error", True)
+    plan_data, plan_status = _call_internal("/api/mcp/orchestrate", "POST", payload)
+    if plan_status != 200:
+        return jsonify({"status": "error", "result": plan_data}), plan_status
+
+    results = []
+    for step in plan_data.get("plan", []):
+        endpoint = step.get("endpoint")
+        method = step.get("method", "POST")
+        step_payload = step.get("payload") or {}
+        data, status = _call_internal(endpoint, method, step_payload)
+        entry = {
+            "step": step.get("step"),
+            "name": step.get("name"),
+            "endpoint": endpoint,
+            "status_code": status,
+            "result": data,
+        }
+        results.append(entry)
+        if stop_on_error and status >= 400:
+            summary = {"status": "error", "results": results}
+            MCP_RUN_HISTORY.append(
+                {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "status": "error",
+                    "results": results,
+                }
+            )
+            return jsonify(summary), status
+
+    summary = {"status": "ok", "results": results}
+    MCP_RUN_HISTORY.append(
+        {
+            "timestamp": datetime.utcnow().isoformat(),
+            "status": "ok",
+            "results": results,
+        }
+    )
+    return jsonify(summary)
+
+
+@app.route("/api/mcp/run/history", methods=["GET"])
+def mcp_run_history():
+    """Return recent MCP run history."""
+
+    limit = request.args.get("limit", default=20, type=int)
+    if limit <= 0:
+        limit = 20
+    return jsonify({"runs": MCP_RUN_HISTORY[-limit:]})
 
 
 def run_population(
