@@ -386,3 +386,12 @@ def api_generate_blueprints(cert_id: int):
             "results": results,
         }
     )
+
+
+@module_blueprints_bp.route(
+    "/api/mcp/certifications/<int:cert_id>/generate-blueprints", methods=["POST"]
+)
+def api_generate_blueprints_mcp(cert_id: int):
+    """MCP wrapper for blueprint generation."""
+
+    return api_generate_blueprints(cert_id)

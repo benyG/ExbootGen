@@ -119,6 +119,19 @@ def _fetch_domains(conn, cert_id: int) -> list[str]:
         cur.close()
 
 
+def _fetch_default_module_id(conn, code_cert: str) -> int | None:
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id FROM modules WHERE code_cert = %s ORDER BY id DESC LIMIT 1",
+            (code_cert,),
+        )
+        row = cur.fetchone()
+        return int(row[0]) if row else None
+    finally:
+        cur.close()
+
+
 def _parse_answer(raw: str) -> str:
     try:
         data = json.loads(raw)
@@ -470,6 +483,163 @@ def api_sync_code_cert():
             cur.close()
         except Exception:
             pass
+        conn.close()
+
+# -------------------- MCP API --------------------
+
+@pdf_bp.route("/api/mcp/import-local", methods=["POST"])
+def api_mcp_import_local():
+    """Import questions from local PDFs into a default or specified module."""
+
+    payload = request.get_json(silent=True) or {}
+    file_paths = payload.get("file_paths")
+    search_root = (payload.get("search_root") or "").strip()
+    module_id = payload.get("module_id")
+    cert_id = payload.get("cert_id")
+    code_cert = (payload.get("code_cert") or "").strip()
+
+    try:
+        module_id = int(module_id) if module_id is not None else None
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "module_id invalide"}), 400
+
+    if module_id is None and (cert_id is None and not code_cert):
+        return jsonify(
+            {
+                "status": "error",
+                "message": "module_id ou cert_id/code_cert requis",
+            }
+        ), 400
+
+    if file_paths is not None and not isinstance(file_paths, list):
+        return jsonify({"status": "error", "message": "file_paths doit être une liste"}), 400
+
+    conn = db_conn()
+    try:
+        if module_id is None:
+            if not code_cert:
+                try:
+                    cert_id = int(cert_id)
+                except (TypeError, ValueError):
+                    return jsonify(
+                        {"status": "error", "message": "cert_id invalide"}
+                    ), 400
+                cert = _fetch_certification(conn, cert_id)
+                if not cert:
+                    return jsonify(
+                        {"status": "error", "message": "Certification introuvable"}
+                    ), 404
+                code_cert = str(cert.get("code") or "").strip()
+            module_id = _fetch_default_module_id(conn, code_cert)
+
+        if module_id is None:
+            return jsonify(
+                {
+                    "status": "error",
+                    "message": "Domaine default introuvable (code_cert).",
+                }
+            ), 404
+
+        def normalize_path(raw_path: str) -> tuple[Path, bool]:
+            candidate = Path(raw_path)
+            if candidate.is_absolute():
+                return candidate.resolve(), True
+            return (PDF_SEARCH_ROOT / candidate).resolve(), False
+
+        def resolve_search_root() -> Path:
+            if not search_root:
+                return PDF_SEARCH_ROOT
+            resolved_root, is_absolute = normalize_path(search_root)
+            if not resolved_root.exists() or not resolved_root.is_dir():
+                raise FileNotFoundError(f"Répertoire introuvable: {search_root}")
+            if not is_absolute and not str(resolved_root).startswith(str(PDF_SEARCH_ROOT)):
+                raise ValueError(f"Chemin non autorisé: {search_root}")
+            return resolved_root
+
+        def collect_files() -> list[Path]:
+            if file_paths:
+                resolved_files: list[Path] = []
+                for raw_path in file_paths:
+                    if not isinstance(raw_path, str) or not raw_path.strip():
+                        continue
+                    resolved, is_absolute = normalize_path(raw_path.strip())
+                    if not resolved.exists() or not resolved.is_file():
+                        raise FileNotFoundError(f"Fichier introuvable: {raw_path}")
+                    if not is_absolute and not str(resolved).startswith(str(PDF_SEARCH_ROOT)):
+                        raise ValueError(f"Chemin non autorisé: {raw_path}")
+                    if resolved.suffix.lower() != ".pdf":
+                        raise ValueError(f"Extension invalide (PDF requis): {raw_path}")
+                    resolved_files.append(resolved)
+                return resolved_files
+
+            if not code_cert:
+                raise ValueError("code_cert requis pour la recherche automatique")
+
+            root_path = resolve_search_root()
+            pattern = f"{code_cert.lower()}________"
+            matches: list[Path] = []
+            for dirpath, _, files in os.walk(root_path):
+                for name in files:
+                    if not name.lower().endswith(".pdf"):
+                        continue
+                    lower_name = name.lower()
+                    if lower_name.startswith(pattern):
+                        matches.append(Path(dirpath) / name)
+                if len(matches) >= 200:
+                    break
+            if not matches:
+                raise FileNotFoundError(
+                    f"Aucun PDF trouvé pour code_cert {code_cert} dans {root_path}"
+                )
+            return matches
+
+        totals = {
+            "imported_questions": 0,
+            "skipped_questions": 0,
+            "imported_answers": 0,
+            "reused_answers": 0,
+            "files": [],
+        }
+
+        try:
+            resolved_files = collect_files()
+        except FileNotFoundError as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 404
+        except ValueError as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 400
+
+        for resolved in resolved_files:
+            text = extract_text_from_pdf(
+                str(resolved),
+                use_ocr=False,
+                skip_first_page=True,
+                header_ratio=0.10,
+                footer_ratio=0.10,
+            )
+            data = detect_questions(text, module_id)
+            filename = resolved.name
+            for q in data.get("questions", []):
+                q.setdefault("src_file", filename)
+            stats = db.insert_questions(module_id, data, "no")
+            totals["files"].append(
+                {
+                    "filename": filename,
+                    "imported_questions": stats.get("imported_questions", 0),
+                    "skipped_questions": stats.get("skipped_questions", 0),
+                }
+            )
+            for key in ("imported_questions", "skipped_questions", "imported_answers", "reused_answers"):
+                totals[key] += stats.get(key, 0)
+
+        return jsonify(
+            {
+                "status": "ok",
+                "module_id": module_id,
+                "files_count": len(resolved_files),
+                **totals,
+            }
+        )
+    finally:
         conn.close()
 
 # -------------------- UI --------------------
