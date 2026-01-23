@@ -615,6 +615,7 @@ def api_mcp_import_local():
                 skip_first_page=True,
                 header_ratio=0.10,
                 footer_ratio=0.10,
+                detect_visuals=True,
             )
             data = detect_questions(text, module_id)
             filename = resolved.name
@@ -699,6 +700,7 @@ def generate_questions_from_pdf():
         skip_first_page=True,
         header_ratio=0.10,
         footer_ratio=0.10,
+        detect_visuals=True,
     )
 
     if not text.strip():
@@ -955,7 +957,8 @@ def upload_pdf():
             use_ocr=False,
             skip_first_page=True,
             header_ratio=0.10,
-            footer_ratio=0.10
+            footer_ratio=0.10,
+            detect_visuals=True,
         )
         data = detect_questions(text, module_id)
         filename = os.path.basename(path)
