@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Client MCP · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 15% 10%, rgba(56,189,248,0.18), transparent 55%),
+                     radial-gradient(circle at 75% 20%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.2), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --glass-soft: rgba(15, 19, 32, 0.82);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb { position: fixed; width: 32rem; height: 32rem; border-radius: 50%; opacity: 0.45; pointer-events: none; mix-blend-mode: screen; background: radial-gradient(circle, rgba(71,245,192,0.32) 0%, rgba(4,7,17,0) 70%); animation: drift 22s ease-in-out infinite; z-index: 0; }
+    .orb-1 { top: -12rem; left: -6rem; }
+    .orb-2 { bottom: -12rem; right: -6rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.24) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift { 0%, 100% { transform: translate3d(0,0,0) scale(1); } 45% { transform: translate3d(40px, -30px, 0) scale(1.05); } 75% { transform: translate3d(-30px, 25px, 0) scale(0.95); } }
+
+    .stellar-header { position: sticky; top: 0; z-index: 20; background: rgba(4,7,17,0.72); backdrop-filter: saturate(180%) blur(18px); border-bottom: 1px solid rgba(148,163,184,0.18); }
+    .stellar-container { width: min(1200px, 92vw); margin: 0 auto; padding: 1.2rem 0 1.6rem; }
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 18px; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25)); border: 1px solid rgba(148, 163, 184, 0.2); color: var(--accent); font-weight: 600; letter-spacing: 0.05em; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28); }
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .stellar-main { flex: 1; width: min(1200px, 92vw); margin: 0 auto; padding: 3.4rem 0 4.5rem; display: flex; flex-direction: column; gap: 2rem; position: relative; z-index: 1; }
+
+    .glass-card { background: var(--glass); border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-strong); padding: clamp(1.6rem, 2.8vw, 2.4rem); backdrop-filter: blur(26px); position: relative; overflow: hidden; }
+    .glass-card::before { content: ''; position: absolute; inset: 1px; border-radius: calc(var(--radius-xl) - 2px); border: 1px solid rgba(148, 163, 184, 0.12); pointer-events: none; }
+
+    h1 { margin: 0 0 0.8rem; font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.1rem, 3.4vw, 2.7rem); }
+    h2 { margin: 0; font-family: 'Space Grotesk', sans-serif; }
+    p { margin: 0; color: var(--text-muted); line-height: 1.6; }
+    label { font-size: 0.9rem; color: var(--text-muted); display: block; margin-bottom: 0.4rem; }
+
+    .section-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+
+    .pill-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.6rem 1.2rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(71,245,192,0.16);
+      color: var(--text-primary);
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition);
+    }
+    .pill-button:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(56, 189, 248, 0.18); }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    .table th, .table td {
+      text-align: left;
+      padding: 0.65rem 0.85rem;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .table th { color: var(--text-muted); font-weight: 600; }
+
+    .grid { display: grid; gap: 1.2rem; }
+    .grid-2 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+
+    input, textarea, select {
+      width: 100%;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: var(--glass-soft);
+      color: var(--text-primary);
+      padding: 0.65rem 0.75rem;
+      font-family: inherit;
+      font-size: 0.9rem;
+    }
+    textarea { min-height: 120px; resize: vertical; }
+
+    .output {
+      background: rgba(15, 19, 32, 0.9);
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      padding: 1rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+      color: #d1fae5;
+    }
+
+    .helper { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.4rem; }
+    .empty-state { padding: 1rem; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <div class="brand-mark">EX</div>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Client MCP</span>
+          </div>
+        </div>
+      </div>
+      {% set active_page = 'mcp_client' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+  <main class="stellar-main">
+    <section class="glass-card">
+      <h1>Client MCP</h1>
+      <p>Préparez les paramètres MCP, exécutez des tools individuels ou lancez un plan complet (orchestrate + run) depuis l’interface.</p>
+    </section>
+
+    <section class="glass-card">
+      <div class="section-header">
+        <h2>Découverte des tools MCP</h2>
+        <button class="pill-button" id="refreshTools">Rafraîchir</button>
+      </div>
+      <div id="toolsTable"></div>
+    </section>
+
+    <section class="glass-card">
+      <div class="section-header">
+        <h2>Invocation d’un tool</h2>
+        <button class="pill-button" id="callTool">Exécuter</button>
+      </div>
+      <div class="grid grid-2">
+        <div>
+          <label for="toolSelect">Tool</label>
+          <select id="toolSelect"></select>
+          <div class="helper">Choisissez un tool MCP. Certains tools nécessitent un <code>cert_id</code> dans le payload.</div>
+        </div>
+        <div>
+          <label for="toolPayload">Payload (JSON)</label>
+          <textarea id="toolPayload">{}</textarea>
+        </div>
+      </div>
+      <div class="helper" id="toolError"></div>
+      <div class="output" id="toolOutput">Aucun appel pour l’instant.</div>
+    </section>
+
+    <section class="glass-card">
+      <div class="section-header">
+        <h2>Plan complet automatisé</h2>
+        <div>
+          <button class="pill-button" id="previewPlan">Générer le plan</button>
+          <button class="pill-button" id="runPlan">Exécuter le plan</button>
+        </div>
+      </div>
+      <div class="grid grid-3">
+        <div>
+          <label for="certId">cert_id (obligatoire)</label>
+          <input id="certId" type="number" placeholder="123">
+        </div>
+        <div>
+          <label for="providerId">provider_id</label>
+          <input id="providerId" type="number" placeholder="7">
+        </div>
+        <div>
+          <label for="codeCert">code_cert</label>
+          <input id="codeCert" type="text" placeholder="AZ-900">
+        </div>
+        <div>
+          <label for="sourceModuleId">source_module_id</label>
+          <input id="sourceModuleId" type="number" placeholder="42">
+        </div>
+        <div>
+          <label for="batchSize">batch_size</label>
+          <input id="batchSize" type="number" placeholder="10">
+        </div>
+        <div>
+          <label for="workers">workers</label>
+          <input id="workers" type="number" placeholder="4">
+        </div>
+        <div>
+          <label for="fixAction">fix_action</label>
+          <input id="fixAction" type="text" placeholder="assign">
+        </div>
+        <div>
+          <label for="blueprintMode">blueprint_mode</label>
+          <input id="blueprintMode" type="text" placeholder="missing">
+        </div>
+        <div>
+          <label for="searchRoot">search_root</label>
+          <input id="searchRoot" type="text" placeholder="/data/pdfs">
+        </div>
+      </div>
+      <div class="grid grid-2" style="margin-top: 1.2rem;">
+        <div>
+          <label for="filePaths">file_paths (JSON array)</label>
+          <textarea id="filePaths">[]</textarea>
+        </div>
+        <div>
+          <label for="blueprintModules">blueprint_module_ids (JSON array)</label>
+          <textarea id="blueprintModules">[]</textarea>
+        </div>
+      </div>
+      <div class="helper" id="planError"></div>
+      <div class="output" id="planOutput">Aucun plan généré.</div>
+      <div class="output" id="runOutput" style="margin-top: 1rem;">Aucune exécution pour l’instant.</div>
+    </section>
+  </main>
+
+  <script>
+    async function fetchJSON(url, options) {
+      const resp = await fetch(url, options);
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`${resp.status} ${resp.statusText} - ${text}`);
+      }
+      return resp.json();
+    }
+
+    function safeParse(text, fallback) {
+      if (!text || !text.trim()) {
+        return fallback;
+      }
+      return JSON.parse(text);
+    }
+
+    function renderTools(tools) {
+      if (!tools.length) {
+        document.getElementById('toolsTable').innerHTML = '<div class="empty-state">Aucun tool MCP exposé.</div>';
+        return;
+      }
+      const rows = tools.map(tool => `
+        <tr>
+          <td>${tool.name}</td>
+          <td>${tool.method}</td>
+          <td>${tool.endpoint}</td>
+        </tr>
+      `).join('');
+      document.getElementById('toolsTable').innerHTML = `
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Méthode</th>
+              <th>Endpoint</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    function fillToolSelect(tools) {
+      const select = document.getElementById('toolSelect');
+      select.innerHTML = '';
+      if (!tools.length) {
+        const opt = document.createElement('option');
+        opt.textContent = 'Aucun tool';
+        opt.value = '';
+        select.appendChild(opt);
+        return;
+      }
+      tools.forEach((tool) => {
+        const opt = document.createElement('option');
+        opt.value = tool.name;
+        opt.textContent = `${tool.name} (${tool.method})`;
+        select.appendChild(opt);
+      });
+    }
+
+    async function loadTools() {
+      try {
+        const data = await fetchJSON('/api/mcp/tools');
+        const tools = data.tools || [];
+        renderTools(tools);
+        fillToolSelect(tools);
+      } catch (err) {
+        document.getElementById('toolsTable').innerHTML = `<div class="empty-state">Erreur de chargement: ${err.message}</div>`;
+      }
+    }
+
+    function gatherPlanPayload() {
+      const payload = {
+        cert_id: Number(document.getElementById('certId').value || 0) || null,
+        provider_id: Number(document.getElementById('providerId').value || 0) || null,
+        code_cert: document.getElementById('codeCert').value.trim() || null,
+        source_module_id: Number(document.getElementById('sourceModuleId').value || 0) || null,
+        batch_size: Number(document.getElementById('batchSize').value || 0) || null,
+        workers: Number(document.getElementById('workers').value || 0) || null,
+        fix_action: document.getElementById('fixAction').value.trim() || null,
+        blueprint_mode: document.getElementById('blueprintMode').value.trim() || null,
+        search_root: document.getElementById('searchRoot').value.trim() || null,
+        file_paths: safeParse(document.getElementById('filePaths').value, null),
+        blueprint_module_ids: safeParse(document.getElementById('blueprintModules').value, null),
+      };
+
+      Object.keys(payload).forEach((key) => {
+        if (payload[key] === null || payload[key] === '' || payload[key] === undefined) {
+          delete payload[key];
+        }
+      });
+
+      return payload;
+    }
+
+    document.getElementById('refreshTools').addEventListener('click', loadTools);
+
+    document.getElementById('callTool').addEventListener('click', async () => {
+      const toolError = document.getElementById('toolError');
+      toolError.textContent = '';
+      const toolOutput = document.getElementById('toolOutput');
+      try {
+        const tool = document.getElementById('toolSelect').value;
+        if (!tool) {
+          throw new Error('Sélectionnez un tool.');
+        }
+        const payload = safeParse(document.getElementById('toolPayload').value, {});
+        const data = await fetchJSON('/api/mcp/call', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool, payload }),
+        });
+        toolOutput.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        toolError.textContent = err.message;
+        toolOutput.textContent = 'Erreur pendant l’appel.';
+      }
+    });
+
+    document.getElementById('previewPlan').addEventListener('click', async () => {
+      const planError = document.getElementById('planError');
+      planError.textContent = '';
+      const planOutput = document.getElementById('planOutput');
+      try {
+        const payload = gatherPlanPayload();
+        const data = await fetchJSON('/api/mcp/orchestrate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        planOutput.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        planError.textContent = err.message;
+        planOutput.textContent = 'Impossible de générer le plan.';
+      }
+    });
+
+    document.getElementById('runPlan').addEventListener('click', async () => {
+      const planError = document.getElementById('planError');
+      planError.textContent = '';
+      const runOutput = document.getElementById('runOutput');
+      try {
+        const payload = gatherPlanPayload();
+        const data = await fetchJSON('/api/mcp/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        runOutput.textContent = `status: ${data.status || 'ok'}\n` + JSON.stringify(data, null, 2);
+      } catch (err) {
+        planError.textContent = err.message;
+        runOutput.textContent = 'Erreur pendant l’exécution du plan.';
+      }
+    });
+
+    loadTools();
+  </script>
+</body>
+</html>

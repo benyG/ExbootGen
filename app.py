@@ -2060,6 +2060,11 @@ def mcp_monitoring():
     return render_template("mcp.html")
 
 
+@app.route("/mcp/client")
+def mcp_client():
+    return render_template("mcp_client.html")
+
+
 @app.route("/api/mcp/unpublished-certifications")
 def mcp_unpublished_certifications():
     """Return unpublished certifications with default domain metrics for MCP."""
