@@ -1,0 +1,1601 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Article Certification · ExBoot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #040711;
+      --glass: rgba(14, 19, 33, 0.72);
+      --glass-strong: rgba(18, 24, 42, 0.86);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --radius-lg: 22px;
+      --radius-md: 16px;
+      --shadow: 0 18px 40px rgba(7, 12, 24, 0.45);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 12% 18%, rgba(124,247,255,0.15), transparent 55%),
+                  radial-gradient(circle at 85% 20%, rgba(244,114,182,0.18), transparent 60%),
+                  radial-gradient(circle at 40% 80%, rgba(71,245,192,0.18), transparent 65%),
+                  var(--bg);
+      color: var(--text-primary);
+      padding: 2.5rem clamp(1.2rem, 4vw, 3rem);
+      display: flex;
+      justify-content: center;
+    }
+
+    main {
+      width: min(1100px, 100%);
+      display: grid;
+      gap: 1.8rem;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.4rem 1.8rem;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px) saturate(160%);
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+
+    header a {
+      color: var(--accent-strong);
+      text-decoration: none;
+      font-weight: 500;
+      border: 1px solid rgba(124, 247, 255, 0.25);
+      padding: 0.5rem 1.1rem;
+      border-radius: 999px;
+      transition: background 0.3s ease, transform 0.3s ease;
+    }
+
+    header a:hover {
+      background: rgba(124, 247, 255, 0.08);
+      transform: translateY(-2px);
+    }
+
+    section {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: clamp(1.3rem, 3vw, 2rem);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px) saturate(150%);
+    }
+
+    .grid-two {
+      display: grid;
+      gap: 1.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .field-group .sub-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+
+    label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 0.6rem;
+      color: var(--text-muted);
+    }
+
+    input[type="search"],
+    select,
+    input[type="url"],
+    textarea {
+      width: 100%;
+      background: rgba(12, 17, 31, 0.86);
+      color: var(--text-primary);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: var(--radius-md);
+      padding: 0.75rem 1rem;
+      font-size: 0.95rem;
+      transition: border 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: rgba(71, 245, 192, 0.6);
+      box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.15);
+    }
+
+    select {
+      appearance: none;
+      background-image: url('data:image/svg+xml;utf8,<svg fill="white" height="14" viewBox="0 0 24 24" width="14" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+      background-repeat: no-repeat;
+      background-position: right 0.8rem center;
+      background-size: 0.8rem;
+      padding-right: 2.5rem;
+    }
+
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+      margin-top: 1.4rem;
+    }
+
+    .primary-actions,
+    .secondary-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.8rem;
+      align-items: center;
+    }
+
+    .secondary-actions {
+      justify-content: space-between;
+    }
+
+    .secondary-actions .image-toggle {
+      margin-left: auto;
+    }
+
+    .image-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      padding-left: 0.2rem;
+    }
+
+    .image-toggle input[type="checkbox"] {
+      width: 1.05rem;
+      height: 1.05rem;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 999px;
+      padding: 0.75rem 1.6rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      transition: transform 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease;
+    }
+
+    button.primary {
+      background: linear-gradient(135deg, rgba(71,245,192,0.85), rgba(124,247,255,0.9));
+      color: #041221;
+      box-shadow: 0 12px 30px rgba(124, 247, 255, 0.18);
+    }
+
+    button.primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    button.secondary {
+      background: rgba(17, 24, 39, 0.75);
+      color: var(--text-primary);
+      border: 1px solid rgba(124,247,255,0.25);
+    }
+
+    button.playbook {
+      background: rgba(10, 14, 28, 0.92);
+      color: var(--text-primary);
+      border: 1px solid rgba(124, 247, 255, 0.28);
+      box-shadow: 0 12px 30px rgba(4, 12, 24, 0.4);
+    }
+
+    .button-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .generate-exam-btn {
+      align-self: flex-start;
+      margin-top: 0.2rem;
+      padding-inline: 1.3rem;
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-2px);
+    }
+
+    button.is-loading {
+      position: relative;
+      pointer-events: none;
+    }
+
+    button.is-loading::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 18px;
+      height: 18px;
+      margin: -9px 0 0 -9px;
+      border-radius: 999px;
+      border: 3px solid rgba(12, 17, 31, 0.25);
+      border-top-color: rgba(12, 17, 31, 0.85);
+      animation: spin 0.9s linear infinite;
+    }
+
+    button.is-loading.primary::after,
+    button.is-loading.playbook::after {
+      border-color: rgba(255, 255, 255, 0.22);
+      border-top-color: rgba(255, 255, 255, 0.88);
+    }
+
+    @keyframes spin {
+      from {
+        transform: rotate(0turn);
+      }
+      to {
+        transform: rotate(1turn);
+      }
+    }
+
+    .status {
+      margin-top: 0.8rem;
+      min-height: 1.2rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .progress-container {
+      margin-top: 1rem;
+      padding: 0.9rem 1.1rem;
+      background: rgba(12, 17, 31, 0.72);
+      border: 1px solid rgba(124, 247, 255, 0.2);
+      border-radius: var(--radius-md);
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      transition: opacity 0.35s ease;
+    }
+
+    .progress-container[hidden] {
+      display: none;
+    }
+
+    .progress-label {
+      font-size: 0.85rem;
+      letter-spacing: 0.02em;
+      color: var(--text-muted);
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 8px;
+      background: rgba(148, 163, 184, 0.16);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(135deg, rgba(71, 245, 192, 0.9), rgba(124, 247, 255, 0.95));
+      border-radius: inherit;
+      transition: width 0.4s ease;
+    }
+
+    .progress-bar.is-error {
+      background: linear-gradient(135deg, rgba(248, 113, 113, 0.9), rgba(244, 114, 182, 0.95));
+    }
+
+    .playbook-steps {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .playbook-step {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .playbook-step::before {
+      content: '•';
+      color: rgba(124, 247, 255, 0.75);
+      font-size: 0.8rem;
+    }
+
+    .playbook-step.is-success::before {
+      content: '✔';
+      color: rgba(124, 247, 255, 0.95);
+    }
+
+    .playbook-step.is-error {
+      color: #f87171;
+    }
+
+    .playbook-step.is-error::before {
+      content: '✖';
+      color: #f87171;
+    }
+
+    .article-output {
+      background: var(--glass-strong);
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(124, 247, 255, 0.2);
+      padding: 1.5rem;
+      white-space: pre-wrap;
+      line-height: 1.65;
+      max-height: 540px;
+      overflow-y: auto;
+    }
+
+    .json-output {
+      background: var(--glass-strong);
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(124, 247, 255, 0.2);
+      padding: 1.2rem 1.4rem;
+      white-space: pre-wrap;
+      font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', monospace;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      max-height: 360px;
+      overflow-y: auto;
+    }
+
+    .social-output {
+      display: grid;
+      gap: 1.3rem;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+
+    .social-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+    }
+
+    .social-output h3 {
+      margin: 0 0 0.6rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--accent-strong);
+    }
+
+    .social-block {
+      background: rgba(12, 17, 31, 0.86);
+      border: 1px solid rgba(124, 247, 255, 0.18);
+      border-radius: var(--radius-md);
+      padding: 1.1rem 1.2rem;
+      min-height: 160px;
+      white-space: pre-wrap;
+      line-height: 1.55;
+    }
+
+    .block-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+    }
+
+    .block-actions button {
+      min-width: 140px;
+    }
+
+    .article-output h2,
+    .article-output h3 {
+      color: var(--accent-strong);
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: 1.8rem 1.1rem;
+      }
+
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.8rem;
+      }
+
+      header a {
+        align-self: flex-end;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Article de certification piloté par IA</h1>
+        <p style="margin:0;color:var(--text-muted);max-width:38rem">Composez un article complet en sélectionnant un provider, une certification et, si disponible, le lien du test partagé Examboot. Si le lien est vide, il sera généré automatiquement avant la rédaction et la publication.</p>
+      </div>
+      <a href="{{ url_for('home') }}">← Retour</a>
+    </header>
+
+    <section>
+      <h2 style="margin-top:0;margin-bottom:1.5rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">1. Sélectionnez la certification</h2>
+      <div class="grid-two">
+        <div class="field-group">
+          <label for="providerSelect">Providers disponibles</label>
+          <label class="sub-label" for="providerSearch">Recherche provider</label>
+          <input type="search" id="providerSearch" placeholder="Rechercher un provider" autocomplete="off">
+          <select id="providerSelect">
+            <option value="">Choisir un provider…</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label for="certSelect">Certifications shortlistées</label>
+          <label class="sub-label" for="certSearch">Recherche certification</label>
+          <input type="search" id="certSearch" placeholder="Rechercher une certification" autocomplete="off" disabled>
+          <select id="certSelect" disabled>
+            <option value="">Choisir une certification…</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label for="topicTypeSelect">Type de sujet</label>
+          <select id="topicTypeSelect">
+            <option value="">Choisir un type de sujet…</option>
+            {% for topic in topic_types %}
+            <option value="{{ topic.value }}">{{ topic.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field-group">
+          <label for="examUrl">Lien du test partagé Examboot</label>
+          <input type="url" id="examUrl" placeholder="http://examboot.net" autocomplete="off">
+          <button type="button" class="secondary generate-exam-btn" id="generateExamBtn">Générer un test Examboot</button>
+        </div>
+      </div>
+      <div class="actions">
+        <div class="primary-actions">
+          <button class="primary" id="generateArticleBtn">Générer l'article</button>
+          <button class="secondary" id="generateTweetBtn">Générer le tweet</button>
+          <button class="secondary" id="generateLinkedinBtn">Générer le post LinkedIn</button>
+        </div>
+        <div class="secondary-actions">
+          <button class="playbook" id="runPlaybookBtn" disabled>Run playbook</button>
+          <label class="image-toggle">
+            <input type="checkbox" id="addImageCheckbox" checked>
+            <span>Ajouter une image</span>
+          </label>
+        </div>
+      </div>
+      <div class="status" id="statusArea"></div>
+      <div class="progress-container" id="playbookProgress" hidden>
+        <div class="progress-label" id="playbookProgressLabel">Préparation du playbook…</div>
+        <div class="progress-track">
+          <div
+            class="progress-bar"
+            id="playbookProgressBar"
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+          ></div>
+        </div>
+        <ul class="playbook-steps" id="playbookSteps" hidden></ul>
+      </div>
+    </section>
+
+    <section>
+      <h2 style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">2. Article généré</h2>
+      <div class="article-output" id="articleOutput">L'article généré apparaîtra ici après soumission du formulaire.</div>
+      <div class="block-actions">
+        <button class="secondary" id="publishArticleBtn" disabled>Publier</button>
+      </div>
+    </section>
+
+    <section id="courseArtSection" hidden>
+      <h2 id="courseArtHeading" style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">3. Fiche certification (type présentation uniquement)</h2>
+      <pre class="json-output" id="courseArtOutput">La fiche certification générée apparaîtra ici lorsque le type « présentation de certification » est sélectionné.</pre>
+      <div class="block-actions">
+        <button class="secondary" id="generateCourseArtBtn" disabled>Générer la fiche</button>
+        <button class="secondary" id="publishCourseArtBtn" disabled>Publier la fiche</button>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="socialHeading" style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">3. Annonces sociales</h2>
+      <div class="social-output">
+        <div class="social-item">
+          <h3>Tweet</h3>
+          <div class="social-block" id="tweetOutput">Le tweet généré apparaîtra ici après l'action correspondante.</div>
+          <div class="block-actions">
+            <button class="secondary" id="publishTweetBtn" disabled>Publier</button>
+          </div>
+        </div>
+        <div class="social-item">
+          <h3>Post LinkedIn</h3>
+          <div class="social-block" id="linkedinOutput">Le post LinkedIn généré apparaîtra ici après l'action correspondante.</div>
+          <div class="block-actions">
+            <button class="secondary" id="publishLinkedinBtn" disabled>Publier</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">4. Carrousel LinkedIn</h2>
+      <div class="grid-two">
+        <div class="field-group">
+          <label for="carouselSubject">Sujet</label>
+          <input type="search" id="carouselSubject" placeholder="Ex. Accélérer la prise de décision B2B" autocomplete="off">
+        </div>
+        <div class="field-group">
+          <label for="carouselQuestion">Question à adresser</label>
+          <textarea id="carouselQuestion" rows="4" placeholder="Ex. Comment aligner marketing et sales pour réduire le cycle de vente ?" autocomplete="off"></textarea>
+        </div>
+      </div>
+      <div class="actions">
+        <div class="primary-actions">
+          <button class="primary" id="generateCarouselBtn">Générer le carrousel</button>
+          <a class="secondary button-link" id="carouselDownloadLink" href="#" target="_blank" rel="noopener" hidden>Télécharger le PDF</a>
+        </div>
+      </div>
+      <div class="status" id="carouselStatus"></div>
+      <pre class="json-output" id="carouselJsonOutput">Le contenu du carrousel apparaîtra ici après génération.</pre>
+    </section>
+  </main>
+
+  <script>
+    const COURSE_ART_TOPIC = 'certification_presentation';
+
+    const DEFAULT_EXAM_URL = 'http://examboot.net';
+    const SELECTION_REQUIRED_MESSAGE = 'Veuillez sélectionner un provider, une certification et un type de sujet.';
+
+    const providerSearch = document.getElementById('providerSearch');
+    const providerSelect = document.getElementById('providerSelect');
+    const certSearch = document.getElementById('certSearch');
+    const certSelect = document.getElementById('certSelect');
+    const examUrlInput = document.getElementById('examUrl');
+    const topicTypeSelect = document.getElementById('topicTypeSelect');
+    const statusArea = document.getElementById('statusArea');
+    const playbookProgressContainer = document.getElementById('playbookProgress');
+    const playbookProgressBar = document.getElementById('playbookProgressBar');
+    const playbookProgressLabel = document.getElementById('playbookProgressLabel');
+    const playbookStepsList = document.getElementById('playbookSteps');
+    const generateArticleBtn = document.getElementById('generateArticleBtn');
+    const generateTweetBtn = document.getElementById('generateTweetBtn');
+    const generateLinkedinBtn = document.getElementById('generateLinkedinBtn');
+    const runPlaybookBtn = document.getElementById('runPlaybookBtn');
+    const generateExamBtn = document.getElementById('generateExamBtn');
+    const publishArticleBtn = document.getElementById('publishArticleBtn');
+    const publishTweetBtn = document.getElementById('publishTweetBtn');
+    const publishLinkedinBtn = document.getElementById('publishLinkedinBtn');
+    const articleOutput = document.getElementById('articleOutput');
+    const courseArtSection = document.getElementById('courseArtSection');
+    const socialHeading = document.getElementById('socialHeading');
+    const courseArtOutput = document.getElementById('courseArtOutput');
+    const generateCourseArtBtn = document.getElementById('generateCourseArtBtn');
+    const publishCourseArtBtn = document.getElementById('publishCourseArtBtn');
+    const tweetOutput = document.getElementById('tweetOutput');
+    const linkedinOutput = document.getElementById('linkedinOutput');
+    const addImageCheckbox = document.getElementById('addImageCheckbox');
+    const carouselSubjectInput = document.getElementById('carouselSubject');
+    const carouselQuestionInput = document.getElementById('carouselQuestion');
+    const generateCarouselBtn = document.getElementById('generateCarouselBtn');
+    const carouselDownloadLink = document.getElementById('carouselDownloadLink');
+    const carouselJsonOutput = document.getElementById('carouselJsonOutput');
+    const carouselStatus = document.getElementById('carouselStatus');
+
+    let providers = [];
+    let certifications = [];
+    let isLoading = false;
+
+    const DEFAULT_ARTICLE_TEXT = articleOutput.textContent;
+    const DEFAULT_COURSE_ART_TEXT = courseArtOutput.textContent;
+    const DEFAULT_TWEET_TEXT = tweetOutput.textContent;
+    const DEFAULT_LINKEDIN_TEXT = linkedinOutput.textContent;
+    const DEFAULT_CAROUSEL_TEXT = carouselJsonOutput.textContent;
+
+    let currentArticle = '';
+    let currentCourseArt = null;
+    let currentTweetDraft = '';
+    let currentLinkedinDraft = '';
+    let currentBlogId = null;
+    let loadingButton = null;
+    let currentCarousel = null;
+    let currentCarouselPdfUrl = '';
+
+    const PLAYBOOK_PROGRESS_STEPS = [
+      { label: 'Création du test Examboot…', target: 15 },
+      { label: 'Génération de l’article…', target: 40 },
+      { label: 'Création des annonces sociales…', target: 65 },
+      { label: 'Publication et sauvegarde…', target: 85 },
+      { label: 'Finalisation…', target: 98 }
+    ];
+
+    const playbookProgressState = {
+      value: 0,
+      timer: null,
+      hideTimeout: null
+    };
+
+    function clearPlaybookProgressTimers() {
+      if (playbookProgressState.timer) {
+        clearInterval(playbookProgressState.timer);
+        playbookProgressState.timer = null;
+      }
+      if (playbookProgressState.hideTimeout) {
+        clearTimeout(playbookProgressState.hideTimeout);
+        playbookProgressState.hideTimeout = null;
+      }
+    }
+
+    function setPlaybookProgressValue(value) {
+      playbookProgressState.value = Math.max(0, Math.min(100, value));
+      playbookProgressBar.style.width = `${playbookProgressState.value}%`;
+      playbookProgressBar.setAttribute('aria-valuenow', String(Math.round(playbookProgressState.value)));
+    }
+
+    function startPlaybookProgress() {
+      clearPlaybookProgressTimers();
+      playbookProgressBar.classList.remove('is-error');
+      setPlaybookProgressValue(0);
+      playbookProgressContainer.hidden = false;
+      if (playbookStepsList) {
+        playbookStepsList.hidden = true;
+        playbookStepsList.innerHTML = '';
+      }
+
+      let stepIndex = 0;
+      let targetValue = PLAYBOOK_PROGRESS_STEPS[stepIndex].target;
+      playbookProgressLabel.textContent = PLAYBOOK_PROGRESS_STEPS[stepIndex].label;
+
+      playbookProgressState.timer = setInterval(() => {
+        if (playbookProgressState.value < targetValue) {
+          setPlaybookProgressValue(playbookProgressState.value + 1);
+          return;
+        }
+
+        if (stepIndex < PLAYBOOK_PROGRESS_STEPS.length - 1) {
+          stepIndex += 1;
+          targetValue = PLAYBOOK_PROGRESS_STEPS[stepIndex].target;
+          playbookProgressLabel.textContent = PLAYBOOK_PROGRESS_STEPS[stepIndex].label;
+          return;
+        }
+
+        if (playbookProgressState.value < 98) {
+          setPlaybookProgressValue(playbookProgressState.value + 1);
+        }
+      }, 250);
+    }
+
+    function completePlaybookProgress(message = 'Playbook terminé') {
+      clearPlaybookProgressTimers();
+      setPlaybookProgressValue(100);
+      playbookProgressLabel.textContent = message;
+      playbookProgressState.hideTimeout = setTimeout(() => {
+        playbookProgressContainer.hidden = true;
+      }, 1800);
+    }
+
+    function failPlaybookProgress(message = 'Erreur lors de l’exécution du playbook') {
+      clearPlaybookProgressTimers();
+      playbookProgressBar.classList.add('is-error');
+      setPlaybookProgressValue(Math.max(playbookProgressState.value, 100));
+      playbookProgressLabel.textContent = message;
+    }
+
+    function renderPlaybookSteps(steps) {
+      if (!playbookStepsList) {
+        return;
+      }
+
+      playbookStepsList.innerHTML = '';
+
+      if (!Array.isArray(steps) || steps.length === 0) {
+        playbookStepsList.hidden = true;
+        return;
+      }
+
+      steps.forEach(step => {
+        const item = document.createElement('li');
+        item.classList.add('playbook-step');
+        if (step && step.success) {
+          item.classList.add('is-success');
+        } else {
+          item.classList.add('is-error');
+        }
+        let message = '';
+        if (step && step.message) {
+          message = step.message;
+        } else if (step && step.label) {
+          message = step.label;
+        }
+        item.textContent = message;
+        playbookStepsList.appendChild(item);
+      });
+
+      playbookStepsList.hidden = false;
+    }
+
+    publishArticleBtn.disabled = true;
+    generateCourseArtBtn.disabled = true;
+    publishCourseArtBtn.disabled = true;
+
+    function updateCourseArtSection() {
+      const isCourseArtTopic = topicTypeSelect.value === COURSE_ART_TOPIC;
+      courseArtSection.hidden = !isCourseArtTopic;
+      socialHeading.textContent = isCourseArtTopic ? '4. Annonces sociales' : '3. Annonces sociales';
+      if (!isCourseArtTopic) {
+        currentCourseArt = null;
+        courseArtOutput.textContent = DEFAULT_COURSE_ART_TEXT;
+      }
+    }
+
+    function renderSocialBlock(element, text, published, statusCode, error, emptyMessage, imageName) {
+      const hasText = Boolean(text && text.trim());
+      if (!hasText) {
+        if (error) {
+          element.textContent = `${emptyMessage}\n\nErreur : ${error}`;
+        } else {
+          element.textContent = emptyMessage;
+        }
+        return;
+      }
+
+      const displayText = text.trim();
+      const metadata = [];
+      if (imageName) {
+        metadata.push(`Image : ${imageName}`);
+      }
+
+      let statusText = published ? 'Statut : Publié ✅' : 'Statut : Non publié';
+      if (typeof statusCode === 'number' && statusCode !== 200) {
+        statusText += ` (${statusCode})`;
+      }
+      if (!published && error) {
+        statusText += ` – ${error}`;
+      }
+      metadata.push(statusText);
+
+      element.textContent = `${displayText}\n\n${metadata.join('\n')}`;
+    }
+
+    function getSelectionPayload() {
+      const providerId = providerSelect.value;
+      const certificationId = certSelect.value;
+      const examUrl = examUrlInput.value.trim();
+      const topicType = topicTypeSelect.value;
+
+      if (!providerId || !certificationId || !topicType) {
+        return null;
+      }
+
+      return {
+        provider_id: providerId,
+        certification_id: certificationId,
+        exam_url: examUrl,
+        topic_type: topicType
+      };
+    }
+
+    function getSelectionIdentifiers() {
+      const providerId = providerSelect.value;
+      const certificationId = certSelect.value;
+
+      if (!providerId || !certificationId) {
+        return null;
+      }
+
+      return {
+        provider_id: providerId,
+        certification_id: certificationId
+      };
+    }
+
+    function updateActionAvailability() {
+      if (isLoading) {
+        return;
+      }
+      const hasSelection = Boolean(getSelectionPayload());
+      const hasCertificationSelection = Boolean(getSelectionIdentifiers());
+      generateArticleBtn.disabled = !hasSelection;
+      generateTweetBtn.disabled = !hasSelection;
+      generateLinkedinBtn.disabled = !hasSelection;
+      runPlaybookBtn.disabled = !hasSelection;
+      generateExamBtn.disabled = !hasCertificationSelection;
+      publishArticleBtn.disabled = !hasSelection || !currentArticle || Boolean(currentBlogId);
+      const isCourseArtTopic = hasSelection && topicTypeSelect.value === COURSE_ART_TOPIC;
+      generateCourseArtBtn.disabled = !isCourseArtTopic;
+      publishCourseArtBtn.disabled = !isCourseArtTopic || !currentCourseArt;
+      publishTweetBtn.disabled = !hasSelection || !currentTweetDraft;
+      publishLinkedinBtn.disabled = !hasSelection || !currentLinkedinDraft;
+      updateCarouselAvailability();
+    }
+
+    function updateCarouselAvailability() {
+      const hasCarouselInput = Boolean(
+        carouselSubjectInput.value.trim() && carouselQuestionInput.value.trim()
+      );
+      generateCarouselBtn.disabled = !hasCarouselInput;
+    }
+
+    async function fetchProviders() {
+      try {
+        const response = await fetch('/quest/api/providers');
+        if (!response.ok) throw new Error('Impossible de récupérer les providers');
+        providers = await response.json();
+        renderProviders(providers);
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    }
+
+    function resetGeneratedContent() {
+      if (isLoading) {
+        return;
+      }
+      currentArticle = '';
+      currentCourseArt = null;
+      currentTweetDraft = '';
+      currentLinkedinDraft = '';
+      currentBlogId = null;
+      articleOutput.textContent = DEFAULT_ARTICLE_TEXT;
+      courseArtOutput.textContent = DEFAULT_COURSE_ART_TEXT;
+      tweetOutput.textContent = DEFAULT_TWEET_TEXT;
+      linkedinOutput.textContent = DEFAULT_LINKEDIN_TEXT;
+      carouselJsonOutput.textContent = DEFAULT_CAROUSEL_TEXT;
+      carouselDownloadLink.hidden = true;
+      carouselDownloadLink.href = '#';
+      carouselStatus.textContent = '';
+      currentCarousel = null;
+      currentCarouselPdfUrl = '';
+      updateCourseArtSection();
+      updateActionAvailability();
+    }
+
+    function renderProviders(list) {
+      providerSelect.innerHTML = '<option value="">Choisir un provider…</option>';
+      list.forEach(provider => {
+        const option = document.createElement('option');
+        option.value = provider.id;
+        option.textContent = provider.name;
+        providerSelect.appendChild(option);
+      });
+      updateActionAvailability();
+    }
+
+    function renderCertifications(list) {
+      certSelect.innerHTML = '<option value="">Choisir une certification…</option>';
+      list.forEach(cert => {
+        const option = document.createElement('option');
+        option.value = cert.id;
+        option.textContent = cert.name;
+        certSelect.appendChild(option);
+      });
+      updateActionAvailability();
+    }
+
+    providerSearch.addEventListener('input', () => {
+      const query = providerSearch.value.toLowerCase();
+      const filtered = providers.filter(provider => provider.name.toLowerCase().includes(query));
+      renderProviders(filtered);
+    });
+
+    providerSelect.addEventListener('change', async () => {
+      const providerId = providerSelect.value;
+      resetGeneratedContent();
+      certSearch.value = '';
+      certifications = [];
+      certSelect.disabled = !providerId;
+      certSearch.disabled = !providerId;
+      renderCertifications([]);
+      updateActionAvailability();
+      if (!providerId) {
+        return;
+      }
+      try {
+        setStatus('Chargement des certifications…');
+        const response = await fetch(`/quest/api/certifications/${providerId}`);
+        if (!response.ok) throw new Error('Erreur lors de la récupération des certifications');
+        certifications = await response.json();
+        renderCertifications(certifications);
+        setStatus('');
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+      updateActionAvailability();
+    });
+
+    certSearch.addEventListener('input', () => {
+      const query = certSearch.value.toLowerCase();
+      const filtered = certifications.filter(cert => cert.name.toLowerCase().includes(query));
+      renderCertifications(filtered);
+    });
+
+    certSelect.addEventListener('change', () => {
+      resetGeneratedContent();
+      updateActionAvailability();
+    });
+    examUrlInput.addEventListener('input', updateActionAvailability);
+    examUrlInput.addEventListener('change', resetGeneratedContent);
+    topicTypeSelect.addEventListener('change', () => {
+      resetGeneratedContent();
+      updateCourseArtSection();
+      updateActionAvailability();
+    });
+    carouselSubjectInput.addEventListener('input', updateCarouselAvailability);
+    carouselQuestionInput.addEventListener('input', updateCarouselAvailability);
+
+    generateExamBtn.addEventListener('click', async () => {
+      const identifiers = getSelectionIdentifiers();
+      if (!identifiers) {
+        setStatus('Veuillez sélectionner un provider et une certification avant de générer un test.', true);
+        return;
+      }
+
+      try {
+        toggleLoading(true, generateExamBtn);
+        setStatus('Génération du test Examboot en cours…');
+        const response = await fetch('/articles/generate-exam-test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(identifiers)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la génération du test Examboot');
+        }
+        if (!payload.url) {
+          throw new Error('URL du test Examboot introuvable.');
+        }
+
+        examUrlInput.value = payload.url;
+        examUrlInput.dispatchEvent(new Event('change'));
+        setStatus('Test Examboot généré avec succès.');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(message, true);
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    generateArticleBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+
+      if (!selection) {
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
+        return;
+      }
+
+      currentBlogId = null;
+      try {
+        toggleLoading(true, generateArticleBtn);
+        setStatus('Génération de l\'article en cours…');
+        const response = await fetch('/articles/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selection)
+        });
+        const payload = await response.json();
+        if (response.status === 409) {
+          currentBlogId = payload.blog_id || currentBlogId;
+          setStatus(payload.error || 'Un article de présentation existe déjà pour cette certification.', false);
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur inconnue lors de la génération');
+        }
+        currentBlogId = null;
+        currentArticle = payload.article || '';
+        articleOutput.textContent = currentArticle || 'Aucun contenu généré.';
+        setStatus('Article généré avec succès.');
+        updateExamUrlIfPresent(payload);
+
+      } catch (error) {
+        setStatus(error.message, true);
+        currentArticle = '';
+        articleOutput.textContent = 'L\'article n\'a pas pu être généré.';
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    publishArticleBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+
+      if (!selection) {
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
+        return;
+      }
+
+      if (!currentArticle || !currentArticle.trim()) {
+        setStatus('Aucun article à publier. Générez un article avant la publication.', true);
+        return;
+      }
+
+      try {
+        toggleLoading(true, publishArticleBtn);
+        setStatus("Publication de l'article en cours…");
+        const response = await fetch('/articles/publish-article', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...selection, article: currentArticle })
+        });
+        const payload = await response.json();
+        if (response.status === 409) {
+          currentBlogId = payload.blog_id || null;
+          setStatus(payload.error || 'Un article de présentation existe déjà pour cette certification.', false);
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(payload.error || "Erreur lors de la publication de l'article");
+        }
+        currentBlogId = payload.blog_id || null;
+        setStatus(`Article publié avec succès (ID ${payload.blog_id}).`);
+        updateExamUrlIfPresent(payload);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(message, true);
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    generateTweetBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+
+      if (!selection) {
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
+        return;
+      }
+
+      try {
+        toggleLoading(true, generateTweetBtn);
+        setStatus('Génération du tweet en cours…');
+        const response = await fetch('/articles/generate-tweet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selection)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la génération du tweet');
+        }
+        currentTweetDraft = payload.tweet || '';
+        renderSocialBlock(
+          tweetOutput,
+          currentTweetDraft,
+          false,
+          null,
+          null,
+          'Aucun tweet généré.',
+          null
+        );
+        setStatus('Tweet généré avec succès.');
+        updateExamUrlIfPresent(payload);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        currentTweetDraft = '';
+        renderSocialBlock(
+          tweetOutput,
+          '',
+          false,
+          null,
+          message,
+          'Aucun tweet généré.',
+          null
+        );
+        setStatus(message, true);
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    generateLinkedinBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+
+      if (!selection) {
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
+        return;
+      }
+
+      try {
+        toggleLoading(true, generateLinkedinBtn);
+        setStatus('Génération du post LinkedIn en cours…');
+        const response = await fetch('/articles/generate-linkedin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selection)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la génération du post LinkedIn');
+        }
+        currentLinkedinDraft = payload.linkedin_post || '';
+        renderSocialBlock(
+          linkedinOutput,
+          currentLinkedinDraft,
+          false,
+          null,
+          null,
+          'Aucun post LinkedIn généré.',
+          null
+        );
+        setStatus('Post LinkedIn généré avec succès.');
+        updateExamUrlIfPresent(payload);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        currentLinkedinDraft = '';
+        renderSocialBlock(
+          linkedinOutput,
+          '',
+          false,
+          null,
+          message,
+          'Aucun post LinkedIn généré.',
+          null
+        );
+        setStatus(message, true);
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    generateCarouselBtn.addEventListener('click', async () => {
+      const subject = carouselSubjectInput.value.trim();
+      const question = carouselQuestionInput.value.trim();
+
+      if (!subject || !question) {
+        carouselStatus.textContent = 'Veuillez renseigner un sujet et une question.';
+        carouselStatus.style.color = '#f87171';
+        return;
+      }
+
+      try {
+        toggleLoading(true, generateCarouselBtn);
+        carouselStatus.textContent = 'Génération du carrousel en cours…';
+        carouselStatus.style.color = 'var(--text-muted)';
+        const response = await fetch('/articles/generate-carousel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subject, question })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la génération du carrousel.');
+        }
+        currentCarousel = payload.carousel || null;
+        currentCarouselPdfUrl = payload.pdf_url || '';
+        carouselJsonOutput.textContent = currentCarousel
+          ? JSON.stringify(currentCarousel, null, 2)
+          : DEFAULT_CAROUSEL_TEXT;
+        if (currentCarouselPdfUrl) {
+          carouselDownloadLink.href = currentCarouselPdfUrl;
+          carouselDownloadLink.hidden = false;
+        } else {
+          carouselDownloadLink.hidden = true;
+        }
+        carouselStatus.textContent = 'Carrousel généré avec succès.';
+        carouselStatus.style.color = 'var(--text-muted)';
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        carouselJsonOutput.textContent = `${DEFAULT_CAROUSEL_TEXT}\n\nErreur : ${message}`;
+        carouselDownloadLink.hidden = true;
+        carouselStatus.textContent = message;
+        carouselStatus.style.color = '#f87171';
+        currentCarousel = null;
+        currentCarouselPdfUrl = '';
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    generateCourseArtBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+
+      if (!selection) {
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
+        return;
+      }
+
+      if (topicTypeSelect.value !== COURSE_ART_TOPIC) {
+        setStatus('La fiche certification est uniquement disponible pour le type présentation.', true);
+        return;
+      }
+
+      try {
+        toggleLoading(true, generateCourseArtBtn);
+        setStatus('Génération de la fiche certification en cours…');
+        const response = await fetch('/articles/generate-course-art', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selection)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la génération de la fiche certification');
+        }
+        currentCourseArt = payload.course_art || null;
+        if (currentCourseArt) {
+          courseArtOutput.textContent = JSON.stringify(currentCourseArt, null, 2);
+          setStatus('Fiche certification générée avec succès.');
+        } else {
+          currentCourseArt = null;
+          courseArtOutput.textContent = DEFAULT_COURSE_ART_TEXT;
+          setStatus('La fiche générée est vide.', true);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        currentCourseArt = null;
+        courseArtOutput.textContent = `${DEFAULT_COURSE_ART_TEXT}\n\nErreur : ${message}`;
+        setStatus(message, true);
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    publishCourseArtBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+
+      if (!selection) {
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
+        return;
+      }
+
+      if (topicTypeSelect.value !== COURSE_ART_TOPIC) {
+        setStatus('La publication de la fiche est réservée au type présentation de certification.', true);
+        return;
+      }
+
+      if (!currentCourseArt) {
+        setStatus('Aucune fiche à publier. Générez une fiche avant la publication.', true);
+        return;
+      }
+
+      try {
+        toggleLoading(true, publishCourseArtBtn);
+        setStatus('Publication de la fiche certification en cours…');
+        const response = await fetch('/articles/publish-course-art', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...selection, course_art: currentCourseArt })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la publication de la fiche certification');
+        }
+        currentCourseArt = payload.course_art || currentCourseArt;
+        courseArtOutput.textContent = JSON.stringify(currentCourseArt, null, 2);
+        setStatus('Fiche certification publiée avec succès.');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(message, true);
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    runPlaybookBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+      if (!selection) {
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
+        return;
+      }
+      selection.add_image = addImageCheckbox.checked;
+      try {
+        toggleLoading(true, runPlaybookBtn);
+        startPlaybookProgress();
+        renderPlaybookSteps([]);
+        setStatus('Exécution du playbook : génération et publication en cours…');
+        const response = await fetch('/articles/run-playbook', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selection)
+        });
+        const payload = await response.json();
+        if (response.status === 409) {
+          currentBlogId = payload.blog_id || currentBlogId;
+          setStatus(payload.error || 'Un article de présentation existe déjà pour cette certification.', false);
+          completePlaybookProgress('Aucun nouveau contenu généré');
+          renderPlaybookSteps([]);
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur inconnue lors de la publication');
+        }
+        currentBlogId = payload.blog_id || null;
+        if (payload.article_error) {
+          currentArticle = '';
+          articleOutput.textContent = `Erreur : ${payload.article_error}`;
+        } else {
+          currentArticle = payload.article || '';
+          articleOutput.textContent = currentArticle || 'Aucun contenu généré.';
+        }
+
+        currentTweetDraft = payload.tweet || '';
+        renderSocialBlock(
+          tweetOutput,
+          currentTweetDraft,
+          Boolean(payload.tweet_published),
+          payload.tweet_status_code,
+          payload.tweet_error,
+          'Aucun tweet généré.',
+          payload.tweet_image
+        );
+
+        currentLinkedinDraft = payload.linkedin_post || '';
+        renderSocialBlock(
+          linkedinOutput,
+          currentLinkedinDraft,
+          Boolean(payload.linkedin_published),
+          payload.linkedin_status_code,
+          payload.linkedin_error,
+          'Aucun post LinkedIn généré.',
+          payload.linkedin_image
+        );
+
+        if (payload.exam_url) {
+          examUrlInput.value = payload.exam_url;
+        }
+
+        currentCourseArt = payload.course_art || null;
+        if (currentCourseArt) {
+          courseArtOutput.textContent = JSON.stringify(currentCourseArt, null, 2);
+        } else if (payload.course_art_error) {
+          courseArtOutput.textContent = `${DEFAULT_COURSE_ART_TEXT}\n\nErreur : ${payload.course_art_error}`;
+        } else if (topicTypeSelect.value === COURSE_ART_TOPIC) {
+          courseArtOutput.textContent = DEFAULT_COURSE_ART_TEXT;
+        }
+
+        renderPlaybookSteps(payload.playbook_steps || []);
+        const stepMessages = Array.isArray(payload.playbook_steps)
+          ? payload.playbook_steps
+              .map(step => (step && step.message ? step.message : null))
+              .filter(Boolean)
+          : [];
+        let hasFailure = Array.isArray(payload.playbook_steps)
+          ? payload.playbook_steps.some(step => step && step.success === false)
+          : false;
+        let statusMessage = 'Playbook terminé.';
+        if (stepMessages.length) {
+          statusMessage = `Playbook terminé – ${stepMessages.join(' · ')}.`;
+        } else {
+          const statuses = [];
+          if (payload.exam_error) {
+            statuses.push(`Test Examboot non généré : ${payload.exam_error}`);
+          } else {
+            statuses.push('Test Examboot généré');
+          }
+          if (payload.blog_id) {
+            statuses.push(`Article enregistré (#${payload.blog_id})`);
+          } else if (currentArticle) {
+            statuses.push('Article généré');
+          } else if (payload.article_error) {
+            statuses.push(`Article non généré : ${payload.article_error}`);
+          }
+          statuses.push(`Tweet ${payload.tweet_published ? 'publié' : 'non publié'}`);
+          statuses.push(`LinkedIn ${payload.linkedin_published ? 'publié' : 'non publié'}`);
+          if (payload.course_art) {
+            statuses.push('Fiche certification enregistrée');
+          } else if (payload.course_art_error) {
+            statuses.push(`Fiche non enregistrée : ${payload.course_art_error}`);
+          }
+          const fallbackFailure =
+            Boolean(payload.article_error) ||
+            Boolean(payload.exam_error) ||
+            !payload.tweet_published ||
+            !payload.linkedin_published ||
+            Boolean(payload.course_art_error);
+          hasFailure = hasFailure || fallbackFailure;
+          statusMessage = `Playbook terminé – ${statuses.join(' · ')}.`;
+        }
+        setStatus(statusMessage, hasFailure);
+        completePlaybookProgress('Playbook terminé');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(message, true);
+        failPlaybookProgress(message);
+        renderPlaybookSteps([]);
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    publishTweetBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+      if (!selection) {
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
+        return;
+      }
+      if (!currentTweetDraft) {
+        setStatus('Veuillez générer le tweet avant de le publier.', true);
+        return;
+      }
+      selection.add_image = addImageCheckbox.checked;
+      selection.tweet = currentTweetDraft;
+      try {
+        toggleLoading(true, publishTweetBtn);
+        setStatus('Publication du tweet en cours…');
+        const response = await fetch('/articles/publish-tweet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selection)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la publication du tweet');
+        }
+
+        currentTweetDraft = payload.tweet || currentTweetDraft;
+        renderSocialBlock(
+          tweetOutput,
+          currentTweetDraft,
+          Boolean(payload.tweet_published),
+          payload.tweet_status_code,
+          payload.tweet_error,
+          'Aucun tweet généré.',
+          payload.tweet_image
+        );
+
+        if (payload.tweet_published) {
+          setStatus('Tweet publié avec succès.');
+        } else {
+          setStatus('Tweet généré mais non publié.', true);
+        }
+        updateExamUrlIfPresent(payload);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(message, true);
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    publishLinkedinBtn.addEventListener('click', async () => {
+      const selection = getSelectionPayload();
+      if (!selection) {
+        setStatus(SELECTION_REQUIRED_MESSAGE, true);
+        return;
+      }
+      if (!currentLinkedinDraft) {
+        setStatus('Veuillez générer le post LinkedIn avant de le publier.', true);
+        return;
+      }
+      selection.add_image = addImageCheckbox.checked;
+      selection.linkedin_post = currentLinkedinDraft;
+      try {
+        toggleLoading(true, publishLinkedinBtn);
+        setStatus('Publication du post LinkedIn en cours…');
+        const response = await fetch('/articles/publish-linkedin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(selection)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la publication du post LinkedIn');
+        }
+
+        currentLinkedinDraft = payload.linkedin_post || currentLinkedinDraft;
+        renderSocialBlock(
+          linkedinOutput,
+          currentLinkedinDraft,
+          Boolean(payload.linkedin_published),
+          payload.linkedin_status_code,
+          payload.linkedin_error,
+          'Aucun post LinkedIn généré.',
+          payload.linkedin_image
+        );
+
+        if (payload.linkedin_published) {
+          setStatus('Post LinkedIn publié avec succès.');
+        } else {
+          setStatus('Post LinkedIn généré mais non publié.', true);
+        }
+        updateExamUrlIfPresent(payload);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(message, true);
+      } finally {
+        toggleLoading(false);
+        updateActionAvailability();
+      }
+    });
+
+    const allActionButtons = [
+      generateArticleBtn,
+      generateTweetBtn,
+      generateLinkedinBtn,
+      generateExamBtn,
+      runPlaybookBtn,
+      publishArticleBtn,
+      generateCourseArtBtn,
+      publishCourseArtBtn,
+      publishTweetBtn,
+      publishLinkedinBtn,
+      generateCarouselBtn
+    ];
+
+    function toggleLoading(state, sourceButton = null) {
+      isLoading = Boolean(state);
+      if (isLoading) {
+        loadingButton = sourceButton || null;
+        allActionButtons.forEach(button => {
+          if (button === loadingButton) {
+            button.classList.add('is-loading');
+          }
+          button.disabled = true;
+        });
+      } else {
+        allActionButtons.forEach(button => button.classList.remove('is-loading'));
+        loadingButton = null;
+        updateActionAvailability();
+      }
+    }
+
+    function setStatus(message, isError = false) {
+      statusArea.textContent = message;
+      statusArea.style.color = isError ? '#f87171' : 'var(--text-muted)';
+    }
+
+    function updateExamUrlIfPresent(payload) {
+      if (payload && payload.exam_url) {
+        examUrlInput.value = payload.exam_url;
+      }
+    }
+
+    examUrlInput.value = examUrlInput.value || '';
+    updateCourseArtSection();
+    updateCarouselAvailability();
+    fetchProviders();
+    updateActionAvailability();
+  </script>
+</body>
+</html>

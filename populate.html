@@ -14,7 +14,7 @@
     
     {% if not is_populating %}
     <!-- Formulaire de sélection -->
-    <form id="select-form" method="POST" action="/" class="space-y-6">
+    <form id="select-form" method="POST" action="/populate" class="space-y-6">
       <div>
         <label for="provider_id" class="block text-lg font-medium text-gray-700">Provider:</label>
         <select name="provider_id" id="provider_id" class="mt-1 block w-full rounded border-gray-300 shadow-sm">
@@ -82,7 +82,7 @@
     $(document).ready(function(){
         // Charger les certifications quand un provider est sélectionné.
         $("#provider_id").change(function(){
-            $.post("/get_certifications", { provider_id: $(this).val() }, function(data){
+            $.post("/populate/get_certifications", { provider_id: $(this).val() }, function(data){
                 $("#cert_id").empty();
                 $.each(data, function(i, item){
                     $("#cert_id").append($("<option>", { 
@@ -93,49 +93,57 @@
             }, "json");
         });
         
-        // Lancement du processus de population et mise à jour dynamique des logs et compteurs
+        // Lancement du processus de population et suivi temps réel
+        let poller = null;
+        let lastLogIndex = 0;
+        function fetchStatus(){
+            $.get("/populate/status", function(resp){
+                if(resp.log){
+                    for(; lastLogIndex < resp.log.length; lastLogIndex++){
+                        $("#logList").append("<li>" + resp.log[lastLogIndex] + "</li>");
+                    }
+                }
+                if(resp.counters){
+                    $("#analysisResult").text(resp.counters.analysis);
+                    $("#domainCounter").text(resp.counters.domainsProcessed + " / " + resp.counters.totalDomains);
+                    $("#questionCounter").text(resp.counters.totalQuestions);
+                    var percent = 0;
+                    if(resp.counters.totalDomains){
+                        percent = Math.round((resp.counters.domainsProcessed / resp.counters.totalDomains) * 100);
+                    }
+                    $("#progressBarFill").css("width", percent + "%").text(percent + "%");
+                }
+                if(resp.status === "completed" || resp.status === "error"){
+                    clearInterval(poller);
+                }
+            }, "json");
+        }
+
         $("#startPopulate").click(function(){
             $("#logList").empty();
             $("#progressBarFill").css("width", "0%").text("0%");
-            // Réinitialiser les compteurs affichés
             $("#analysisResult").text("En attente...");
             $("#domainCounter").text("0 / 0");
             $("#questionCounter").text("0");
-            $.post("/populate_process", {
+            lastLogIndex = 0;
+            $.post("/populate/process", {
                 provider_id: "{{ provider_id }}",
                 cert_id: "{{ cert_id }}"
-            }, function(response){
-                var logs = response.log;
-                var total = logs.length;
-                var i = 0;
-                if(response.counters) {
-                    $("#analysisResult").text(response.counters.analysis);
-                    $("#domainCounter").text(response.counters.domainsProcessed + " / " + response.counters.totalDomains);
-                    $("#questionCounter").text(response.counters.totalQuestions);
-                }
-                function displayNextLog() {
-                    if (i < total) {
-                        $("#logList").append("<li>" + logs[i] + "</li>");
-                        var percent = Math.round(((i+1) / total) * 100);
-                        $("#progressBarFill").css("width", percent + "%").text(percent + "%");
-                        i++;
-                        setTimeout(displayNextLog, 500);
-                    }
-                }
-                displayNextLog();
+            }, function(){
+                poller = setInterval(fetchStatus, 1000);
             }, "json");
         });
 
         // Bouton de pause
         $("#pausePopulate").click(function(){
-            $.post("/pause_populate", {}, function(response){
+            $.post("/populate/pause", {}, function(response){
                 $("#logList").append("<li>Processus mis en pause.</li>");
             }, "json");
         });
 
         // Bouton de reprise
         $("#resumePopulate").click(function(){
-            $.post("/resume_populate", {}, function(response){
+            $.post("/populate/resume", {}, function(response){
                 $("#logList").append("<li>Processus repris.</li>");
             }, "json");
         });

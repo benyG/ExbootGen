@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fix Questions · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 20% 20%, rgba(76,201,240,0.15), transparent 55%),
+                     radial-gradient(circle at 80% 30%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.22), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb {
+      position: fixed;
+      width: 32rem;
+      height: 32rem;
+      border-radius: 50%;
+      opacity: 0.45;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      background: radial-gradient(circle, rgba(71,245,192,0.32) 0%, rgba(4,7,17,0) 70%);
+      animation: drift 22s ease-in-out infinite;
+      z-index: 0;
+    }
+
+    .orb-1 { top: -12rem; left: -6rem; }
+    .orb-2 { bottom: -10rem; right: -4rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.25) 0%, rgba(4,7,17,0) 70%); }
+    .orb-3 { top: 45vh; right: 50%; transform: translateX(50%); animation-delay: -14s; background: radial-gradient(circle, rgba(244,114,182,0.28) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift {
+      0%, 100% { transform: translate3d(0,0,0) scale(1); }
+      45% { transform: translate3d(40px, -30px, 0) scale(1.05); }
+      75% { transform: translate3d(-30px, 25px, 0) scale(0.95); }
+    }
+
+    .stellar-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(4, 7, 17, 0.72);
+      backdrop-filter: saturate(180%) blur(18px);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .stellar-container { width: min(1200px, 92vw); margin: 0 auto; padding: 1.2rem 0 1.6rem; }
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 18px; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25)); border: 1px solid rgba(148, 163, 184, 0.2); color: var(--accent-strong); font-weight: 600; letter-spacing: 0.05em; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28); }
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .nav-toggle { display: none; width: 2.8rem; height: 2.8rem; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 19, 32, 0.68); color: var(--text-primary); align-items: center; justify-content: center; cursor: pointer; transition: transform 0.35s var(--transition), background 0.35s var(--transition); }
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+    .nav-toggle span, .nav-toggle span::before, .nav-toggle span::after { display: block; width: 18px; height: 2px; background: currentColor; border-radius: 999px; position: relative; transition: transform 0.35s ease, opacity 0.3s ease; }
+    .nav-toggle span::before, .nav-toggle span::after { content: ''; position: absolute; left: 0; }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.4rem; border-radius: var(--radius-lg); padding: 0.35rem; background: rgba(8, 12, 24, 0.55); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
+    .stellar-nav a { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.05rem; border-radius: 14px; text-decoration: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition); }
+    .stellar-nav a::after { content: ''; position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14)); opacity: 0; transition: opacity 0.35s var(--transition); z-index: -1; }
+    .stellar-nav a:hover { color: var(--text-primary); transform: translateY(-2px); }
+    .stellar-nav a:hover::after { opacity: 1; }
+    .stellar-nav a.active { color: var(--text-primary); }
+    .stellar-nav a.active::after { opacity: 1; box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18); }
+
+    .stellar-main { flex: 1; width: min(1200px, 92vw); margin: 0 auto; padding: 4.2rem 0 5.6rem; display: flex; flex-direction: column; gap: 2.8rem; position: relative; z-index: 1; }
+
+    .glass-card { background: var(--glass); border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-strong); padding: clamp(2rem, 3vw, 3rem); backdrop-filter: blur(26px); position: relative; overflow: hidden; }
+    .glass-card::before { content: ''; position: absolute; inset: 1px; border-radius: calc(var(--radius-xl) - 2px); border: 1px solid rgba(148, 163, 184, 0.12); pointer-events: none; }
+
+    .hero-intro h1 { margin: 0 0 1rem; font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.2rem, 4vw, 2.9rem); letter-spacing: -0.01em; }
+    .hero-intro p { margin: 0; color: var(--text-muted); line-height: 1.7; }
+
+    label { font-weight: 500; font-size: 0.95rem; color: var(--text-primary); display: block; margin-bottom: 0.35rem; }
+    select, button { width: 100%; border-radius: 14px; border: 1px solid rgba(148, 163, 184, 0.22); padding: 0.75rem 0.95rem; background: rgba(10, 15, 28, 0.85); color: var(--text-primary); font-family: inherit; font-size: 0.95rem; transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease; }
+    select:focus, button:focus { outline: none; border-color: rgba(71, 245, 192, 0.6); box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.22); }
+
+    .stellar-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 0.85rem 1.6rem; border-radius: 999px; background: linear-gradient(135deg, rgba(71,245,192,0.9), rgba(124,247,255,0.85)); color: #020617; font-weight: 600; text-decoration: none; border: none; cursor: pointer; box-shadow: 0 14px 35px rgba(71, 245, 192, 0.3); transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition); }
+    .stellar-button:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 18px 42px rgba(71, 245, 192, 0.38); }
+
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.4rem; margin-top: 1.6rem; }
+    .action-link { color: var(--accent-strong); text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 0.35rem; }
+    .action-link.disabled { color: var(--text-muted); pointer-events: none; }
+
+    .progress-area { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.6rem; margin-top: 2.4rem; }
+    .progress-card { border-radius: var(--radius-lg); padding: 1.6rem; background: rgba(8, 12, 24, 0.75); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: 0 16px 34px rgba(8, 12, 23, 0.48); display: flex; flex-direction: column; gap: 0.35rem; }
+    .progress-card span { font-size: 0.8rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-muted); }
+    .progress-card strong { font-size: 1.4rem; letter-spacing: -0.01em; }
+
+    #progress-section { display:none; }
+    #progress-section.active { display:block; }
+    #job-section { display:none; }
+    #job-section.active { display:block; }
+
+    #progress-bar { width: 100%; background: rgba(8, 12, 24, 0.72); border-radius: 999px; overflow: hidden; border: 1px solid rgba(148, 163, 184, 0.18); height: 14px; margin-top: 1rem; position: relative; }
+    #progress-bar div { height: 100%; width: 0%; background: linear-gradient(90deg, rgba(71,245,192,0.9), rgba(124,247,255,0.9)); transition: width 0.45s ease; }
+
+    #job-log-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.92rem; color: rgba(226, 232, 240, 0.85); }
+    #job-section .log-container { border: 1px solid rgba(148, 163, 184, 0.14); border-radius: 18px; background: rgba(8, 12, 24, 0.78); padding: 1.2rem; max-height: 260px; overflow-y: auto; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
+
+    [data-animate] { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    [data-animate].is-visible { opacity: 1; transform: translateY(0); }
+
+    footer { color: rgba(226, 232, 240, 0.55); text-align: center; padding: 2.4rem 0 3rem; font-size: 0.85rem; }
+
+    @media (max-width: 960px) {
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 1.2rem; }
+      .stellar-nav { flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+  <div class="stellar-orb orb-3"></div>
+
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <span class="brand-mark">EX</span>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Console d'orchestration pédagogique</span>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
+        </button>
+      </div>
+      {% set active_page = 'fix' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+  <main class="stellar-main">
+    <section class="glass-card hero-intro" data-animate>
+      <h1>Réparez vos questions en un éclair</h1>
+      <p>Sélectionnez une certification et un type de traitement pour corriger automatiquement les réponses manquantes, les drag-n-drop ou les matchings.</p>
+      <a id="verifyBlueprintLink" class="action-link disabled" href="#" aria-disabled="true">Verify Blueprint</a>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <form id="fix-form" method="POST" action="{{ url_for('fix_process') }}" class="form-grid">
+        <div>
+          <label for="provider_id">Provider</label>
+          <select name="provider_id" id="provider_id">
+            {% for provider in providers %}
+              <option value="{{ provider[0] }}" {% if selected_provider_id == provider[0] %}selected{% endif %}>{{ provider[1] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="cert_id">Certification</label>
+          <select name="cert_id" id="cert_id" data-selected-cert="{{ selected_cert_id if selected_cert_id is not none else '' }}"></select>
+        </div>
+        <div>
+          <label for="action">Type de traitement</label>
+          <select name="action" id="action">
+            <option value="assign" {% if selected_action == 'assign' %}selected{% endif %}>Attribuer réponse juste</option>
+            <option value="drag" {% if selected_action == 'drag' %}selected{% endif %}>Compléter drag-n-drop</option>
+            <option value="matching" {% if selected_action == 'matching' %}selected{% endif %}>Compléter matching</option>
+          </select>
+        </div>
+        <div style="grid-column:1 / -1; display:flex; justify-content:flex-end;">
+          <button type="submit" id="startFix" class="stellar-button">Lancer la correction</button>
+        </div>
+      </form>
+
+      <div id="progress-section" class="progress-area">
+        <div class="progress-card">
+          <span>Progression</span>
+          <strong id="progress-label">0%</strong>
+          <div id="progress-bar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div></div></div>
+          <span id="progress-count">0 corrigée(s) sur 0</span>
+          <span id="progress-remaining">Sélectionnez une certification pour afficher la progression.</span>
+        </div>
+      </div>
+
+      <div id="job-section" class="glass-card" style="margin-top:2rem;">
+        <div class="progress-card" style="background:transparent; border:none; box-shadow:none; padding:0; gap:0.6rem;">
+          <span>Suivi du job</span>
+          <strong id="job-status">En attente…</strong>
+          <span id="job-id-label"></span>
+        </div>
+        <div class="log-container">
+          <ul id="job-log-list"></ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>ExBoot Laboratory &mdash; Garantissez la qualité de vos banques de questions.</footer>
+
+  <script>
+    const toggle = document.getElementById('navToggle');
+    const nav = document.getElementById('stellarNav');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const isOpen = toggle.classList.toggle('is-open');
+        document.body.classList.toggle('nav-open', isOpen);
+        toggle.setAttribute('aria-expanded', isOpen);
+      });
+    }
+
+    const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
+    nav?.querySelectorAll('a[data-route]').forEach(link => {
+      const target = (link.dataset.route || '').replace(/\/$/, '') || '/';
+      if (target === '/' ? currentPath === '/' : currentPath.startsWith(target)) {
+        nav.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+        link.classList.add('active');
+      }
+    });
+
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.2 });
+
+    document.querySelectorAll('[data-animate]').forEach(el => observer.observe(el));
+  </script>
+
+  <script src="{{ url_for('static', filename='js/searchable-select.js') }}"></script>
+
+  <script>
+    $(document).ready(function(){
+      const $provider = $("#provider_id");
+      const $cert = $("#cert_id");
+      const $action = $("#action");
+      const $progressSection = $("#progress-section");
+      const $progressBar = $("#progress-bar div");
+      const $progressLabel = $("#progress-label");
+      const $progressCount = $("#progress-count");
+      const $progressRemaining = $("#progress-remaining");
+      const $jobSection = $("#job-section");
+      const $jobStatus = $("#job-status");
+      const $jobIdLabel = $("#job-id-label");
+      const $jobLogList = $("#job-log-list");
+      const verifyLink = document.getElementById('verifyBlueprintLink');
+      const blueprintBase = "{{ url_for('module_blueprints.index') }}";
+
+      const providerSearch = window.makeSelectSearchable ? window.makeSelectSearchable($provider[0], { placeholder: 'Rechercher un provider…' }) : null;
+      const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable($cert[0], { placeholder: 'Rechercher une certification…' }) : null;
+
+      let initialProgress = {{ initial_progress|tojson }};
+      const preloadedCertId = "{{ selected_cert_id if selected_cert_id is not none else '' }}";
+      const preloadedAction = "{{ selected_action or 'assign' }}";
+      const statusUrlTemplate = "{{ url_for('fix_status', job_id='__JOB__') }}";
+      const processUrl = "{{ url_for('fix_process') }}";
+      let poller = null;
+      let currentJobId = null;
+      let lastLogIndex = 0;
+
+      function updateVerifyLink(){
+        const providerId = $provider.val();
+        const selectedOption = $cert[0]?.selectedOptions?.[0];
+        const codeCert = selectedOption?.dataset?.codeCert || '';
+        const match = Array.from($cert[0].options).find(
+          opt => (opt.dataset?.codeCert || '') === codeCert
+        );
+        const certId = match?.value || $cert.val();
+        if(providerId && certId){
+          verifyLink.href = `${blueprintBase}?provider_id=${providerId}&cert_id=${certId}`;
+          verifyLink.classList.remove('disabled');
+          verifyLink.setAttribute('aria-disabled', 'false');
+        } else {
+          verifyLink.href = '#';
+          verifyLink.classList.add('disabled');
+          verifyLink.setAttribute('aria-disabled', 'true');
+        }
+      }
+
+      function parseValue(val){
+        const num = Number(val);
+        return Number.isFinite(num) ? num : 0;
+      }
+
+      function renderProgress(data){
+        const total = parseValue(data && data.total);
+        const corrected = parseValue(data && data.corrected);
+        const remaining = parseValue(data && data.remaining);
+        const safeCorrected = Math.max(Math.min(corrected, total), 0);
+        const percent = total > 0 ? Math.round((safeCorrected / total) * 100) : 0;
+
+        $progressBar.css("width", percent + "%");
+        $progressBar.parent().attr("aria-valuenow", percent);
+        $progressLabel.text(`${percent}%`);
+        $progressCount.text(`${safeCorrected} corrigée(s) sur ${total}`);
+        if (total === 0) {
+          $progressRemaining.text("Aucune question à traiter pour cette sélection.");
+        } else {
+          $progressRemaining.text(`${Math.max(remaining, 0)} question(s) restante(s) à traiter.`);
+        }
+        $progressSection.addClass("active");
+      }
+
+      function clearProgress(){
+        $progressBar.css("width", "0%");
+        $progressBar.parent().attr("aria-valuenow", 0);
+        $progressLabel.text("0%");
+        $progressCount.text("0 corrigée(s) sur 0");
+        $progressRemaining.text("Sélectionnez une certification pour afficher la progression.");
+        $progressSection.removeClass("active");
+      }
+
+      function resetJobSection(options){
+        const keepVisible = Boolean(options && options.keepVisible);
+        if(poller){
+          clearInterval(poller);
+          poller = null;
+        }
+        currentJobId = null;
+        lastLogIndex = 0;
+        $jobStatus.text("En attente…");
+        $jobIdLabel.text("");
+        $jobLogList.empty();
+        if(!keepVisible){
+          $jobSection.removeClass("active");
+        }
+      }
+
+      function appendJobLog(message, cssClass){
+        const li = $("<li>").text(message);
+        if(cssClass){
+          li.addClass(cssClass);
+        }
+        $jobLogList.append(li);
+      }
+
+      function fetchJobStatus(jobId){
+        if(!jobId){
+          return;
+        }
+        $.get(statusUrlTemplate.replace('__JOB__', jobId), function(data){
+          if(data && Array.isArray(data.log)){
+            for(; lastLogIndex < data.log.length; lastLogIndex++){
+              appendJobLog(data.log[lastLogIndex]);
+            }
+          }
+          if(data && data.counters){
+            renderProgress(data.counters);
+          }
+          if(data && data.status){
+            const status = data.status;
+            if(status === "queued"){
+              $jobStatus.text("En attente d'un worker…");
+            } else if(status === "running"){
+              $jobStatus.text("Traitement en cours…");
+            } else if(status === "paused"){
+              $jobStatus.text("Traitement en pause.");
+            } else if(status === "completed"){
+              $jobStatus.text("Traitement terminé.");
+            } else if(status === "failed"){
+              $jobStatus.text("Erreur pendant le traitement.");
+            } else {
+              $jobStatus.text(status);
+            }
+
+            if(status === "completed" || status === "failed"){
+              if(poller){
+                clearInterval(poller);
+                poller = null;
+              }
+              currentJobId = null;
+              updateProgress();
+              if(status === "failed" && data.error){
+                appendJobLog("Erreur: " + data.error, "text-red-400");
+              }
+            }
+          }
+        }, "json").fail(function(xhr){
+          if(poller){
+            clearInterval(poller);
+            poller = null;
+          }
+          if(xhr.status === 404){
+            appendJobLog("Job introuvable.", "text-red-400");
+          }
+        });
+      }
+
+      function startPolling(jobId){
+        if(poller){
+          clearInterval(poller);
+        }
+        poller = setInterval(function(){ fetchJobStatus(jobId); }, 1000);
+        fetchJobStatus(jobId);
+      }
+
+      function updateProgress(){
+        const certId = $cert.val();
+        const action = $action.val() || "assign";
+
+        if(!certId){
+          clearProgress();
+          return;
+        }
+
+        if(initialProgress && String(certId) === String(preloadedCertId) && String(action) === String(preloadedAction)){
+          renderProgress(initialProgress);
+          initialProgress = null;
+          return;
+        }
+
+        $.post("{{ url_for('fix_get_progress') }}", { cert_id: certId, action: action }, function(data){
+          if(data){
+            renderProgress(data);
+          } else {
+            clearProgress();
+          }
+        }, "json").fail(function(){
+          clearProgress();
+        });
+      }
+
+      function loadCertifications(providerId, selectedCertId){
+        $.post("{{ url_for('fix_get_certifications') }}", { provider_id: providerId }, function(data){
+          const items = (data || []).map(item => ({
+            value: item.id,
+            label: item.name,
+            selected: Number(selectedCertId) === Number(item.id),
+            dataset: { codeCert: item.code_cert || '' }
+          }));
+          if (certSearch) {
+            const list = items.length ? items : [{ value: '', label: '— Aucune certification —' }];
+            const selectedValue = list.find(opt => opt.selected)?.value ?? list[0]?.value ?? '';
+            certSearch.setOptions(list, { keepSearch: false, selectedValue });
+            certSearch.select.dispatchEvent(new Event('change'));
+          } else {
+            $cert.empty();
+            $.each(items.length ? items : [{ value: '', label: '— Aucune certification —' }], function(_, optionData){
+              const option = $("<option>", { value: optionData.value, text: optionData.label });
+              option.attr('data-code-cert', optionData.dataset?.codeCert || '');
+              if (optionData.selected) {
+                option.prop('selected', true);
+              }
+              $cert.append(option);
+            });
+            $cert.trigger('change');
+          }
+          updateVerifyLink();
+        }, "json");
+      }
+
+      $provider.on('change', function(){
+        const selectedCertId = $cert.data('selected-cert');
+        loadCertifications($(this).val(), selectedCertId);
+      });
+
+
+      $cert.on('change', function(){
+        $cert.removeData('selected-cert');
+        updateVerifyLink();
+        updateProgress();
+      });
+
+      $action.on('change', updateProgress);
+
+      $provider.trigger('change');
+      updateVerifyLink();
+
+      $("#fix-form").on('submit', function(e){
+        e.preventDefault();
+        resetJobSection({ keepVisible: true });
+        $jobSection.addClass("active");
+        const payload = $(this).serialize();
+        $.post(processUrl, payload, function(resp){
+          if(resp && resp.job_id){
+            currentJobId = resp.job_id;
+            $jobIdLabel.text(`Job #${currentJobId}`);
+            startPolling(currentJobId);
+          } else {
+            appendJobLog("Impossible de démarrer le traitement.", "text-red-400");
+          }
+        }, "json").fail(function(xhr){
+          $jobStatus.text("Erreur au démarrage.");
+          appendJobLog("Erreur au démarrage: " + xhr.responseText, "text-red-400");
+        });
+      });
+    });
+  </script>
+</body>
+</html>

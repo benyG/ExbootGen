@@ -2,130 +2,889 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Importer Domaines</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Importation cosmique de modules · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
-    body { font-family: sans-serif; padding: 2rem; }
-    .panel { display: inline-block; width: 45%; vertical-align: top;
-             border:1px solid #ccc; border-radius:6px; padding:1em; margin:1%; }
-    .field { margin: .5em 0; }
-    label { display:block; font-weight:bold; margin-bottom:.2em; }
-    select, textarea, button { width:100%; padding:.5em; font-size:1em; }
-    #progress { width:100%; background:#eee; border-radius:4px; overflow:hidden; margin-top:1em; }
-    #bar      { width:0%; height:1em; background:#4caf50; transition: width .3s; }
-    #log      { white-space: pre-wrap; background:#f9f9f9; padding:.5em;
-                 height:8em; overflow-y: auto; border:1px solid #ddd; margin-top:.5em; }
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 20% 20%, rgba(76,201,240,0.15), transparent 55%),
+                     radial-gradient(circle at 80% 30%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.22), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --glass-soft: rgba(15, 19, 32, 0.82);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb {
+      position: fixed;
+      width: 32rem;
+      height: 32rem;
+      border-radius: 50%;
+      opacity: 0.45;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      background: radial-gradient(circle, rgba(71,245,192,0.32) 0%, rgba(4,7,17,0) 70%);
+      animation: drift 22s ease-in-out infinite;
+      z-index: 0;
+    }
+
+    .orb-1 { top: -12rem; left: -6rem; }
+    .orb-2 { bottom: -10rem; right: -4rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.25) 0%, rgba(4,7,17,0) 70%); }
+    .orb-3 { top: 45vh; right: 50%; transform: translateX(50%); animation-delay: -14s; background: radial-gradient(circle, rgba(244,114,182,0.28) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift {
+      0%, 100% { transform: translate3d(0,0,0) scale(1); }
+      45% { transform: translate3d(40px, -30px, 0) scale(1.05); }
+      75% { transform: translate3d(-30px, 25px, 0) scale(0.95); }
+    }
+
+    .stellar-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(4, 7, 17, 0.72);
+      backdrop-filter: saturate(180%) blur(18px);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .stellar-container {
+      width: min(1200px, 92vw);
+      margin: 0 auto;
+      padding: 1.2rem 0 1.6rem;
+    }
+
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 2.75rem;
+      height: 2.75rem;
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25));
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      color: var(--accent-strong);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28);
+    }
+
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .nav-toggle {
+      display: none;
+      width: 2.8rem;
+      height: 2.8rem;
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(15, 19, 32, 0.68);
+      color: var(--text-primary);
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.35s var(--transition), background 0.35s var(--transition);
+    }
+
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+
+    .nav-toggle span,
+    .nav-toggle span::before,
+    .nav-toggle span::after {
+      display: block;
+      width: 18px;
+      height: 2px;
+      background: currentColor;
+      border-radius: 999px;
+      position: relative;
+      transition: transform 0.35s ease, opacity 0.3s ease;
+    }
+
+    .nav-toggle span::before,
+    .nav-toggle span::after {
+      content: '';
+      position: absolute;
+      left: 0;
+    }
+
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 1.4rem;
+      border-radius: var(--radius-lg);
+      padding: 0.35rem;
+      background: rgba(8, 12, 24, 0.55);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06);
+    }
+
+    .stellar-nav a {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.65rem 1.05rem;
+      border-radius: 14px;
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition);
+    }
+
+    .stellar-nav a::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14));
+      opacity: 0;
+      transition: opacity 0.35s var(--transition);
+      z-index: -1;
+    }
+
+    .stellar-nav a:hover { color: var(--text-primary); transform: translateY(-2px); }
+    .stellar-nav a:hover::after { opacity: 1; }
+    .stellar-nav a.active { color: var(--text-primary); }
+    .stellar-nav a.active::after { opacity: 1; box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18); }
+
+    .stellar-main {
+      flex: 1;
+      width: min(1200px, 92vw);
+      margin: 0 auto;
+      padding: 4.2rem 0 5.6rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2.8rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .glass-card {
+      background: var(--glass);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-strong);
+      padding: clamp(2rem, 3vw, 3rem);
+      backdrop-filter: blur(26px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .glass-card::before {
+      content: '';
+      position: absolute;
+      inset: 1px;
+      border-radius: calc(var(--radius-xl) - 2px);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      pointer-events: none;
+    }
+
+    .hero-intro h1 {
+      margin: 0 0 1rem;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(2.1rem, 4vw, 2.8rem);
+      letter-spacing: -0.01em;
+    }
+
+    .hero-intro p { margin: 0; color: var(--text-muted); line-height: 1.7; }
+
+    .panel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 2rem;
+    }
+
+    .panel {
+      border-radius: var(--radius-lg);
+      padding: 1.8rem;
+      background: rgba(8, 12, 24, 0.72);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      box-shadow: 0 18px 40px rgba(3, 7, 18, 0.55);
+    }
+
+    .panel h2 {
+      margin: 0;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.4rem;
+      letter-spacing: 0.04em;
+    }
+
+    label {
+      font-weight: 500;
+      font-size: 0.95rem;
+      color: var(--text-primary);
+      display: block;
+      margin-bottom: 0.35rem;
+    }
+
+    select, textarea, button {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      padding: 0.75rem 0.95rem;
+      background: rgba(10, 15, 28, 0.85);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 0.95rem;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+    }
+
+    select:focus, textarea:focus, button:focus {
+      outline: none;
+      border-color: rgba(71, 245, 192, 0.6);
+      box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.22);
+    }
+
+    textarea {
+      min-height: 240px;
+      resize: vertical;
+      line-height: 1.6;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    button#import-btn {
+      background: linear-gradient(135deg, rgba(71,245,192,0.9), rgba(124,247,255,0.85));
+      color: #020617;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition);
+      box-shadow: 0 14px 35px rgba(71, 245, 192, 0.28);
+    }
+
+    button#import-btn:hover { transform: translateY(-3px); box-shadow: 0 18px 42px rgba(71,245,192,0.38); }
+
+    .json-stats {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .module-inventory {
+      margin-top: 1.6rem;
+      padding-top: 1.4rem;
+      border-top: 1px solid rgba(148, 163, 184, 0.16);
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+    }
+
+    .module-inventory h3 {
+      margin: 0;
+      font-size: 1rem;
+      font-family: 'Space Grotesk', sans-serif;
+      letter-spacing: 0.05em;
+    }
+
+    .module-inventory p {
+      margin: 0;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+
+    .module-inventory ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .module-chip {
+      padding: 0.85rem 1rem;
+      border-radius: 14px;
+      background: rgba(8, 12, 24, 0.6);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      box-shadow: inset 0 0 0 1px rgba(148,163,184,0.04);
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .module-chip strong {
+      font-weight: 600;
+    }
+
+    .module-chip span {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    .button-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin: 1.2rem 0 0;
+    }
+
+    .secondary-button {
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      background: rgba(10, 15, 28, 0.72);
+      color: var(--text-primary);
+      font-weight: 500;
+      border-radius: 14px;
+      padding: 0.75rem 1.1rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.3s var(--transition), border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .secondary-button:hover {
+      transform: translateY(-2px);
+      border-color: rgba(71, 245, 192, 0.45);
+      box-shadow: 0 12px 30px rgba(4, 7, 17, 0.45);
+    }
+
+    .secondary-button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .status-note {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      min-height: 1.2rem;
+    }
+
+    #progress {
+      width: 100%;
+      background: rgba(8, 12, 24, 0.72);
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      height: 12px;
+      margin-top: 1rem;
+      position: relative;
+    }
+
+    .jump-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: var(--accent-strong);
+      text-decoration: none;
+      font-weight: 600;
+      margin-top: 0.8rem;
+    }
+
+    .jump-link.disabled {
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    #bar {
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, rgba(71,245,192,0.9), rgba(124,247,255,0.9));
+      transition: width 0.35s ease;
+    }
+
+    #log {
+      white-space: pre-wrap;
+      background: rgba(8, 12, 24, 0.75);
+      padding: 1rem 1.2rem;
+      height: 220px;
+      overflow-y: auto;
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      border-radius: 18px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      color: rgba(148, 215, 199, 0.92);
+      box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06);
+    }
+
+    #log::-webkit-scrollbar { width: 8px; }
+    #log::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.35); border-radius: 999px; }
+
+    [data-animate] { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    [data-animate].is-visible { opacity: 1; transform: translateY(0); }
+
+    footer { color: rgba(226, 232, 240, 0.55); text-align: center; padding: 2.4rem 0 3rem; font-size: 0.85rem; }
+
+    @media (max-width: 960px) {
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 1.2rem; }
+      .stellar-nav { flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
   </style>
 </head>
 <body>
-  <h1>Importer des Domaines</h1>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+  <div class="stellar-orb orb-3"></div>
 
-  <div class="panel">
-    <div class="field">
-      <label for="prov">Provider</label>
-      <select id="prov"></select>
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <span class="brand-mark">EX</span>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Console d'orchestration pédagogique</span>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
+        </button>
+      </div>
+      {% set active_page = 'domains' %}
+      {% include '_nav.html' %}
     </div>
-    <div class="field">
-      <label for="cert">Certification</label>
-      <select id="cert"></select>
-    </div>
-  </div>
+  </header>
 
-  <div class="panel">
-    <div class="field">
-      <label for="json-input">Collez le JSON des domaines à importer</label>
-      <textarea id="json-input" rows="10" placeholder='[
+  <main class="stellar-main">
+    <section class="glass-card hero-intro" data-animate>
+      <h1>Importez vos modules à la vitesse de la lumière</h1>
+      <p>Déployez et mettez à jour la structure de vos certifications depuis un simple JSON. Suivi de progression, validation instantanée et journal des actions vous accompagnent pas à pas.</p>
+    </section>
+
+    <section class="panel-grid" data-animate>
+      <div class="panel">
+        <h2>Association Provider & Certification</h2>
+        <div>
+          <label for="prov">Provider</label>
+          <select id="prov"></select>
+        </div>
+        <div>
+          <label for="cert">Certification</label>
+          <select id="cert"></select>
+        </div>
+        <div class="json-stats">
+          <span>Provider & certification sélectionnés</span>
+          <span id="selectionLabel">—</span>
+        </div>
+        <a id="jumpToDefault" class="jump-link disabled" href="#" aria-disabled="true">Jump to Default</a>
+        <div class="module-inventory">
+          <h3>Domaines existants</h3>
+          <p id="modulesEmpty">Sélectionnez une certification pour afficher ses domaines.</p>
+          <ul id="modulesList"></ul>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Collez votre JSON</h2>
+        <label for="json-input">Structure attendue</label>
+        <textarea id="json-input" rows="10" placeholder='[
   {"name":"Domaine A","descr":"Description…"},
   {"name":"Domaine B"}
 ]'></textarea>
-    </div>
-    <button id="import-btn">OK</button>
+        <div class="json-stats">
+          <span id="jsonCount">0 caractère</span>
+          <span id="jsonPreviewStatus">En attente de validation…</span>
+        </div>
+        <div class="button-stack">
+          <button type="button" id="generate-json-btn" class="secondary-button">Générer la structure avec OpenAI</button>
+          <span id="generationStatus" class="status-note"></span>
+        </div>
+        <button id="import-btn">Lancer l'importation</button>
+        <div id="progress"><div id="bar"></div></div>
+        <div id="log" aria-live="polite"></div>
+      </div>
+    </section>
+  </main>
 
-    <div id="progress"><div id="bar"></div></div>
-    <div id="log"></div>
-  </div>
+  <footer>ExBoot Laboratory &mdash; Importer des modules n'a jamais été aussi sensoriel.</footer>
 
-<script>
-  async function loadJSON(url) {
-    const res = await fetch(url);
-    return res.json();
-  }
+  <script src="{{ url_for('static', filename='js/searchable-select.js') }}"></script>
 
-  function fill(sel, items) {
-    sel.innerHTML = '';
-    items.forEach(i=>{
-      const o = document.createElement('option');
-      o.value = i.id; o.text = i.name;
-      sel.appendChild(o);
-    });
-  }
-
-  // Initialisation des dropdowns
-  document.addEventListener('DOMContentLoaded', async ()=>{
-    const provSel = document.getElementById('prov'),
-          certSel = document.getElementById('cert');
-
-    // Charge providers
-    const providers = await loadJSON('/api/providers');
-    fill(provSel, providers);
-    provSel.value = providers[0]?.id;
-
-    // Quand change provider => recharge certifications
-    provSel.addEventListener('change', async ()=>{
-      const certs = await loadJSON(`/api/certifications/${provSel.value}`);
-      fill(certSel, certs);
-    });
-    // Trigger initial
-    provSel.dispatchEvent(new Event('change'));
-  });
-
-  // Gestion de l’import
-  document.getElementById('import-btn').onclick = async ()=>{
-    const certId = +document.getElementById('cert').value;
-    let domains;
-    try {
-      domains = JSON.parse(document.getElementById('json-input').value);
-      if (!Array.isArray(domains)) throw '';
-    } catch {
-      return alert('JSON invalide : attendez un tableau d’objets.');
+  <script>
+    const toggle = document.getElementById('navToggle');
+    const nav = document.getElementById('stellarNav');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const isOpen = toggle.classList.toggle('is-open');
+        document.body.classList.toggle('nav-open', isOpen);
+        toggle.setAttribute('aria-expanded', isOpen);
+      });
     }
 
-    const log = document.getElementById('log'),
-          bar = document.getElementById('bar'),
-          total = domains.length;
-    log.textContent = '';
-    bar.style.width = '0%';
+    const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
+    nav?.querySelectorAll('a[data-route]').forEach(link => {
+      const target = (link.dataset.route || '').replace(/\/$/, '') || '/';
+      if (target === '/' ? currentPath === '/' : currentPath.startsWith(target)) {
+        nav.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+        link.classList.add('active');
+      }
+    });
 
-    for (let i = 0; i < total; i++) {
-      const dom = domains[i];
-      if (!dom.name) {
-        log.textContent += `Ignoré (pas de name): ${JSON.stringify(dom)}\n`;
-        continue;
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.2 });
+
+    document.querySelectorAll('[data-animate]').forEach(el => observer.observe(el));
+
+    const jsonInput = document.getElementById('json-input');
+    const jsonCount = document.getElementById('jsonCount');
+    const jsonPreviewStatus = document.getElementById('jsonPreviewStatus');
+    const selectionLabel = document.getElementById('selectionLabel');
+    const modulesList = document.getElementById('modulesList');
+    const modulesEmpty = document.getElementById('modulesEmpty');
+    const jumpLink = document.getElementById('jumpToDefault');
+    const generateBtn = document.getElementById('generate-json-btn');
+    const generationStatus = document.getElementById('generationStatus');
+
+    function updateStats() {
+      const length = jsonInput.value.length;
+      jsonCount.textContent = `${length} caractère${length > 1 ? 's' : ''}`;
+      try {
+        const parsed = JSON.parse(jsonInput.value);
+        if (Array.isArray(parsed)) {
+          jsonPreviewStatus.textContent = `${parsed.length} module(s) détecté(s)`;
+          jsonPreviewStatus.style.color = 'var(--accent)';
+        } else {
+          jsonPreviewStatus.textContent = 'Le JSON doit être un tableau d’objets.';
+          jsonPreviewStatus.style.color = '#fbbf24';
+        }
+      } catch {
+        jsonPreviewStatus.textContent = 'JSON invalide pour l’instant.';
+        jsonPreviewStatus.style.color = '#f87171';
+      }
+    }
+
+    jsonInput.addEventListener('input', updateStats);
+    updateStats();
+
+    const base = '{{ url_for('dom.index') }}';
+    const pdfBase = '{{ url_for('pdf.index') }}';
+    const params = new URLSearchParams(window.location.search);
+    const preselectProviderId = Number(params.get('provider_id'));
+    const preselectCertId = Number(params.get('cert_id'));
+    let pendingCertId = Number.isFinite(preselectCertId) ? preselectCertId : null;
+    let currentModules = [];
+
+    async function loadJSON(url, options = {}) {
+      const res = await fetch(url, options);
+      const data = await res.json();
+      if (!res.ok) {
+        const message = (data && data.error) ? data.error : `HTTP ${res.status}`;
+        throw new Error(message);
+      }
+      return data;
+    }
+
+    function fill(select, items) {
+      const helper = select && select.__searchableSelect;
+      if (helper) {
+        helper.setOptions(
+          (items || []).map(item => ({
+            value: item.id,
+            label: item.name,
+            dataset: { codeCert: item.code_cert || '' }
+          })),
+          { keepSearch: false }
+        );
+      } else {
+        select.innerHTML = '';
+        (items || []).forEach(item => {
+          const option = document.createElement('option');
+          option.value = item.id;
+          option.textContent = item.name;
+          if (item.code_cert) {
+            option.dataset.codeCert = item.code_cert;
+          }
+          select.appendChild(option);
+        });
+      }
+    }
+
+    function setGenerationStatus(message, tone = 'muted') {
+      generationStatus.textContent = message;
+      if (tone === 'error') {
+        generationStatus.style.color = '#f87171';
+      } else if (tone === 'success') {
+        generationStatus.style.color = 'var(--accent)';
+      } else {
+        generationStatus.style.color = 'var(--text-muted)';
+      }
+    }
+
+    function renderModules(modules) {
+      modulesList.innerHTML = '';
+      if (!Array.isArray(modules) || modules.length === 0) {
+        modulesEmpty.textContent = 'Aucun domaine enregistré pour cette certification.';
+        modulesEmpty.style.display = 'block';
+        return;
+      }
+
+      modulesEmpty.style.display = 'none';
+      currentModules = modules;
+      modules.forEach(module => {
+        const li = document.createElement('li');
+        li.className = 'module-chip';
+        const title = document.createElement('strong');
+        title.textContent = module.name || module.module_name || 'Domaine';
+        li.appendChild(title);
+        const descr = module.descr || module.module_descr;
+        if (descr) {
+          const span = document.createElement('span');
+          span.textContent = descr;
+          li.appendChild(span);
+        }
+        modulesList.appendChild(li);
+      });
+    }
+
+    async function updateJumpLink() {
+      if (!jumpLink) return;
+      const certSel = document.getElementById('cert');
+      const selectedCert = certSel?.options[certSel.selectedIndex];
+      const certCode = (selectedCert?.dataset?.codeCert || '').trim();
+      if (!certCode) {
+        jumpLink.href = '#';
+        jumpLink.classList.add('disabled');
+        jumpLink.setAttribute('aria-disabled', 'true');
+        return;
       }
       try {
-        const res = await fetch('/api/modules', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({
-            certification_id: certId,
-            name: dom.name,
-            descr: dom.descr || null
-          })
-        });
-        const j = await res.json();
-        if (res.ok) {
-          log.textContent += `✓ [${j.id}] ${j.name}\n`;
+        const payload = await loadJSON(`${base}api/default-module?code_cert=${encodeURIComponent(certCode)}`);
+        if (payload && payload.module_id && payload.cert_id && payload.provider_id) {
+          jumpLink.href = `${pdfBase}?provider_id=${payload.provider_id}&cert_id=${payload.cert_id}&module_id=${payload.module_id}`;
+          jumpLink.classList.remove('disabled');
+          jumpLink.setAttribute('aria-disabled', 'false');
         } else {
-          log.textContent += `✗ Erreur: ${j.error}\n`;
+          jumpLink.href = '#';
+          jumpLink.classList.add('disabled');
+          jumpLink.setAttribute('aria-disabled', 'true');
         }
-      } catch (e) {
-        log.textContent += `✗ Erreur réseau: ${e}\n`;
+      } catch (err) {
+        jumpLink.href = '#';
+        jumpLink.classList.add('disabled');
+        jumpLink.setAttribute('aria-disabled', 'true');
       }
-      // Mise à jour de la barre
-      bar.style.width = `${Math.round((i+1)/total*100)}%`;
     }
 
-    alert(`Import terminé : ${total} item(s) traités.`);
-  };
-</script>
+    async function refreshModules(certId) {
+      if (!certId) {
+        modulesList.innerHTML = '';
+        modulesEmpty.textContent = 'Sélectionnez une certification pour afficher ses domaines.';
+        modulesEmpty.style.display = 'block';
+        currentModules = [];
+        updateJumpLink();
+        return;
+      }
+
+      modulesList.innerHTML = '';
+      modulesEmpty.textContent = 'Chargement des domaines…';
+      modulesEmpty.style.display = 'block';
+      try {
+        const modules = await loadJSON(`${base}api/certifications/${certId}/modules`);
+        renderModules(modules);
+        updateJumpLink();
+      } catch (err) {
+        modulesList.innerHTML = '';
+        modulesEmpty.textContent = err.message || 'Impossible de récupérer les domaines actuels.';
+        modulesEmpty.style.display = 'block';
+        currentModules = [];
+        updateJumpLink();
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const provSel = document.getElementById('prov');
+      const certSel = document.getElementById('cert');
+
+      const provSearch = window.makeSelectSearchable ? window.makeSelectSearchable(provSel, { placeholder: 'Rechercher un provider…' }) : null;
+      const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certSel, { placeholder: 'Rechercher une certification…' }) : null;
+
+      function updateSelectionLabel() {
+        selectionLabel.textContent = `${provSel.options[provSel.selectedIndex]?.text || ''} → ${certSel.options[certSel.selectedIndex]?.text || '—'}`;
+      }
+
+      async function refreshProviderCertifications() {
+        try {
+          const certs = await loadJSON(`${base}api/certifications/${provSel.value}`);
+          fill(certSel, certs);
+          certSearch && certSearch.setSearchTerm('');
+          if (certs.length) {
+            const preferred = pendingCertId && certs.find(item => item.id === pendingCertId);
+            certSel.value = preferred ? preferred.id : certs[0].id;
+            pendingCertId = null;
+            updateSelectionLabel();
+            refreshModules(certSel.value);
+          } else {
+            updateSelectionLabel();
+            refreshModules(null);
+          }
+        } catch (err) {
+          updateSelectionLabel();
+          modulesList.innerHTML = '';
+          modulesEmpty.textContent = err.message || 'Impossible de charger les certifications.';
+          modulesEmpty.style.display = 'block';
+          currentModules = [];
+          updateJumpLink();
+        }
+      }
+
+      try {
+        const providers = await loadJSON(base + 'api/providers');
+        fill(provSel, providers);
+        provSearch && provSearch.setSearchTerm('');
+        if (providers.length) {
+          const preferredProvider = Number.isFinite(preselectProviderId)
+            ? providers.find(item => item.id === preselectProviderId)
+            : null;
+          provSel.value = preferredProvider ? preferredProvider.id : providers[0].id;
+          await refreshProviderCertifications();
+        } else {
+          updateSelectionLabel();
+          refreshModules(null);
+        }
+      } catch (err) {
+        selectionLabel.textContent = '—';
+        modulesEmpty.textContent = err.message || 'Impossible de charger les providers.';
+        modulesEmpty.style.display = 'block';
+        currentModules = [];
+        updateJumpLink();
+      }
+
+      provSel.addEventListener('change', refreshProviderCertifications);
+
+      certSel.addEventListener('change', () => {
+        updateSelectionLabel();
+        refreshModules(certSel.value);
+        updateJumpLink();
+      });
+    });
+
+    if (generateBtn) {
+      const originalLabel = generateBtn.textContent;
+      generateBtn.addEventListener('click', async () => {
+        const certId = document.getElementById('cert').value;
+        if (!certId) {
+          setGenerationStatus('Choisissez une certification avant de générer.', 'error');
+          return;
+        }
+
+        setGenerationStatus('Génération en cours…');
+        generateBtn.disabled = true;
+        generateBtn.textContent = 'Génération…';
+        try {
+          const payload = await loadJSON(`${base}api/certifications/${certId}/generate-domains`, { method: 'POST' });
+          if (!Array.isArray(payload.modules)) {
+            throw new Error('Réponse inattendue de l’API.');
+          }
+          jsonInput.value = JSON.stringify(payload.modules, null, 2);
+          updateStats();
+          setGenerationStatus(`Proposition générée pour ${payload.certification}.`, 'success');
+        } catch (err) {
+          setGenerationStatus(err.message || 'Erreur lors de la génération.', 'error');
+        } finally {
+          generateBtn.disabled = false;
+          generateBtn.textContent = originalLabel;
+        }
+      });
+    }
+
+    const importBtn = document.getElementById('import-btn');
+    if (importBtn) {
+      importBtn.addEventListener('click', async () => {
+        const certId = +document.getElementById('cert').value;
+        let domains;
+        try {
+          domains = JSON.parse(jsonInput.value);
+          if (!Array.isArray(domains)) throw new Error();
+        } catch (err) {
+          alert('JSON invalide : attendez un tableau d’objets.');
+          return;
+        }
+
+        const log = document.getElementById('log');
+        const bar = document.getElementById('bar');
+        const total = domains.length;
+        log.textContent = '';
+        bar.style.width = '0%';
+
+        for (let i = 0; i < total; i++) {
+          const dom = domains[i] || {};
+          const name = dom.name || dom.module_name;
+          const descr = dom.descr !== undefined ? dom.descr : dom.module_descr;
+
+          if (!name) {
+            log.textContent += `⚠️ Ignoré (pas de nom): ${JSON.stringify(dom)}\n`;
+            continue;
+          }
+          try {
+            const res = await fetch(base + 'api/modules', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                certification_id: certId,
+                name,
+                descr: descr || null
+              })
+            });
+            const j = await res.json();
+            if (res.ok) {
+              log.textContent += `✅ [${j.id}] ${j.name}\n`;
+            } else {
+              log.textContent += `⛔ Erreur: ${j.error}\n`;
+            }
+          } catch (e) {
+            log.textContent += `⛔ Erreur réseau: ${e}\n`;
+          }
+          bar.style.width = `${Math.round((i + 1) / total * 100)}%`;
+        }
+
+        alert(`Import terminé : ${total} item(s) traité(s).`);
+        refreshModules(certId);
+      });
+    }
+  </script>
 </body>
 </html>

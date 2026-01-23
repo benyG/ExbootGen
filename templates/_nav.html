@@ -1,0 +1,131 @@
+<style>
+  .stellar-nav .nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .stellar-nav .nav-parent {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.65rem 1.05rem;
+    border-radius: 14px;
+    font-weight: 600;
+    color: var(--text-primary, #f8fafc);
+    background: rgba(15, 19, 32, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    cursor: pointer;
+    justify-content: space-between;
+  }
+
+  .stellar-nav .nav-children {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding-left: 0.8rem;
+  }
+
+  .stellar-nav .nav-children.is-collapsed {
+    display: none;
+  }
+
+  .stellar-nav .nav-group:hover > .nav-children {
+    display: flex;
+  }
+
+  .stellar-nav .nav-parent .chevron {
+    font-size: 0.85em;
+    opacity: 0.75;
+  }
+</style>
+
+<nav class="stellar-nav" id="stellarNav">
+  <div class="nav-group">
+    <a href="{{ url_for('home') }}" data-route="{{ url_for('home') }}"{% if active_page|default('') == 'home' %} class="active"{% endif %}>🏠 Home</a>
+  </div>
+  <div class="nav-group">
+    <button class="nav-parent" type="button" data-toggle-target="nav-questions" aria-expanded="false">
+      <span>❓ Questions factory</span>
+      <span class="chevron">▸</span>
+    </button>
+    <div class="nav-children is-collapsed" id="nav-questions">
+      <a href="{{ url_for('pdf.index') }}" data-route="{{ url_for('pdf.index') }}"{% if active_page|default('') == 'pdf_import' %} class="active"{% endif %}>PDF Import</a>
+      <a href="{{ url_for('pdf.generate_index') }}" data-route="{{ url_for('pdf.generate_index') }}"{% if active_page|default('') == 'pdf_generate' %} class="active"{% endif %}>Generate via PDF</a>
+      <a href="{{ url_for('dom.index') }}" data-route="{{ url_for('dom.index') }}"{% if active_page|default('') == 'domains' %} class="active"{% endif %}>Domains(AI)</a>
+      <a href="{{ url_for('reloc.index') }}" data-route="{{ url_for('reloc.index') }}"{% if active_page|default('') == 'relocate' %} class="active"{% endif %}>Relocate(AI)</a>
+      <a href="{{ url_for('fix_index') }}" data-route="{{ url_for('fix_index') }}"{% if active_page|default('') == 'fix' %} class="active"{% endif %}>Fix Question(AI)</a>
+      <a href="{{ url_for('module_blueprints.index') }}" data-route="{{ url_for('module_blueprints.index') }}"{% if active_page|default('') == 'blueprints' %} class="active"{% endif %}>Blueprints(AI)</a>
+      <a href="{{ url_for('populate_index') }}" data-route="{{ url_for('populate_index') }}"{% if active_page|default('') == 'populate' %} class="active"{% endif %}>Populate(AI)</a>
+      <a href="{{ url_for('quest.index') }}" data-route="{{ url_for('quest.index') }}"{% if active_page|default('') == 'json_import' %} class="active"{% endif %}>JSON Import</a>
+      <a href="{{ url_for('edit_question.index') }}" data-route="{{ url_for('edit_question.index') }}"{% if active_page|default('') == 'edit_question' %} class="active"{% endif %}>Edit Question</a>
+      <a href="{{ url_for('move.index') }}" data-route="{{ url_for('move.index') }}"{% if active_page|default('') == 'move' %} class="active"{% endif %}>Move Question</a>
+    </div>
+  </div>
+  <div class="nav-group">
+    <button class="nav-parent" type="button" data-toggle-target="nav-publishing" aria-expanded="false">
+      <span>📰 Publishing factory</span>
+      <span class="chevron">▸</span>
+    </button>
+    <div class="nav-children is-collapsed" id="nav-publishing">
+      <a href="{{ url_for('articles.index') }}" data-route="{{ url_for('articles.index') }}"{% if active_page|default('') == 'articles' %} class="active"{% endif %}>Article Builder(AI)</a>
+      <a href="{{ url_for('schedule') }}" data-route="{{ url_for('schedule') }}"{% if active_page|default('') == 'schedule' %} class="active"{% endif %}>Schedule</a>
+      <a href="{{ url_for('pdf.export_index') }}" data-route="{{ url_for('pdf.export_index') }}"{% if active_page|default('') == 'pdf_export' %} class="active"{% endif %}>PDF Export</a>
+    </div>
+  </div>
+  <div class="nav-group">
+    <button class="nav-parent" type="button" data-toggle-target="nav-labs" aria-expanded="false">
+      <span>🧪 Labs factory</span>
+      <span class="chevron">▸</span>
+    </button>
+    <div class="nav-children is-collapsed" id="nav-labs">
+      <a href="{{ url_for('hol.player') }}" data-route="{{ url_for('hol.player') }}"{% if active_page|default('') == 'hol_player' %} class="active"{% endif %}>Hands-on Labs</a>
+      <a href="{{ url_for('hol.labs_generator') }}" data-route="{{ url_for('hol.labs_generator') }}"{% if active_page|default('') == 'hol_generator' %} class="active"{% endif %}>Labs Generator(AI)</a>
+    </div>
+  </div>
+  <div class="nav-group">
+    <button class="nav-parent" type="button" data-toggle-target="nav-stats" aria-expanded="false">
+      <span>📊 Stats</span>
+      <span class="chevron">▸</span>
+    </button>
+    <div class="nav-children is-collapsed" id="nav-stats">
+      <a href="{{ url_for('dashboard') }}" data-route="{{ url_for('dashboard') }}"{% if active_page|default('') == 'dashboard' %} class="active"{% endif %}>Dashboard</a>
+      <a href="{{ url_for('reports') }}" data-route="{{ url_for('reports') }}"{% if active_page|default('') == 'reports' %} class="active"{% endif %}>Reports</a>
+      <a href="{{ url_for('mcp_monitoring') }}" data-route="{{ url_for('mcp_monitoring') }}"{% if active_page|default('') == 'mcp' %} class="active"{% endif %}>MCP</a>
+    </div>
+  </div>
+</nav>
+
+<script>
+  const updateChevron = (button, expanded) => {
+    const chevron = button.querySelector('.chevron');
+    if (chevron) {
+      chevron.textContent = expanded ? '▾' : '▸';
+    }
+  };
+
+  document.querySelectorAll('.nav-group').forEach((group) => {
+    const button = group.querySelector('[data-toggle-target]');
+    const targetId = button?.getAttribute('data-toggle-target');
+    const target = targetId ? document.getElementById(targetId) : null;
+    if (!button || !target) {
+      return;
+    }
+
+    const setExpanded = (expanded) => {
+      target.classList.toggle('is-collapsed', !expanded);
+      button.setAttribute('aria-expanded', String(expanded));
+      updateChevron(button, expanded);
+    };
+
+    setExpanded(false);
+
+    button.addEventListener('click', () => {
+      const isExpanded = button.getAttribute('aria-expanded') === 'true';
+      setExpanded(!isExpanded);
+    });
+
+    group.addEventListener('mouseenter', () => setExpanded(true));
+    group.addEventListener('mouseleave', () => setExpanded(false));
+  });
+</script>

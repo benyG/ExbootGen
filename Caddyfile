@@ -1,0 +1,4 @@
+factory.cisspbootcamp.online
+
+reverse_proxy :8000
+

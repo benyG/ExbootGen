@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Question · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #050814;
+      --panel: rgba(13, 17, 28, 0.8);
+      --panel-soft: rgba(14, 18, 30, 0.75);
+      --border: rgba(255, 255, 255, 0.08);
+      --accent: #5cf1c7;
+      --accent-strong: #7cf7ff;
+      --text: #e5e7eb;
+      --muted: rgba(229, 231, 235, 0.7);
+      --shadow: 0 25px 50px rgba(0, 0, 0, 0.35);
+      --radius: 18px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(92,241,199,0.18), transparent 40%),
+                  radial-gradient(circle at 75% 10%, rgba(124,247,255,0.18), transparent 45%),
+                  radial-gradient(circle at 50% 80%, rgba(244,114,182,0.14), transparent 55%),
+                  var(--bg);
+      color: var(--text);
+      padding-bottom: 64px;
+    }
+
+    .stellar-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(5, 8, 20, 0.8);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .stellar-container { width: min(1200px, 94vw); margin: 0 auto; padding: 1rem 0 1.25rem; }
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; }
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { width: 2.75rem; height: 2.75rem; display: grid; place-items: center; border-radius: 16px; background: linear-gradient(135deg, rgba(92,241,199,0.16), rgba(124,247,255,0.18)); border: 1px solid var(--border); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06); color: var(--accent-strong); letter-spacing: 0.08em; font-weight: 700; }
+    .brand-text strong { display: block; letter-spacing: 0.02em; }
+    .brand-text span { color: var(--muted); font-size: 0.9rem; }
+
+    .stellar-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1rem; }
+    .stellar-nav a { color: var(--muted); text-decoration: none; padding: 0.55rem 0.9rem; border-radius: 12px; border: 1px solid transparent; transition: 0.2s ease; }
+    .stellar-nav a:hover { color: var(--text); border-color: var(--border); background: rgba(255,255,255,0.04); }
+    .stellar-nav a.active { color: #0b172a; background: var(--accent); border-color: transparent; }
+
+    .nav-toggle { display: none; width: 48px; height: 48px; border-radius: 12px; border: 1px solid var(--border); background: rgba(255,255,255,0.04); color: var(--text); align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
+    .nav-toggle span, .nav-toggle::before { display: block; width: 18px; height: 2px; background: currentColor; transition: 0.25s ease; }
+    .nav-toggle::before { content: ''; width: 14px; }
+
+    main { width: min(1200px, 94vw); margin: 28px auto; display: flex; flex-direction: column; gap: 1rem; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.2rem 1.4rem; box-shadow: var(--shadow); }
+    .panel h2 { margin: 0 0 0.25rem; }
+    .panel p { margin: 0; color: var(--muted); }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+    label { display: block; margin-bottom: 0.45rem; color: var(--muted); font-size: 0.95rem; }
+    input[type="text"], select, textarea { width: 100%; background: var(--panel-soft); border: 1px solid var(--border); color: var(--text); border-radius: 12px; padding: 0.75rem 0.9rem; font-size: 1rem; }
+    textarea { min-height: 72px; resize: vertical; }
+
+    button.primary { background: linear-gradient(135deg, #5cf1c7, #7cf7ff); border: none; color: #071026; font-weight: 700; padding: 0.9rem 1.2rem; border-radius: 12px; cursor: pointer; box-shadow: 0 15px 35px rgba(92,241,199,0.35); }
+    button.primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 0.75rem 1rem; border-radius: 10px; cursor: pointer; }
+    button.danger { background: rgba(248, 113, 113, 0.18); border: 1px solid rgba(248, 113, 113, 0.55); color: #fecaca; padding: 0.75rem 1rem; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; min-width: 48px; }
+    button.danger:hover { border-color: #f87171; color: #fee2e2; }
+
+    .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0.9rem; }
+    .result-card { background: var(--panel-soft); border: 1px solid var(--border); border-radius: 14px; padding: 0.9rem 1rem; cursor: pointer; transition: 0.2s ease; }
+    .result-card:hover { border-color: rgba(124,247,255,0.6); transform: translateY(-2px); }
+    .result-card small { display: block; color: var(--muted); margin-top: 0.35rem; }
+    .result-card .src { color: #c084fc; font-size: 0.9rem; }
+
+    .editor {
+      background: var(--panel-soft);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      min-height: 220px;
+      padding: 1rem;
+      outline: none;
+    }
+    .editor table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 0.75rem 0;
+    }
+    .editor table,
+    .editor th,
+    .editor td {
+      border: 1px solid rgba(255, 255, 255, 0.35);
+    }
+    .editor th,
+    .editor td {
+      padding: 0.6rem 0.75rem;
+    }
+    .editor[data-placeholder]:empty::before {
+      content: attr(data-placeholder);
+      color: var(--muted);
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-bottom: 0.75rem;
+      padding: 0.35rem;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .toolbar-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding-right: 0.35rem;
+      border-right: 1px solid var(--border);
+    }
+    .toolbar-group:last-of-type { border-right: none; padding-right: 0; }
+    .toolbar button {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.45rem 0.55rem;
+      border-radius: 10px;
+      cursor: pointer;
+      min-width: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      font-weight: 600;
+    }
+    .toolbar button span { opacity: 0.9; }
+    .toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+    .toolbar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .toolbar-status {
+      margin-left: 0.35rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .toolbar-status strong { color: var(--accent); }
+
+    .answers { display: flex; flex-direction: column; gap: 0.75rem; }
+    .answer-item { background: var(--panel-soft); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem; display: grid; grid-template-columns: 1fr auto; gap: 0.75rem; align-items: center; }
+    .answer-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.55rem; width: 100%; }
+    .answer-fields label { display: flex; flex-direction: column; gap: 0.3rem; color: var(--muted); font-size: 0.95rem; }
+    .answer-fields input[type="text"] { width: 100%; background: var(--panel-soft); border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 0.6rem 0.75rem; }
+    .answer-item .meta { color: var(--muted); font-size: 0.9rem; }
+
+    .status { font-size: 0.95rem; color: var(--muted); }
+    .hidden { display: none; }
+
+    @media (max-width: 800px) {
+      .stellar-nav { display: none; }
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); margin-top: 1rem; }
+      .answer-item { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <span class="brand-mark">EX</span>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Éditeur de questions</span>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-label="Ouvrir la navigation"><span></span></button>
+      </div>
+      {% set active_page = 'edit_question' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h1>Rechercher et éditer une question</h1>
+      <p>Filtrez par texte, provider et certification. Cliquez sur une carte pour afficher et modifier le contenu, l'origine et les réponses de la question.</p>
+    </section>
+
+    <section class="panel">
+      <div class="grid">
+        <div>
+          <label for="searchText">Texte à rechercher</label>
+          <input type="text" id="searchText" placeholder="Mots-clés de la question">
+        </div>
+        <div>
+          <label for="providerSelect">Provider</label>
+          <select id="providerSelect"></select>
+        </div>
+        <div>
+          <label for="certificationSelect">Certification</label>
+          <select id="certificationSelect"></select>
+        </div>
+        <div id="moduleSelectWrap" class="hidden">
+          <label for="moduleSelect">Module</label>
+          <select id="moduleSelect"></select>
+        </div>
+      </div>
+      <div style="margin-top: 0.8rem; display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;">
+        <button class="primary" id="searchBtn">Lancer la recherche</button>
+        <label style="display:flex; align-items:center; gap:0.4rem; color: var(--muted); font-size: 0.95rem;">
+          <input type="checkbox" id="addModeToggle">
+          Mode ajout
+        </label>
+        <span class="status" id="searchStatus">Saisissez au moins un mot-clé.</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+        <h2 style="margin: 0;">Résultats</h2>
+        <span class="status" id="resultsCount">Aucun résultat pour le moment.</span>
+      </div>
+      <div class="results" id="results"></div>
+    </section>
+
+    <section class="panel">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+        <div>
+          <h2 style="margin: 0;">Éditeur</h2>
+          <p class="status" id="editorStatus">Sélectionnez une question pour l'éditer.</p>
+        </div>
+        <div class="status" id="contextInfo"></div>
+      </div>
+
+      <div style="margin: 1rem 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 0.75rem;">
+        <div>
+          <label for="srcFile">Source (src_file)</label>
+          <input type="text" id="srcFile" placeholder="Fichier d'origine">
+        </div>
+        <div>
+          <label for="descrInput">Description / diagramme</label>
+          <input type="text" id="descrInput" placeholder="Description facultative de la question">
+        </div>
+        <div>
+          <label for="natureSelect">Type de question</label>
+          <select id="natureSelect">
+            <option value="1">QCM</option>
+            <option value="2">True_False</option>
+            <option value="3">Réponse écrite</option>
+            <option value="4">Matching</option>
+            <option value="5">Drag-and-Drop</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="toolbar" id="editorToolbar" role="toolbar" aria-label="Outils de mise en forme">
+        <div class="toolbar-group">
+          <button type="button" data-command="bold" aria-label="Gras"><strong>B</strong></button>
+          <button type="button" data-command="italic" aria-label="Italique"><em>I</em></button>
+          <button type="button" data-command="underline" aria-label="Souligné"><u>U</u></button>
+          <button type="button" data-command="strikeThrough" aria-label="Barré"><span style="text-decoration: line-through;">S</span></button>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" data-command="subscript" aria-label="Indice">x<sub>2</sub></button>
+          <button type="button" data-command="superscript" aria-label="Exposant">x<sup>2</sup></button>
+          <button type="button" data-command="createLink" aria-label="Insérer un lien">🔗</button>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" data-command="formatBlock" data-value="H2" aria-label="Titre niveau 2">H2</button>
+          <button type="button" data-command="formatBlock" data-value="H3" aria-label="Titre niveau 3">H3</button>
+          <button type="button" data-command="formatBlock" data-value="P" aria-label="Paragraphe">¶</button>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" data-command="justifyLeft" aria-label="Aligner à gauche">⟸</button>
+          <button type="button" data-command="justifyCenter" aria-label="Centrer">⇔</button>
+          <button type="button" data-command="justifyRight" aria-label="Aligner à droite">⟹</button>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" data-command="insertUnorderedList" aria-label="Liste à puces">•</button>
+          <button type="button" data-command="insertOrderedList" aria-label="Liste numérotée">1.</button>
+          <button type="button" data-command="formatBlock" data-value="BLOCKQUOTE" aria-label="Citation">❝</button>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" data-command="insertTable" aria-label="Insérer un tableau">▦</button>
+          <button type="button" data-command="insertImage" aria-label="Insérer une image">🖼️</button>
+          <button type="button" data-command="removeFormat" aria-label="Effacer la mise en forme">⨯</button>
+        </div>
+        <div class="toolbar-group">
+          <button type="button" data-command="undo" aria-label="Annuler">↺</button>
+          <button type="button" data-command="redo" aria-label="Rétablir">↻</button>
+        </div>
+        <div class="toolbar-status" id="uploadStatus" aria-live="polite"></div>
+      </div>
+      <div class="editor" id="questionEditor" contenteditable="true" aria-label="Éditeur de question" data-placeholder="Commencez à saisir le texte de la question…"></div>
+
+      <div style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="margin: 0;">Réponses</h3>
+        <button type="button" class="secondary" id="addAnswer">Ajouter une réponse</button>
+      </div>
+      <div class="answers" id="answers"></div>
+
+      <div style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+        <button class="primary" id="saveBtn" disabled>Enregistrer les modifications</button>
+        <button class="primary hidden" id="addBtn">Ajouter</button>
+        <button class="danger" id="deleteBtn" type="button" aria-label="Supprimer la question" title="Supprimer la question" disabled>🗑️</button>
+        <span class="status" id="saveStatus"></span>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const navToggle = document.getElementById('navToggle');
+    const nav = document.getElementById('stellarNav');
+    navToggle?.addEventListener('click', () => {
+      const isOpen = document.body.classList.toggle('nav-open');
+      navToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+
+    const providerSelect = document.getElementById('providerSelect');
+    const certificationSelect = document.getElementById('certificationSelect');
+    const moduleSelect = document.getElementById('moduleSelect');
+    const moduleSelectWrap = document.getElementById('moduleSelectWrap');
+    const addModeToggle = document.getElementById('addModeToggle');
+    const addBtn = document.getElementById('addBtn');
+    const resultsContainer = document.getElementById('results');
+    const resultsCount = document.getElementById('resultsCount');
+    const searchStatus = document.getElementById('searchStatus');
+    const searchText = document.getElementById('searchText');
+    const searchBtn = document.getElementById('searchBtn');
+    const questionEditor = document.getElementById('questionEditor');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const srcFileInput = document.getElementById('srcFile');
+    const descrInput = document.getElementById('descrInput');
+    const natureSelect = document.getElementById('natureSelect');
+    const editorStatus = document.getElementById('editorStatus');
+    const contextInfo = document.getElementById('contextInfo');
+    const answersContainer = document.getElementById('answers');
+    const saveBtn = document.getElementById('saveBtn');
+    const saveStatus = document.getElementById('saveStatus');
+    const deleteBtn = document.getElementById('deleteBtn');
+
+    let currentQuestionId = null;
+    let isAddMode = false;
+
+    const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
+    nav?.querySelectorAll('a[data-route]').forEach(link => {
+      const target = (link.dataset.route || '').replace(/\/$/, '') || '/';
+      if (target === '/' ? currentPath === '/' : currentPath.startsWith(target)) {
+        nav.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+        link.classList.add('active');
+      }
+    });
+
+    const escapeHtml = (text) => {
+      const div = document.createElement('div');
+      div.textContent = text ?? '';
+      return div.innerHTML;
+    };
+
+    function setSelectOptions(selectEl, placeholder, items) {
+      selectEl.innerHTML = '';
+      const defaultOpt = document.createElement('option');
+      defaultOpt.value = '';
+      defaultOpt.textContent = placeholder;
+      selectEl.appendChild(defaultOpt);
+
+      items.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        opt.textContent = item.name ?? '';
+        selectEl.appendChild(opt);
+      });
+    }
+
+    async function loadProviders() {
+      const res = await fetch('/edit-question/api/providers');
+      const providers = await res.json();
+      setSelectOptions(providerSelect, '— Tous —', providers);
+    }
+
+    async function loadCertifications() {
+      const provId = providerSelect.value;
+      setSelectOptions(certificationSelect, '— Toutes —', []);
+      setSelectOptions(moduleSelect, '— Sélectionner —', []);
+      if (!provId) return;
+      const res = await fetch(`/edit-question/api/certifications/${provId}`);
+      const certs = await res.json();
+      setSelectOptions(certificationSelect, '— Toutes —', certs);
+    }
+
+    async function loadModules() {
+      const certId = certificationSelect.value;
+      setSelectOptions(moduleSelect, '— Sélectionner —', []);
+      if (!certId) return;
+      const res = await fetch(`/edit-question/api/modules/${certId}`);
+      const modules = await res.json();
+      setSelectOptions(moduleSelect, '— Sélectionner —', modules);
+    }
+
+    async function searchQuestions() {
+      if (isAddMode) {
+        searchStatus.textContent = 'Mode ajout activé : la recherche est désactivée.';
+        return;
+      }
+      const q = searchText.value.trim();
+      if (!q) {
+        searchStatus.textContent = 'Veuillez saisir un mot-clé.';
+        return;
+      }
+      searchStatus.textContent = 'Recherche en cours…';
+      resultsContainer.innerHTML = '';
+      const params = new URLSearchParams({ q });
+      if (providerSelect.value) params.append('provider_id', providerSelect.value);
+      if (certificationSelect.value) params.append('certification_id', certificationSelect.value);
+      const res = await fetch(`/edit-question/api/search?${params.toString()}`);
+      const data = await res.json();
+      const results = data.results || [];
+      resultsCount.textContent = `${results.length} résultat(s)`;
+      searchStatus.textContent = results.length ? 'Cliquez sur une carte pour charger la question.' : 'Aucun résultat pour cette recherche.';
+
+      resultsContainer.innerHTML = results.map(r => `
+        <article class="result-card" data-id="${r.id}">
+          <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
+          <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
+          <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
+          <small class="src">${r.src_file ? `src_file : ${escapeHtml(r.src_file)}` : 'src_file non renseigné'}</small>
+        </article>
+      `).join('');
+    }
+
+    async function loadQuestion(questionId) {
+      if (isAddMode) {
+        setAddMode(false);
+      }
+      const res = await fetch(`/edit-question/api/questions/${questionId}`);
+      if (!res.ok) {
+        editorStatus.textContent = 'Impossible de charger la question.';
+        return;
+      }
+      const q = await res.json();
+      currentQuestionId = q.id;
+      questionEditor.innerHTML = q.text || '';
+      srcFileInput.value = q.src_file || '';
+      descrInput.value = q.descr || '';
+      natureSelect.value = String(q.nature ?? 1);
+      contextInfo.textContent = `${q.provider_name || ''} → ${q.certification_name || ''} → ${q.module_name || ''}`;
+      editorStatus.textContent = `Édition de la question #${q.id}`;
+      saveBtn.disabled = false;
+      deleteBtn.disabled = false;
+      renderAnswers(q.answers || []);
+    }
+
+    function renderAnswers(items) {
+      answersContainer.innerHTML = '';
+      if (!items.length) {
+        addAnswerField();
+        return;
+      }
+      items.forEach(item => addAnswerField(item.value || '', item.isok, item.meta));
+    }
+
+    function addAnswerField(value = '', isok = false, meta = {}) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'answer-item';
+      wrapper.dataset.meta = JSON.stringify(meta || {});
+      wrapper.innerHTML = `
+        <div class="answer-fields">
+          <label>
+            Valeur
+            <input type="text" class="answer-value" placeholder="value" value="${escapeHtml(value)}">
+          </label>
+          <label>
+            Cible (target, optionnel)
+            <input type="text" class="answer-target" placeholder="target" value="${escapeHtml(meta?.target || '')}">
+          </label>
+        </div>
+        <div style="display:flex; flex-direction: column; align-items: flex-end; gap: 0.45rem;">
+          <label style="display:flex; align-items:center; gap:0.35rem; color: var(--muted); font-size:0.95rem;">
+            <input type="checkbox" ${isok ? 'checked' : ''}> Correcte
+          </label>
+          <button type="button" class="secondary remove-answer">Supprimer</button>
+        </div>
+      `;
+      wrapper.querySelector('.remove-answer').addEventListener('click', () => wrapper.remove());
+      answersContainer.appendChild(wrapper);
+    }
+
+    function setAddMode(enabled) {
+      isAddMode = enabled;
+      addModeToggle.checked = enabled;
+      moduleSelectWrap.classList.toggle('hidden', !enabled);
+      addBtn.classList.toggle('hidden', !enabled);
+      saveBtn.classList.toggle('hidden', enabled);
+      deleteBtn.classList.toggle('hidden', enabled);
+      searchBtn.disabled = enabled;
+      searchText.disabled = enabled;
+      resultsContainer.classList.toggle('hidden', enabled);
+      resultsCount.classList.toggle('hidden', enabled);
+      if (enabled) {
+        currentQuestionId = null;
+        questionEditor.innerHTML = '';
+        srcFileInput.value = '';
+        descrInput.value = '';
+        natureSelect.value = '1';
+        editorStatus.textContent = 'Mode ajout : saisissez une nouvelle question.';
+        contextInfo.textContent = '';
+        renderAnswers([]);
+        saveStatus.textContent = '';
+        deleteBtn.disabled = true;
+        searchStatus.textContent = 'Sélectionnez un provider et une certification pour commencer.';
+        loadModules();
+      } else {
+        editorStatus.textContent = 'Sélectionnez une question pour l\'éditer.';
+        searchStatus.textContent = 'Saisissez au moins un mot-clé.';
+        addBtn.disabled = false;
+        deleteBtn.disabled = !currentQuestionId;
+      }
+    }
+
+    function applyCommand(command, value = null) {
+      switch (command) {
+        case 'createLink': {
+          const url = prompt('URL du lien');
+          if (url) document.execCommand('createLink', false, url);
+          break;
+        }
+        case 'insertImage': {
+          const url = prompt('URL de l\'image');
+          if (url) document.execCommand('insertImage', false, url);
+          break;
+        }
+        case 'insertTable': {
+          const rows = 3;
+          const cols = 3;
+          let html = '<table>';
+          for (let r = 0; r < rows; r++) {
+            html += '<tr>';
+            for (let c = 0; c < cols; c++) {
+              html += `<td>Cell ${r + 1}.${c + 1}</td>`;
+            }
+            html += '</tr>';
+          }
+          html += '</table>';
+          document.execCommand('insertHTML', false, html);
+          break;
+        }
+        case 'formatBlock':
+          document.execCommand('formatBlock', false, value || 'P');
+          break;
+        default:
+          document.execCommand(command, false, value);
+      }
+      questionEditor.focus();
+    }
+
+    const editorToolbar = document.getElementById('editorToolbar');
+    editorToolbar.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-command]');
+      if (!button) return;
+      applyCommand(button.dataset.command, button.dataset.value || null);
+    });
+
+    function setUploadStatus(message, tone = 'info') {
+      if (!uploadStatus) return;
+      uploadStatus.textContent = message || '';
+      if (tone === 'error') {
+        uploadStatus.style.color = '#fca5a5';
+      } else if (tone === 'success') {
+        uploadStatus.style.color = 'var(--accent)';
+      } else {
+        uploadStatus.style.color = 'var(--muted)';
+      }
+    }
+
+    async function uploadImageFile(file) {
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      setUploadStatus('Téléversement de l’image…');
+      try {
+        const res = await fetch('/edit-question/api/upload-image', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok || !data.url) {
+          throw new Error(data.error || 'Impossible de téléverser l’image.');
+        }
+        document.execCommand('insertImage', false, data.url);
+        setUploadStatus('Image insérée depuis le presse-papiers.', 'success');
+      } catch (err) {
+        setUploadStatus(err.message || 'Erreur pendant l’upload.', 'error');
+      } finally {
+        questionEditor.focus();
+      }
+    }
+
+    questionEditor.addEventListener('paste', (event) => {
+      const clipboard = event.clipboardData;
+      if (!clipboard) return;
+
+      const imageItem = Array.from(clipboard.items || []).find(item => item.type && item.type.startsWith('image/'));
+      if (imageItem) {
+        event.preventDefault();
+        const file = imageItem.getAsFile();
+        uploadImageFile(file);
+        return;
+      }
+
+      const html = clipboard.getData('text/html');
+      if (html) {
+        event.preventDefault();
+        document.execCommand('insertHTML', false, html);
+        questionEditor.focus();
+        return;
+      }
+
+      const text = clipboard.getData('text/plain');
+      if (text) {
+        event.preventDefault();
+        // Convert TSV/CSV tables to HTML tables when possible
+        const rows = text.split(/\r?\n/).filter(Boolean).map(r => r.split(/\t|,/));
+        const hasMultipleCells = rows.some(r => r.length > 1);
+        if (rows.length && hasMultipleCells) {
+          const htmlTable = `
+            <table>
+              ${rows.map(r => `<tr>${r.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}
+            </table>
+          `;
+          document.execCommand('insertHTML', false, htmlTable);
+        } else {
+          const safe = escapeHtml(text).replace(/\n/g, '<br>');
+          document.execCommand('insertHTML', false, safe);
+        }
+        questionEditor.focus();
+      }
+    });
+
+    document.getElementById('addAnswer').addEventListener('click', () => addAnswerField());
+
+    resultsContainer.addEventListener('click', (e) => {
+      const card = e.target.closest('.result-card');
+      if (card?.dataset.id) {
+        loadQuestion(card.dataset.id);
+      }
+    });
+
+    document.getElementById('searchBtn').addEventListener('click', searchQuestions);
+    searchText.addEventListener('keyup', (e) => { if (e.key === 'Enter') searchQuestions(); });
+    providerSelect.addEventListener('change', () => { loadCertifications(); if (!isAddMode) searchQuestions(); });
+    certificationSelect.addEventListener('change', () => {
+      if (isAddMode) {
+        loadModules();
+        return;
+      }
+      searchQuestions();
+    });
+    addModeToggle.addEventListener('change', (event) => {
+      setAddMode(event.target.checked);
+    });
+    moduleSelect?.addEventListener('change', () => {
+      saveStatus.textContent = '';
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      if (!currentQuestionId) return;
+      saveStatus.textContent = 'Enregistrement en cours…';
+      const answers = Array.from(document.querySelectorAll('.answer-item')).map(item => {
+        const baseMeta = item.dataset.meta ? JSON.parse(item.dataset.meta) : {};
+        const value = item.querySelector('.answer-value')?.value.trim() || '';
+        const target = item.querySelector('.answer-target')?.value.trim() || '';
+        const meta = { ...baseMeta };
+        if (target) {
+          meta.target = target;
+        } else {
+          delete meta.target;
+        }
+        return {
+          value,
+          isok: item.querySelector('input[type="checkbox"]').checked,
+          meta,
+        };
+      });
+      const payload = {
+        text: questionEditor.innerHTML.trim(),
+        src_file: srcFileInput.value.trim(),
+        descr: descrInput.value.trim(),
+        nature: Number.parseInt(natureSelect.value || '1', 10),
+        answers,
+      };
+      const res = await fetch(`/edit-question/api/questions/${currentQuestionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        saveStatus.textContent = 'Question mise à jour avec succès.';
+      } else {
+        const err = await res.json().catch(() => ({}));
+        saveStatus.textContent = err.error || 'Erreur pendant la sauvegarde.';
+      }
+    });
+
+    deleteBtn.addEventListener('click', async () => {
+      if (!currentQuestionId) return;
+      const confirmDelete = window.confirm(`Supprimer définitivement la question #${currentQuestionId} ?`);
+      if (!confirmDelete) return;
+      deleteBtn.disabled = true;
+      saveStatus.textContent = 'Suppression en cours…';
+      const res = await fetch(`/edit-question/api/questions/${currentQuestionId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        saveStatus.textContent = 'Question supprimée.';
+        currentQuestionId = null;
+        questionEditor.innerHTML = '';
+        srcFileInput.value = '';
+        descrInput.value = '';
+        natureSelect.value = '1';
+        renderAnswers([]);
+        editorStatus.textContent = 'Sélectionnez une question pour l\'éditer.';
+        contextInfo.textContent = '';
+        saveBtn.disabled = true;
+        deleteBtn.disabled = true;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        saveStatus.textContent = err.error || 'Erreur pendant la suppression.';
+        deleteBtn.disabled = false;
+      }
+    });
+
+    addBtn.addEventListener('click', async () => {
+      saveStatus.textContent = '';
+      const moduleId = moduleSelect.value;
+      if (!moduleId) {
+        saveStatus.textContent = 'Sélectionnez un module pour ajouter la question.';
+        return;
+      }
+      const text = questionEditor.innerHTML.trim();
+      if (!text) {
+        saveStatus.textContent = 'Le texte de la question est requis.';
+        return;
+      }
+      const answers = Array.from(document.querySelectorAll('.answer-item')).map(item => {
+        const baseMeta = item.dataset.meta ? JSON.parse(item.dataset.meta) : {};
+        const value = item.querySelector('.answer-value')?.value.trim() || '';
+        const target = item.querySelector('.answer-target')?.value.trim() || '';
+        const meta = { ...baseMeta };
+        if (target) {
+          meta.target = target;
+        } else {
+          delete meta.target;
+        }
+        return {
+          value,
+          isok: item.querySelector('input[type="checkbox"]').checked,
+          meta,
+        };
+      }).filter(item => item.value);
+      if (!answers.length) {
+        saveStatus.textContent = 'Ajoutez au moins une réponse.';
+        return;
+      }
+      addBtn.disabled = true;
+      saveStatus.textContent = 'Ajout de la question…';
+      const payload = {
+        module_id: moduleId,
+        text,
+        src_file: srcFileInput.value.trim(),
+        descr: descrInput.value.trim(),
+        nature: Number.parseInt(natureSelect.value || '1', 10),
+        answers,
+      };
+      const res = await fetch('/edit-question/api/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        saveStatus.textContent = 'Question ajoutée avec succès.';
+        questionEditor.innerHTML = '';
+        srcFileInput.value = '';
+        descrInput.value = '';
+        renderAnswers([]);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        saveStatus.textContent = err.error || 'Erreur pendant l’ajout.';
+      }
+      addBtn.disabled = false;
+    });
+
+    loadProviders();
+  </script>
+</body>
+</html>

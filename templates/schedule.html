@@ -1,0 +1,2119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schedule · ExBoot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #040711;
+      --glass: rgba(12, 16, 29, 0.72);
+      --glass-strong: rgba(17, 22, 36, 0.9);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text: #f8fafc;
+      --muted: rgba(226, 232, 240, 0.78);
+      --warning: #f59e0b;
+      --danger: #f87171;
+      --radius-lg: 22px;
+      --radius-md: 14px;
+      --shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background:
+        radial-gradient(circle at 15% 20%, rgba(124,247,255,0.12), transparent 45%),
+        radial-gradient(circle at 80% 10%, rgba(244,114,182,0.14), transparent 50%),
+        radial-gradient(circle at 50% 80%, rgba(71,245,192,0.16), transparent 60%),
+        var(--bg);
+      color: var(--text);
+    }
+
+    .orb {
+      position: fixed;
+      width: 26rem;
+      height: 26rem;
+      border-radius: 50%;
+      filter: blur(6px);
+      opacity: 0.25;
+      mix-blend-mode: screen;
+      background: radial-gradient(circle, rgba(71,245,192,0.26) 0%, rgba(4,7,17,0) 70%);
+      animation: float 18s ease-in-out infinite;
+      pointer-events: none;
+    }
+    .orb-2 { top: -8rem; right: -8rem; width: 30rem; height: 30rem; animation-delay: -6s; background: radial-gradient(circle, rgba(124,247,255,0.2) 0%, rgba(4,7,17,0) 70%); }
+    .orb-3 { bottom: -10rem; left: -6rem; width: 28rem; height: 28rem; animation-delay: -12s; background: radial-gradient(circle, rgba(244,114,182,0.22) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes float {
+      0%, 100% { transform: translate3d(0,0,0); }
+      45% { transform: translate3d(24px, -16px, 0); }
+      75% { transform: translate3d(-18px, 12px, 0); }
+    }
+
+    header.stellar-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(4, 7, 17, 0.78);
+      backdrop-filter: blur(16px) saturate(170%);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .container {
+      width: min(1200px, 94vw);
+      margin: 0 auto;
+      padding: 0 1rem 3rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.2rem 0;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+    }
+
+    .brand-mark {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      background: linear-gradient(145deg, rgba(71,245,192,0.9), rgba(124,247,255,0.9));
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      color: #041221;
+      box-shadow: 0 12px 28px rgba(124,247,255,0.18);
+    }
+
+    .brand strong {
+      font-family: 'Space Grotesk', 'Inter', sans-serif;
+      font-size: 1.1rem;
+      letter-spacing: 0.01em;
+    }
+
+    .nav-toggle {
+      display: none;
+      width: 2.8rem;
+      height: 2.8rem;
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(15, 19, 32, 0.68);
+      color: var(--text);
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.35s var(--transition), background 0.35s var(--transition);
+    }
+
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+
+    .nav-toggle span,
+    .nav-toggle span::before,
+    .nav-toggle span::after {
+      display: block;
+      width: 18px;
+      height: 2px;
+      background: currentColor;
+      border-radius: 999px;
+      position: relative;
+      transition: transform 0.35s ease, opacity 0.3s ease;
+    }
+
+    .nav-toggle span::before,
+    .nav-toggle span::after {
+      content: '';
+      position: absolute;
+      left: 0;
+    }
+
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.8rem;
+      border-radius: var(--radius-lg);
+      padding: 0.35rem;
+      background: rgba(8, 12, 24, 0.55);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06);
+    }
+
+    .stellar-nav a {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.65rem 1.05rem;
+      border-radius: 14px;
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--muted);
+      transition: color 0.3s ease, transform 0.3s ease, background 0.3s ease;
+    }
+
+    .stellar-nav a::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14));
+      opacity: 0;
+      transition: opacity 0.35s ease;
+      z-index: -1;
+    }
+
+    .stellar-nav a:hover {
+      color: var(--text);
+      transform: translateY(-2px);
+    }
+
+    .stellar-nav a:hover::after { opacity: 1; }
+
+    .stellar-nav a.active {
+      color: var(--text);
+    }
+
+    .stellar-nav a.active::after {
+      opacity: 1;
+      box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18);
+    }
+
+    .page-title {
+      margin: 2rem 0 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 1rem;
+    }
+
+    .page-title h1 {
+      margin: 0;
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      letter-spacing: 0.02em;
+    }
+
+    .page-title .hint {
+      color: var(--muted);
+      max-width: 700px;
+      line-height: 1.5;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 1.4rem;
+      align-items: start;
+    }
+
+    @media (max-width: 1024px) {
+      .layout { grid-template-columns: 1fr; }
+      .top-bar { align-items: flex-start; }
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav {
+        max-height: 600px;
+        opacity: 1;
+        pointer-events: auto;
+        margin-top: 1rem;
+      }
+      .stellar-nav {
+        flex-direction: column;
+        max-height: 0;
+        opacity: 0;
+        pointer-events: none;
+        overflow: hidden;
+        transition: max-height 0.4s ease, opacity 0.4s ease;
+        width: 100%;
+      }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+
+    .card {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px) saturate(160%);
+    }
+
+    .card h2, .card h3 {
+      margin-top: 0;
+      margin-bottom: 0.6rem;
+      letter-spacing: 0.01em;
+    }
+
+    .card-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .calendar-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(4,7,17,0.75);
+      backdrop-filter: blur(8px) saturate(130%);
+      z-index: 50;
+      padding: 1rem;
+    }
+
+    .modal-backdrop.is-open { display: flex; }
+
+    .modal {
+      background: var(--glass-strong);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      width: min(900px, 100%);
+      max-height: 90vh;
+      overflow: auto;
+      padding: 1.5rem;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .subtle {
+      color: var(--muted);
+      margin: 0.2rem 0 0.8rem;
+      line-height: 1.5;
+    }
+
+    .calendar-wrapper {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .month-switcher {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: var(--glass-strong);
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+    }
+
+    .month-switcher button {
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(12, 16, 29, 0.9);
+      color: var(--text);
+      border-radius: 10px;
+      width: 34px;
+      height: 34px;
+      cursor: pointer;
+      box-shadow: inset 0 0 0 1px rgba(124,247,255,0.05);
+      transition: border 0.2s ease, transform 0.2s ease;
+    }
+
+    .month-switcher button:hover {
+      border-color: rgba(124, 247, 255, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      border: 1px solid rgba(124, 247, 255, 0.35);
+      color: #041221;
+      background: linear-gradient(145deg, rgba(124,247,255,0.9), rgba(71,245,192,0.92));
+      box-shadow: 0 12px 30px rgba(124, 247, 255, 0.14);
+    }
+
+    .legend {
+      display: flex;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .legend .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(71,245,192,0.14);
+    }
+
+    .weekday-row, .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 0.35rem;
+    }
+
+    .auto-plan-row {
+      margin-top: 1rem;
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .weekday {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+      padding: 0.35rem 0;
+    }
+
+    .day {
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(12, 16, 29, 0.45);
+      border-radius: var(--radius-md);
+      min-height: 100px;
+      padding: 0.75rem;
+      position: relative;
+      cursor: pointer;
+      transition: border 0.2s ease, transform 0.2s ease, background 0.2s ease;
+    }
+
+    .day:hover { transform: translateY(-2px); border-color: rgba(124, 247, 255, 0.45); }
+    .day.selected { border-color: rgba(124, 247, 255, 0.7); box-shadow: 0 12px 24px rgba(124, 247, 255, 0.14); }
+    .day.today::after {
+      content: "Aujourd'hui";
+      position: absolute;
+      top: 8px;
+      right: 10px;
+      font-size: 0.7rem;
+      color: var(--accent-strong);
+      background: rgba(124, 247, 255, 0.08);
+      border-radius: 999px;
+      padding: 0.2rem 0.55rem;
+      border: 1px solid rgba(124, 247, 255, 0.18);
+    }
+
+    .day-number {
+      font-weight: 700;
+      font-size: 1rem;
+    }
+
+    .day .empty {
+      opacity: 0.35;
+    }
+
+    .channel-chips {
+      display: flex;
+      gap: 0.3rem;
+      flex-wrap: wrap;
+      margin-top: 0.5rem;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.55rem;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #041221;
+    }
+
+    .chip.x { background: linear-gradient(135deg, #38bdf8, #0ea5e9); color: #041221; border: 1px solid rgba(14,165,233,0.45); box-shadow: 0 8px 25px rgba(14,165,233,0.16); }
+    .chip.linkedin { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #e2e8f0; }
+    .chip.article { background: linear-gradient(135deg, #a855f7, #7c3aed); color: #f8fafc; }
+
+    .count {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(71,245,192,0.16);
+      border: 1px solid rgba(71,245,192,0.38);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 0.15rem 0.45rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .day.empty-cell {
+      opacity: 0.35;
+      cursor: default;
+    }
+
+    .panel {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .schedule-list {
+      display: grid;
+      gap: 0.6rem;
+    }
+
+    .schedule-item {
+      padding: 0.85rem 1rem;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(17, 22, 36, 0.8);
+      display: grid;
+      gap: 0.35rem;
+    }
+
+    .schedule-item .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .schedule-item strong {
+      font-size: 1rem;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: capitalize;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      color: var(--muted);
+      background: rgba(148, 163, 184, 0.08);
+    }
+
+    .status-badge::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      background: currentColor;
+      box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16);
+    }
+
+    .status-badge.success { color: #22c55e; border-color: rgba(34,197,94,0.4); background: rgba(34,197,94,0.12); }
+    .status-badge.error { color: #f472b6; border-color: rgba(244,114,182,0.4); background: rgba(244,114,182,0.14); }
+    .status-badge.pending { color: #ffffff; border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.08); }
+    .status-badge.running { color: #60a5fa; border-color: rgba(96,165,250,0.4); background: rgba(96,165,250,0.12); }
+    .status-badge.partial { color: #fb923c; border-color: rgba(251,146,60,0.4); background: rgba(251,146,60,0.12); }
+
+    .log-link {
+      margin-left: auto;
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 0.92rem;
+      text-decoration: none;
+    }
+
+    .report-block {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 14px;
+      background: rgba(12, 16, 29, 0.86);
+      border: 1px solid rgba(148,163,184,0.18);
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .report-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .report-list {
+      display: grid;
+      gap: 0.5rem;
+    }
+
+    .report-entry {
+      padding: 0.65rem 0.8rem;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      background: rgba(17, 22, 36, 0.75);
+      display: grid;
+      gap: 0.25rem;
+    }
+
+    .report-entry .title-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .report-entry .message {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .channel-results {
+      display: grid;
+      gap: 0.25rem;
+      margin-top: 0.1rem;
+    }
+
+    .channel-results .channel-detail {
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.35;
+    }
+
+    .report-summary {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .report-pill {
+      display: inline-flex;
+      gap: 0.45rem;
+      align-items: center;
+      padding: 0.45rem 0.75rem;
+      border-radius: 12px;
+      background: rgba(12, 16, 29, 0.66);
+      border: 1px solid rgba(148,163,184,0.2);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .report-pill .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .report-pill.success { border-color: rgba(34,197,94,0.45); color: #22c55e; }
+    .report-pill.success .dot { background: #22c55e; box-shadow: 0 0 0 4px rgba(34,197,94,0.12); }
+    .report-pill.error { border-color: rgba(244,114,182,0.45); color: #f472b6; }
+    .report-pill.error .dot { background: #f472b6; box-shadow: 0 0 0 4px rgba(244,114,182,0.12); }
+    .report-pill.pending { border-color: rgba(255,255,255,0.35); color: #ffffff; }
+    .report-pill.pending .dot { background: #ffffff; box-shadow: 0 0 0 4px rgba(255,255,255,0.12); }
+    .report-pill.running { border-color: rgba(96,165,250,0.45); color: #60a5fa; }
+    .report-pill.running .dot { background: #60a5fa; box-shadow: 0 0 0 4px rgba(96,165,250,0.12); }
+    .report-pill.partial { border-color: rgba(251,146,60,0.45); color: #fb923c; }
+    .report-pill.partial .dot { background: #fb923c; box-shadow: 0 0 0 4px rgba(251,146,60,0.12); }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 0.4rem;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    input[type="search"],
+    input[type="url"],
+    select,
+    input[type="time"] {
+      width: 100%;
+      background: rgba(12, 16, 29, 0.86);
+      color: var(--text);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 12px;
+      padding: 0.7rem 0.9rem;
+      font-size: 0.95rem;
+      transition: border 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: rgba(124, 247, 255, 0.6);
+      box-shadow: 0 0 0 3px rgba(124, 247, 255, 0.14);
+    }
+
+    .checkbox-group {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+
+    .checkbox-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.55rem 0.8rem;
+      border-radius: 12px;
+      background: rgba(12,16,29,0.86);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .checkbox-pill input {
+      accent-color: var(--accent);
+      width: 16px;
+      height: 16px;
+    }
+
+    button.primary {
+      margin-top: 0.6rem;
+      width: 100%;
+      border: none;
+      background: linear-gradient(145deg, rgba(124,247,255,0.9), rgba(71,245,192,0.92));
+      color: #041221;
+      border-radius: 14px;
+      padding: 0.85rem 1rem;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      box-shadow: 0 16px 40px rgba(124, 247, 255, 0.16);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    button.primary:hover { transform: translateY(-1px); box-shadow: 0 18px 40px rgba(124, 247, 255, 0.2); }
+
+    button.primary.inline {
+      width: auto;
+      padding-inline: 1.3rem;
+      margin-top: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      min-height: 44px;
+      box-shadow: 0 14px 28px rgba(124, 247, 255, 0.12);
+    }
+
+    .status {
+      margin-top: 0.6rem;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    .status.error { color: var(--danger); }
+    .status.success { color: var(--accent); }
+
+    .empty-state {
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed rgba(148, 163, 184, 0.3);
+      padding: 1.1rem;
+      border-radius: 14px;
+      background: rgba(12, 16, 29, 0.6);
+    }
+
+    .time-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: rgba(124, 247, 255, 0.08);
+      border: 1px solid rgba(124, 247, 255, 0.25);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 0.3rem 0.7rem;
+      font-weight: 600;
+    }
+
+    .grid-two {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+
+    .input-with-action {
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .input-with-action input {
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .inline-hint {
+      margin: 0.35rem 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .secondary {
+      width: fit-content;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(12,16,29,0.85);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 0.65rem 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border 0.2s ease, transform 0.2s ease;
+    }
+
+    .secondary.is-loading {
+      opacity: 0.65;
+      pointer-events: none;
+    }
+
+    .secondary:hover { border-color: rgba(124, 247, 255, 0.35); transform: translateY(-1px); }
+    .secondary:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+    .secondary.small {
+      padding: 0.5rem 0.85rem;
+      font-size: 0.92rem;
+    }
+
+    .ghost {
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: transparent;
+      color: var(--text);
+      border-radius: 12px;
+      padding: 0.4rem 0.7rem;
+      cursor: pointer;
+      font-weight: 700;
+      transition: border 0.2s ease, transform 0.2s ease;
+    }
+
+    .ghost:hover { border-color: rgba(124, 247, 255, 0.5); transform: translateY(-1px); }
+
+    .danger {
+      width: fit-content;
+      border: 1px solid rgba(248, 113, 113, 0.35);
+      background: rgba(127, 29, 29, 0.6);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 0.5rem 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: border 0.2s ease, transform 0.2s ease, background 0.2s ease;
+    }
+
+    .danger:hover { border-color: rgba(248, 113, 113, 0.55); transform: translateY(-1px); background: rgba(127, 29, 29, 0.75); }
+    .danger:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+    .item-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.8rem;
+    }
+
+    .actions-row {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+      margin-top: 0.6rem;
+    }
+
+    .option-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .option-row .image-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .option-row input[type="checkbox"] {
+      accent-color: var(--accent);
+      width: 1.05rem;
+      height: 1.05rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="orb"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <header class="stellar-header">
+    <div class="container">
+      <div class="top-bar">
+        <div class="brand">
+          <div class="brand-mark">EX</div>
+          <div>
+            <div style="font-weight: 700; letter-spacing: 0.01em;">ExBoot Scheduler</div>
+            <div style="color: var(--muted); font-size: 0.9rem;">Coordination sociale et éditoriale</div>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
+        </button>
+      </div>
+      {% set active_page = 'schedule' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="page-title">
+      <div>
+        <h1>Planification multicanale</h1>
+        <p class="hint">Visualisez d'un coup d'œil les publications prévues sur LinkedIn, Twitter et vos articles longs. Sélectionnez une date, définissez l'heure, choisissez le provider, la certification, le type de sujet et, si vous l'avez déjà, le lien de référence (test partagé Examboot ou URL personnalisée). Si le lien est laissé vide, il sera généré automatiquement au moment de la publication.</p>
+      </div>
+      <span class="pill">Calendrier mensuel piloté</span>
+    </div>
+
+    <div class="layout">
+      <section class="card calendar-wrapper">
+        <div class="calendar-header">
+          <div>
+            <h2 id="monthLabel">Calendrier</h2>
+            <p class="subtle">Les jours marqués indiquent des posts programmés. Cliquez sur une date pour voir ou compléter les actions planifiées.</p>
+          </div>
+          <div class="legend">
+            <span><span class="dot"></span> Action planifiée</span>
+            <span><span class="dot" style="background: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.18);"></span> LinkedIn</span>
+            <span><span class="dot" style="background: #38bdf8; box-shadow: 0 0 0 3px rgba(14,165,233,0.25);"></span> X</span>
+            <span><span class="dot" style="background: #a855f7; box-shadow: 0 0 0 3px rgba(168,85,247,0.18);"></span> Article</span>
+          </div>
+          <div class="calendar-actions">
+            <div class="month-switcher">
+              <button type="button" id="prevMonth" aria-label="Mois précédent">◀</button>
+              <div id="currentMonthName" style="font-weight: 700; letter-spacing: 0.02em;"></div>
+              <button type="button" id="nextMonth" aria-label="Mois suivant">▶</button>
+            </div>
+            <button type="button" class="primary inline" id="openScheduleModal">Ajouter</button>
+          </div>
+        </div>
+        <div class="weekday-row">
+          <div class="weekday">Lun</div><div class="weekday">Mar</div><div class="weekday">Mer</div>
+          <div class="weekday">Jeu</div><div class="weekday">Ven</div><div class="weekday">Sam</div><div class="weekday">Dim</div>
+        </div>
+        <div class="calendar-grid" id="calendarGrid" aria-live="polite"></div>
+        <div class="auto-plan-row">
+          <button type="button" class="secondary inline" id="autoPlanMonth">Planifier automatiquement le mois</button>
+          <div id="autoPlanStatus" class="status" role="status"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="card">
+          <h3 id="selectedDateTitle">Date sélectionnée</h3>
+          <p class="subtle" id="selectedDateSummary">Choisissez un jour dans le calendrier pour voir les actions programmées.</p>
+          <div class="schedule-list" id="scheduleList"></div>
+          <div class="actions-row">
+            <button id="executeDayBtn" class="secondary" type="button" disabled>Exécuter les actions du jour</button>
+            <div id="executeStatus" class="status" role="status"></div>
+          </div>
+          <div class="report-block">
+            <div class="report-header">
+              <div>
+                <h4 style="margin:0;">Rapport du jour</h4>
+                <p class="subtle" style="margin:0;">Visualisez rapidement les résultats des dernières exécutions, leurs messages clés et accédez aux logs de job.</p>
+              </div>
+              <div>
+                <label for="reportDateFilter" style="margin-bottom:0.2rem;">Filtrer par date</label>
+                <input type="date" id="reportDateFilter">
+              </div>
+            </div>
+            <div class="report-summary" id="reportSummary"></div>
+            <div class="report-list" id="reportList"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="scheduleModal" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="scheduleModalTitle">
+      <div class="modal-header">
+        <div>
+          <p class="pill" style="margin:0;">Planifier une action</p>
+          <h3 id="scheduleModalTitle" style="margin:0.2rem 0 0;">Configurer la publication pour la date sélectionnée</h3>
+          <p class="subtle" id="modalDateLabel" style="margin:0;">Date sélectionnée : <strong id="modalDateValue"></strong></p>
+        </div>
+        <button type="button" class="ghost" id="closeScheduleModal" aria-label="Fermer la fenêtre">✕</button>
+      </div>
+      <form id="scheduleForm" class="grid-two">
+        <div>
+          <label for="providerSearch">Recherche provider</label>
+          <input type="search" id="providerSearch" placeholder="Rechercher un provider">
+        </div>
+        <div>
+          <label for="providerSelect">Providers disponibles</label>
+          <select id="providerSelect">
+            <option value="">Choisir un provider…</option>
+          </select>
+        </div>
+        <div>
+          <label for="certSearch">Recherche certification</label>
+          <input type="search" id="certSearch" placeholder="Rechercher une certification" disabled>
+        </div>
+        <div>
+          <label for="certSelect">Certifications</label>
+          <select id="certSelect" disabled>
+            <option value="">Choisir une certification…</option>
+          </select>
+        </div>
+        <div>
+          <label for="topicType">Type de sujet</label>
+          <select id="topicType">
+            <option value="">Sélectionner…</option>
+            <option value="certification_presentation">Présentation de certification</option>
+            <option value="preparation_methodology">Méthodologie & préparation</option>
+            <option value="experience_testimony">Retour d'expérience</option>
+            <option value="career_impact">Impact carrière</option>
+            <option value="engagement_community">Engagement communauté</option>
+          </select>
+        </div>
+        <div>
+          <label for="contentType">Format de publication</label>
+          <select id="contentType">
+            <option value="post_social">Post court (social)</option>
+            <option value="article_long">Article long</option>
+            <option value="teasing">Teasing certification</option>
+            <option value="ressource">Partage de ressource/test</option>
+          </select>
+        </div>
+        <div>
+          <label for="linkInput">Lien de référence</label>
+          <div class="input-with-action">
+            <input type="url" id="linkInput" placeholder="URL du test partagé Examboot ou lien personnalisé">
+            <button type="button" class="secondary" id="generateExamBtn" disabled>Générer un test</button>
+          </div>
+          <p class="inline-hint">Utilise la certification sélectionnée pour générer et préremplir le lien Examboot.</p>
+        </div>
+        <div>
+          <label for="timeInput">Heure de diffusion</label>
+          <input type="time" id="timeInput" value="09:00">
+        </div>
+        <div class="checkbox-group">
+          <label class="checkbox-pill"><input type="checkbox" value="linkedin" class="channel-checkbox"> LinkedIn</label>
+          <label class="checkbox-pill"><input type="checkbox" value="x" class="channel-checkbox"> Twitter</label>
+          <label class="checkbox-pill"><input type="checkbox" value="article" class="channel-checkbox"> Article long</label>
+        </div>
+        <div class="option-row">
+          <label class="image-toggle">
+            <input type="checkbox" id="addImageToggle" checked>
+            <span>Ajouter une image à la publication</span>
+          </label>
+        </div>
+        <div>
+          <label for="noteInput">Notes internes (optionnel)</label>
+          <input type="search" id="noteInput" placeholder="CTA, angle éditorial, visuel attendu…">
+        </div>
+        <div style="grid-column: 1 / -1;">
+          <button type="submit" class="primary">Planifier pour la date sélectionnée</button>
+          <div id="formStatus" class="status" role="status"></div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="scheduleModal" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="scheduleModalTitle">
+      <div class="modal-header">
+        <div>
+          <p class="pill" style="margin:0;">Planifier une action</p>
+          <h3 id="scheduleModalTitle" style="margin:0.2rem 0 0;">Configurer la publication pour la date sélectionnée</h3>
+          <p class="subtle" id="modalDateLabel" style="margin:0;">Date sélectionnée : <strong id="modalDateValue"></strong></p>
+        </div>
+        <button type="button" class="ghost" id="closeScheduleModal" aria-label="Fermer la fenêtre">✕</button>
+      </div>
+      <form id="scheduleForm" class="grid-two">
+        <div>
+          <label for="providerSearch">Recherche provider</label>
+          <input type="search" id="providerSearch" placeholder="Rechercher un provider">
+        </div>
+        <div>
+          <label for="providerSelect">Providers disponibles</label>
+          <select id="providerSelect">
+            <option value="">Choisir un provider…</option>
+          </select>
+        </div>
+        <div>
+          <label for="certSearch">Recherche certification</label>
+          <input type="search" id="certSearch" placeholder="Rechercher une certification" disabled>
+        </div>
+        <div>
+          <label for="certSelect">Certifications</label>
+          <select id="certSelect" disabled>
+            <option value="">Choisir une certification…</option>
+          </select>
+        </div>
+        <div>
+          <label for="topicType">Type de sujet</label>
+          <select id="topicType">
+            <option value="">Sélectionner…</option>
+            <option value="certification_presentation">Présentation de certification</option>
+            <option value="preparation_methodology">Méthodologie & préparation</option>
+            <option value="experience_testimony">Retour d'expérience</option>
+            <option value="career_impact">Impact carrière</option>
+            <option value="engagement_community">Engagement communauté</option>
+          </select>
+        </div>
+        <div>
+          <label for="contentType">Format de publication</label>
+          <select id="contentType">
+            <option value="post_social">Post court (social)</option>
+            <option value="article_long">Article long</option>
+            <option value="teasing">Teasing certification</option>
+            <option value="ressource">Partage de ressource/test</option>
+          </select>
+        </div>
+        <div>
+          <label for="linkInput">Lien de référence</label>
+          <div class="input-with-action">
+            <input type="url" id="linkInput" placeholder="URL du test partagé Examboot ou lien personnalisé">
+            <button type="button" class="secondary" id="generateExamBtn" disabled>Générer un test</button>
+          </div>
+          <p class="inline-hint">Utilise la certification sélectionnée pour générer et préremplir le lien Examboot.</p>
+        </div>
+        <div>
+          <label for="timeInput">Heure de diffusion</label>
+          <input type="time" id="timeInput" value="09:00">
+        </div>
+        <div class="checkbox-group">
+          <label class="checkbox-pill"><input type="checkbox" value="linkedin" class="channel-checkbox"> LinkedIn</label>
+          <label class="checkbox-pill"><input type="checkbox" value="x" class="channel-checkbox"> Twitter</label>
+          <label class="checkbox-pill"><input type="checkbox" value="article" class="channel-checkbox"> Article long</label>
+        </div>
+        <div class="option-row">
+          <label class="image-toggle">
+            <input type="checkbox" id="addImageToggle" checked>
+            <span>Ajouter une image à la publication</span>
+          </label>
+        </div>
+        <div>
+          <label for="noteInput">Notes internes (optionnel)</label>
+          <input type="search" id="noteInput" placeholder="CTA, angle éditorial, visuel attendu…">
+        </div>
+        <div style="grid-column: 1 / -1;">
+          <button type="submit" class="primary">Planifier pour la date sélectionnée</button>
+          <div id="formStatus" class="status" role="status"></div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const navToggle = document.getElementById('navToggle');
+    const nav = document.getElementById('stellarNav');
+    const navMediaQuery = window.matchMedia('(max-width: 1024px)');
+
+    if (navToggle && nav) {
+      navToggle.addEventListener('click', () => {
+        const isOpen = navToggle.classList.toggle('is-open');
+        document.body.classList.toggle('nav-open', isOpen);
+        navToggle.setAttribute('aria-expanded', isOpen);
+      });
+    }
+
+    const resetNavState = () => {
+      if (!navMediaQuery.matches && navToggle) {
+        document.body.classList.remove('nav-open');
+        navToggle.classList.remove('is-open');
+        navToggle.setAttribute('aria-expanded', 'false');
+      }
+    };
+
+    navMediaQuery.addEventListener('change', resetNavState);
+    resetNavState();
+
+    const calendarGrid = document.getElementById('calendarGrid');
+    const selectedDateTitle = document.getElementById('selectedDateTitle');
+    const selectedDateSummary = document.getElementById('selectedDateSummary');
+    const scheduleList = document.getElementById('scheduleList');
+    const executeDayBtn = document.getElementById('executeDayBtn');
+    const executeStatus = document.getElementById('executeStatus');
+    const reportList = document.getElementById('reportList');
+    const reportSummary = document.getElementById('reportSummary');
+    const reportDateFilter = document.getElementById('reportDateFilter');
+    const currentMonthName = document.getElementById('currentMonthName');
+    const monthLabel = document.getElementById('monthLabel');
+    const prevMonthBtn = document.getElementById('prevMonth');
+    const nextMonthBtn = document.getElementById('nextMonth');
+    const providerSearch = document.getElementById('providerSearch');
+    const providerSelect = document.getElementById('providerSelect');
+    const certSearch = document.getElementById('certSearch');
+    const certSelect = document.getElementById('certSelect');
+    const topicType = document.getElementById('topicType');
+    const contentType = document.getElementById('contentType');
+    const linkInput = document.getElementById('linkInput');
+    const timeInput = document.getElementById('timeInput');
+    const noteInput = document.getElementById('noteInput');
+    const addImageToggle = document.getElementById('addImageToggle');
+    const generateExamBtn = document.getElementById('generateExamBtn');
+    const formStatus = document.getElementById('formStatus');
+    const scheduleForm = document.getElementById('scheduleForm');
+    const scheduleModal = document.getElementById('scheduleModal');
+    const openScheduleModalBtn = document.getElementById('openScheduleModal');
+    const closeScheduleModalBtn = document.getElementById('closeScheduleModal');
+    const modalDateValue = document.getElementById('modalDateValue');
+    const autoPlanBtn = document.getElementById('autoPlanMonth');
+    const autoPlanStatus = document.getElementById('autoPlanStatus');
+
+    let providers = [];
+    let certifications = [];
+    let filteredCerts = [];
+    let planning = normalisePlanning(loadPlanning());
+    let scheduleReports = {};
+
+    let viewDate = new Date();
+    let selectedDate = new Date();
+
+    const channelLabels = { linkedin: 'LinkedIn', x: 'Twitter', article: 'Article' };
+
+    function formatDateKey(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function formatDateLabel(date) {
+      return date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    }
+
+    function loadPlanning() {
+      try {
+        const raw = localStorage.getItem('exboot-schedule');
+        return raw ? JSON.parse(raw) : {};
+      } catch (err) {
+        console.warn('Impossible de charger la planification locale', err);
+        return {};
+      }
+    }
+
+    function savePlanning() {
+      try {
+        localStorage.setItem('exboot-schedule', JSON.stringify(planning));
+      } catch (err) {
+        console.warn('Impossible de sauvegarder la planification locale', err);
+      }
+    }
+
+    function mergeServerPlanning(entries) {
+      const idToDay = {};
+      Object.entries(planning).forEach(([day, items]) => {
+        items.forEach(item => {
+          if (item.id) idToDay[item.id] = day;
+        });
+      });
+
+      const nextPlanning = { ...planning };
+      entries.forEach(entry => {
+        const dayKey = entry.day;
+        const normalizedEntry = normaliseEntry(entry);
+        if (!normalizedEntry.id || !dayKey) return;
+
+        const previousDay = idToDay[normalizedEntry.id];
+        if (previousDay && previousDay !== dayKey && nextPlanning[previousDay]) {
+          nextPlanning[previousDay] = nextPlanning[previousDay].filter(item => item.id !== normalizedEntry.id);
+          if (!nextPlanning[previousDay].length) delete nextPlanning[previousDay];
+        }
+
+        const dayEntries = nextPlanning[dayKey] ? [...nextPlanning[dayKey]] : [];
+        const existingIndex = dayEntries.findIndex(item => item.id === normalizedEntry.id);
+        if (existingIndex >= 0) {
+          dayEntries[existingIndex] = normalizedEntry;
+        } else {
+          dayEntries.push(normalizedEntry);
+        }
+        nextPlanning[dayKey] = dayEntries;
+      });
+      planning = nextPlanning;
+      savePlanning();
+    }
+
+    function normaliseEntry(entry) {
+      if (!entry) return {};
+      return {
+        ...entry,
+        addImage: entry.addImage !== false,
+        status: normaliseStatus(entry.status || entry.state || 'queued'),
+        jobId: entry.jobId || entry.job_id || null,
+        resultSummary: entry.resultSummary || entry.result_summary || entry.summary || null,
+        channelResults: entry.channelResults || entry.channel_results || {}
+      };
+    }
+
+    function normalisePlanning(raw) {
+      if (!raw || typeof raw !== 'object') return {};
+      const normalised = {};
+      Object.entries(raw).forEach(([day, entries]) => {
+        normalised[day] = Array.isArray(entries) ? entries.map(normaliseEntry) : [];
+      });
+      return normalised;
+    }
+
+    const statusLabels = {
+      succeeded: 'succès',
+      success: 'succès',
+      failed: 'échec',
+      error: 'échec',
+      running: 'en cours',
+      queued: 'en attente',
+      pending: 'en attente',
+      partial: 'partiel'
+    };
+
+    function normaliseStatus(raw) {
+      if (!raw) return 'queued';
+      const value = raw.toString().toLowerCase();
+      if (['success', 'succeeded', 'completed'].includes(value)) return 'succeeded';
+      if (['failed', 'error'].includes(value)) return 'failed';
+      if (['running', 'in_progress'].includes(value)) return 'running';
+      if (value === 'partial') return 'partial';
+      if (value === 'pending') return 'pending';
+      return value;
+    }
+
+    function statusClass(status) {
+      switch (normaliseStatus(status)) {
+        case 'succeeded': return 'success';
+        case 'failed': return 'error';
+        case 'running': return 'running';
+        case 'partial': return 'partial';
+        default: return 'pending';
+      }
+    }
+
+    function statusLabel(status) {
+      const normalized = normaliseStatus(status);
+      return statusLabels[normalized] || normalized;
+    }
+
+    function summariseEntry(entry) {
+      const provider = entry.providerName || 'Provider';
+      const cert = entry.certName || 'Certification';
+      const subject = entry.subjectLabel || entry.subject || 'Sujet';
+      const content = entry.contentTypeLabel || entry.contentType || 'Contenu';
+      const time = entry.time || 'Heure non précisée';
+      return `${time} • ${provider} · ${cert} (${subject} – ${content})`;
+    }
+
+    async function fetchServerPlanning() {
+      try {
+        const response = await fetch('/schedule/api');
+        if (!response.ok) throw new Error('Réponse serveur invalide');
+        const payload = await response.json();
+        const entries = Array.isArray(payload) ? payload : payload.entries || [];
+        scheduleReports = payload.reports || {};
+        mergeServerPlanning(entries || []);
+        renderCalendar();
+        renderDayDetails();
+        renderReport();
+      } catch (err) {
+        console.warn('Impossible de synchroniser la planification serveur', err);
+      }
+    }
+
+    async function persistEntryToServer(entry) {
+      try {
+        const response = await fetch('/schedule/api', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entry)
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur inconnue');
+        }
+        return { ...entry, id: payload.id || entry.id };
+      } catch (err) {
+        throw err;
+      }
+    }
+
+    function renderCalendar() {
+      calendarGrid.innerHTML = '';
+      const year = viewDate.getFullYear();
+      const month = viewDate.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const startDay = (firstDay.getDay() + 6) % 7; // start on Monday
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      currentMonthName.textContent = viewDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+      monthLabel.textContent = `Calendrier – ${currentMonthName.textContent}`;
+
+      // Empty slots before the first day
+      for (let i = 0; i < startDay; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'day empty-cell';
+        calendarGrid.appendChild(cell);
+      }
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const cellDate = new Date(year, month, day);
+        const cell = document.createElement('div');
+        cell.className = 'day';
+        const isToday = formatDateKey(cellDate) === formatDateKey(new Date());
+        const isSelected = formatDateKey(cellDate) === formatDateKey(selectedDate);
+        if (isToday) cell.classList.add('today');
+        if (isSelected) cell.classList.add('selected');
+
+        const dateKey = formatDateKey(cellDate);
+        const entries = planning[dateKey] || [];
+        if (entries.length) {
+          const count = document.createElement('div');
+          count.className = 'count';
+          count.textContent = `${entries.length} action${entries.length > 1 ? 's' : ''}`;
+          cell.appendChild(count);
+        }
+
+        const number = document.createElement('div');
+        number.className = 'day-number';
+        number.textContent = day;
+        cell.appendChild(number);
+
+        const channels = new Set();
+        entries.forEach(item => item.channels.forEach(ch => channels.add(ch)));
+        if (channels.size) {
+          const wrap = document.createElement('div');
+          wrap.className = 'channel-chips';
+          channels.forEach(ch => {
+            const chip = document.createElement('div');
+            chip.className = `chip ${ch}`;
+            chip.textContent = channelLabels[ch] || ch;
+            wrap.appendChild(chip);
+          });
+          cell.appendChild(wrap);
+        }
+
+        cell.addEventListener('click', () => {
+          selectedDate = cellDate;
+          renderCalendar();
+          renderDayDetails();
+        });
+
+      calendarGrid.appendChild(cell);
+    }
+    }
+
+    function buildReportFromEntries(dateKey, entries) {
+      const items = [];
+      const summary = { succeeded: 0, failed: 0, pending: 0, running: 0, partial: 0 };
+      let jobId = (scheduleReports[dateKey] && scheduleReports[dateKey].job_id) || null;
+
+      entries.forEach(entry => {
+        const status = normaliseStatus(entry.status);
+        const message = summariseEntry(entry);
+        if (!jobId && (entry.jobId || entry.job_id)) jobId = entry.jobId || entry.job_id;
+        items.push({
+          id: entry.id,
+          status,
+          message,
+          job_id: entry.jobId || entry.job_id || jobId,
+          channels: entry.channels || [],
+          channel_results: entry.channelResults || entry.channel_results || {},
+          result_summary: entry.resultSummary || entry.summary || entry.result_summary || null,
+          last_run_at: entry.lastRunAt || entry.last_run_at || null
+        });
+        if (status === 'succeeded') summary.succeeded += 1;
+        else if (status === 'failed') summary.failed += 1;
+        else if (status === 'partial') summary.partial += 1;
+        else if (status === 'running') summary.running += 1;
+        else summary.pending += 1;
+      });
+
+      let overall = 'succeeded';
+      if (summary.failed > 0) {
+        overall = 'failed';
+      } else if (summary.partial > 0) {
+        overall = 'partial';
+      } else if (summary.running > 0) {
+        overall = 'running';
+      } else if (items.length && summary.pending === items.length) {
+        overall = 'queued';
+      }
+
+      return {
+        job_id: jobId,
+        entries: items,
+        summary,
+        status: overall
+      };
+    }
+
+    function refreshReportForDay(dateKey) {
+      if (!dateKey) return;
+      const entries = planning[dateKey] || [];
+      if (!entries.length) {
+        delete scheduleReports[dateKey];
+        return;
+      }
+      scheduleReports[dateKey] = buildReportFromEntries(dateKey, entries);
+    }
+
+    function getReportForDate(dateKey) {
+      if (scheduleReports[dateKey]) return scheduleReports[dateKey];
+      const entries = planning[dateKey] || [];
+      return buildReportFromEntries(dateKey, entries);
+    }
+
+    function renderReport(targetDate) {
+      if (!reportList || !reportSummary) return;
+      const dateKey = targetDate || formatDateKey(selectedDate);
+      if (reportDateFilter && !reportDateFilter.value) {
+        reportDateFilter.value = dateKey;
+      }
+
+      const report = getReportForDate(dateKey);
+      const summary = (report && report.summary) || {};
+      const entries = (report && report.entries) || [];
+
+      reportSummary.innerHTML = '';
+      [
+        { key: 'succeeded', label: 'Succès', className: 'success' },
+        { key: 'partial', label: 'Partiels', className: 'partial' },
+        { key: 'failed', label: 'Échecs', className: 'error' },
+        { key: 'running', label: 'En cours', className: 'running' },
+        { key: 'pending', label: 'En attente', className: 'pending' }
+      ].forEach(item => {
+        const pill = document.createElement('div');
+        pill.className = `report-pill ${item.className}`;
+        pill.innerHTML = `<span class="dot"></span> <span>${item.label}</span> <strong>${summary[item.key] || 0}</strong>`;
+        reportSummary.appendChild(pill);
+      });
+
+      reportList.innerHTML = '';
+      if (!entries.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = 'Aucun rapport disponible pour cette date.';
+        reportList.appendChild(empty);
+        return;
+      }
+
+      entries.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'report-entry';
+        const header = document.createElement('div');
+        header.className = 'title-row';
+
+        const badge = document.createElement('span');
+        badge.className = `status-badge ${statusClass(item.status)}`;
+        badge.textContent = statusLabel(item.status);
+        header.appendChild(badge);
+
+        if (item.job_id) {
+          const link = document.createElement('a');
+          link.href = `/schedule/status/${encodeURIComponent(item.job_id)}`;
+          link.target = '_blank';
+          link.className = 'log-link';
+          link.textContent = `Log job #${item.job_id}`;
+          header.appendChild(link);
+        }
+
+        const message = document.createElement('div');
+        message.className = 'message';
+        message.textContent = item.message || 'Action planifiée';
+
+        const summaryBlock = document.createElement('div');
+        summaryBlock.className = 'channel-results';
+        if (item.channel_results && typeof item.channel_results === 'object') {
+          Object.entries(item.channel_results).forEach(([ch, payload]) => {
+            const chip = document.createElement('span');
+            chip.className = `chip ${ch} ${statusClass(payload.status)}`;
+            chip.textContent = `${channelLabels[ch] || ch}: ${statusLabel(payload.status)}`;
+            summaryBlock.appendChild(chip);
+            if (payload.message) {
+              const detail = document.createElement('div');
+              detail.className = 'channel-detail';
+              detail.textContent = payload.message;
+              summaryBlock.appendChild(detail);
+            }
+          });
+        }
+        if (item.result_summary) {
+          const summaryLine = document.createElement('div');
+          summaryLine.className = 'channel-detail';
+          summaryLine.textContent = item.result_summary;
+          summaryBlock.appendChild(summaryLine);
+        }
+
+        row.appendChild(header);
+        row.appendChild(message);
+        if (summaryBlock.childNodes.length) row.appendChild(summaryBlock);
+        reportList.appendChild(row);
+      });
+    }
+
+    function renderDayDetails() {
+      const key = formatDateKey(selectedDate);
+      const entries = (planning[key] || []).slice().sort((a, b) => a.time.localeCompare(b.time));
+      if (reportDateFilter) {
+        reportDateFilter.value = key;
+      }
+      selectedDateTitle.textContent = formatDateLabel(selectedDate);
+      selectedDateSummary.textContent = entries.length
+        ? `${entries.length} action${entries.length > 1 ? 's' : ''} planifiée${entries.length > 1 ? 's' : ''} pour cette date.`
+        : 'Aucune action planifiée pour cette date. Ajoutez une publication depuis le formulaire.';
+      executeDayBtn.disabled = entries.length === 0;
+      setExecuteStatus(entries.length ? 'Prêt à exécuter les actions du jour.' : 'Aucune action à exécuter.');
+
+      scheduleList.innerHTML = '';
+
+      if (!entries.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = 'Rien de planifié pour le moment.';
+        scheduleList.appendChild(empty);
+        return;
+      }
+
+      entries.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'schedule-item';
+
+        const header = document.createElement('div');
+        header.className = 'meta';
+        const time = document.createElement('span');
+        time.className = 'time-pill';
+        time.textContent = item.time || '—';
+        header.appendChild(time);
+
+        const jobId = item.jobId || (scheduleReports[key] && scheduleReports[key].job_id);
+        const badge = document.createElement('span');
+        badge.className = `status-badge ${statusClass(item.status)}`;
+        badge.textContent = statusLabel(item.status);
+        header.appendChild(badge);
+
+        item.channels.forEach(ch => {
+          const chip = document.createElement('span');
+          chip.className = `chip ${ch}`;
+          chip.textContent = channelLabels[ch] || ch;
+          header.appendChild(chip);
+        });
+
+        if (jobId) {
+          const logLink = document.createElement('a');
+          logLink.href = `/schedule/status/${encodeURIComponent(jobId)}`;
+          logLink.target = '_blank';
+          logLink.className = 'log-link';
+          logLink.textContent = 'Log du job';
+          header.appendChild(logLink);
+        }
+
+        const provider = document.createElement('div');
+        provider.innerHTML = `<strong>${item.providerName || 'Provider'}</strong> · ${item.certName || 'Certification'}`;
+
+        const topic = document.createElement('div');
+        topic.className = 'meta';
+        topic.textContent = `${item.subjectLabel || 'Sujet'} • ${item.contentTypeLabel}`;
+
+        const addImage = item.addImage !== false;
+
+        const link = document.createElement('a');
+        link.href = item.link;
+        link.textContent = item.link || 'Lien';
+        link.target = "_blank";
+        link.style.color = 'var(--accent-strong)';
+
+        card.appendChild(header);
+        card.appendChild(provider);
+        card.appendChild(topic);
+        const mediaInfo = document.createElement('div');
+        mediaInfo.className = 'meta';
+        mediaInfo.textContent = addImage ? 'Visuel inclus' : 'Sans image';
+        card.appendChild(mediaInfo);
+        if (item.link) card.appendChild(link);
+        const noteText = typeof item.note === 'string' ? item.note : '';
+        if (noteText) {
+          const note = document.createElement('div');
+          note.className = 'meta';
+          note.textContent = noteText;
+          card.appendChild(note);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'item-actions';
+
+        const retryBtn = document.createElement('button');
+        retryBtn.type = 'button';
+        retryBtn.className = 'secondary small';
+        retryBtn.textContent = 'Relancer';
+        retryBtn.addEventListener('click', () => retryEntry(item, retryBtn));
+        actions.appendChild(retryBtn);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'danger';
+        deleteBtn.textContent = 'Supprimer';
+        deleteBtn.addEventListener('click', () => deleteEntry(item, deleteBtn));
+        actions.appendChild(deleteBtn);
+
+        card.appendChild(actions);
+
+        scheduleList.appendChild(card);
+      });
+      renderReport(key);
+    }
+
+    function setStatus(message, type = '') {
+      formStatus.textContent = message;
+      formStatus.className = 'status';
+      if (type === 'error') formStatus.classList.add('error');
+      if (type === 'success') formStatus.classList.add('success');
+    }
+
+    function setExecuteStatus(message, type = '') {
+      executeStatus.textContent = message;
+      executeStatus.className = 'status';
+      if (type === 'error') executeStatus.classList.add('error');
+      if (type === 'success') executeStatus.classList.add('success');
+    }
+
+    function setAutoPlanStatus(message, type = '') {
+      if (!autoPlanStatus) return;
+      autoPlanStatus.textContent = message;
+      autoPlanStatus.className = 'status';
+      if (type === 'error') autoPlanStatus.classList.add('error');
+      if (type === 'success') autoPlanStatus.classList.add('success');
+    }
+
+    async function deleteEntry(item, button) {
+      if (!item || !item.id) return;
+      const dayKey = item.day || formatDateKey(selectedDate);
+      setExecuteStatus('Suppression de la planification…');
+      setButtonLoading(button, true, 'Suppression…');
+      try {
+        const response = await fetch(`/schedule/api/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Suppression impossible');
+        const dayEntries = planning[dayKey] || [];
+        planning[dayKey] = dayEntries.filter(entry => entry.id !== item.id);
+        if (planning[dayKey] && planning[dayKey].length === 0) {
+          delete planning[dayKey];
+        }
+        savePlanning();
+        refreshReportForDay(dayKey);
+        renderCalendar();
+        renderDayDetails();
+        setExecuteStatus('Planification supprimée.', 'success');
+      } catch (err) {
+        setExecuteStatus(`Erreur de suppression : ${err.message}`, 'error');
+      } finally {
+        setButtonLoading(button, false);
+      }
+    }
+
+    async function retryEntry(item, button) {
+      if (!item || !item.id) return;
+      setExecuteStatus('Réenfilement de la planification…');
+      setButtonLoading(button, true, 'Relance…');
+      try {
+        const response = await fetch(`/schedule/retry/${encodeURIComponent(item.id)}`, { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Réenfilement impossible');
+        const mode = data.mode || 'inline';
+        const jobId = data.job_id || data.id || 'planifié';
+        const dayKey = item.day || formatDateKey(selectedDate);
+        const dayEntries = planning[dayKey] || [];
+        dayEntries.forEach(entry => {
+          entry.jobId = jobId;
+          entry.status = 'queued';
+        });
+        scheduleReports[dayKey] = buildReportFromEntries(dayKey, dayEntries);
+        savePlanning();
+        setExecuteStatus(`Job ${jobId} relancé (${mode}).`, 'success');
+        renderCalendar();
+        renderDayDetails();
+      } catch (err) {
+        setExecuteStatus(`Erreur lors de la relance : ${err.message}`, 'error');
+      } finally {
+        setButtonLoading(button, false);
+      }
+    }
+
+    async function fetchProviders() {
+      try {
+        const response = await fetch('/quest/api/providers');
+        if (!response.ok) throw new Error('Requête provider échouée');
+        providers = await response.json();
+      } catch (err) {
+        console.warn('Fallback providers', err);
+        providers = [
+          { id: 1, name: 'AWS' },
+          { id: 2, name: 'Microsoft Azure' },
+          { id: 3, name: 'Google Cloud' }
+        ];
+      }
+      renderProviders(providers);
+    }
+
+    async function fetchCertifications(providerId) {
+      if (!providerId) return;
+      try {
+        const response = await fetch(`/quest/api/certifications/${providerId}`);
+        if (!response.ok) throw new Error('Requête certification échouée');
+        certifications = await response.json();
+      } catch (err) {
+        console.warn('Fallback certifications', err);
+        certifications = [
+          { id: 100, name: 'Architecte Solutions' },
+          { id: 101, name: 'Admin Cloud' }
+        ];
+      }
+      renderCertifications(certifications);
+    }
+
+    function renderProviders(list) {
+      providerSelect.innerHTML = '<option value=\"\">Choisir un provider…</option>';
+      list.forEach(provider => {
+        const option = document.createElement('option');
+        option.value = provider.id;
+        option.textContent = provider.name;
+        providerSelect.appendChild(option);
+      });
+      updateActionsAvailability();
+    }
+
+    function renderCertifications(list) {
+      certSelect.innerHTML = '<option value=\"\">Choisir une certification…</option>';
+      list.forEach(cert => {
+        const option = document.createElement('option');
+        option.value = cert.id;
+        option.textContent = cert.name;
+        certSelect.appendChild(option);
+      });
+      certSelect.disabled = !list.length;
+      certSearch.disabled = !list.length;
+      updateActionsAvailability();
+    }
+
+    function updateActionsAvailability() {
+      const hasSelection = Boolean(providerSelect.value && certSelect.value);
+      if (generateExamBtn) {
+        generateExamBtn.disabled = !hasSelection;
+      }
+    }
+
+    function setButtonLoading(button, isLoading, loadingText = '') {
+      if (!button) return;
+      if (isLoading) {
+        button.dataset.originalLabel = button.textContent;
+        if (loadingText) {
+          button.textContent = loadingText;
+        }
+        button.disabled = true;
+        button.classList.add('is-loading');
+      } else {
+        if (button.dataset.originalLabel) {
+          button.textContent = button.dataset.originalLabel;
+          delete button.dataset.originalLabel;
+        }
+        button.classList.remove('is-loading');
+        updateActionsAvailability();
+      }
+    }
+
+    function updateModalDateLabel() {
+      if (!modalDateValue) return;
+      modalDateValue.textContent = formatDateLabel(selectedDate);
+    }
+
+    function toggleScheduleModal(open = true) {
+      if (!scheduleModal) return;
+      if (open) {
+        updateModalDateLabel();
+        scheduleModal.classList.add('is-open');
+        scheduleModal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        if (providerSearch) providerSearch.focus();
+      } else {
+        scheduleModal.classList.remove('is-open');
+        scheduleModal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+      }
+    }
+
+    if (openScheduleModalBtn) {
+      openScheduleModalBtn.addEventListener('click', () => toggleScheduleModal(true));
+    }
+
+    if (closeScheduleModalBtn) {
+      closeScheduleModalBtn.addEventListener('click', () => toggleScheduleModal(false));
+    }
+
+    if (scheduleModal) {
+      scheduleModal.addEventListener('click', event => {
+        if (event.target === scheduleModal) toggleScheduleModal(false);
+      });
+    }
+
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && scheduleModal && scheduleModal.classList.contains('is-open')) {
+        toggleScheduleModal(false);
+      }
+    });
+
+    providerSearch.addEventListener('input', () => {
+      const query = providerSearch.value.toLowerCase();
+      const filtered = providers.filter(p => p.name.toLowerCase().includes(query));
+      renderProviders(filtered);
+    });
+
+    providerSelect.addEventListener('change', () => {
+      const providerId = providerSelect.value;
+      certSearch.value = '';
+      certSelect.value = '';
+      certifications = [];
+      renderCertifications([]);
+      certSelect.disabled = !providerId;
+      certSearch.disabled = !providerId;
+      updateActionsAvailability();
+      if (providerId) fetchCertifications(providerId);
+    });
+
+    certSearch.addEventListener('input', () => {
+      const query = certSearch.value.toLowerCase();
+      filteredCerts = certifications.filter(c => c.name.toLowerCase().includes(query));
+      renderCertifications(filteredCerts);
+    });
+
+    certSelect.addEventListener('change', () => {
+      updateActionsAvailability();
+    });
+
+    generateExamBtn.addEventListener('click', async () => {
+      const providerId = providerSelect.value;
+      const certId = certSelect.value;
+      if (!providerId || !certId) {
+        setStatus('Sélectionnez un provider et une certification avant de générer un test.', 'error');
+        return;
+      }
+      try {
+        setButtonLoading(generateExamBtn, true, 'Génération…');
+        setStatus('Génération du test Examboot en cours…');
+        const response = await fetch('/articles/generate-exam-test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider_id: providerId, certification_id: certId })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors de la génération du test Examboot');
+        }
+        if (!payload.url) {
+          throw new Error('URL du test Examboot introuvable.');
+        }
+        linkInput.value = payload.url;
+        linkInput.dispatchEvent(new Event('input'));
+        setStatus('Lien prérempli avec le test Examboot généré.', 'success');
+      } catch (err) {
+        const message = err && err.message ? err.message : 'Erreur lors de la génération du test Examboot';
+        setStatus(message, 'error');
+      } finally {
+        setButtonLoading(generateExamBtn, false);
+      }
+    });
+
+    executeDayBtn.addEventListener('click', async () => {
+      const key = formatDateKey(selectedDate);
+      const entries = planning[key] || [];
+      if (!entries.length) {
+        setExecuteStatus('Aucune action planifiée pour cette date.', 'error');
+        return;
+      }
+
+      setExecuteStatus('Envoi des actions planifiées…');
+      try {
+        const response = await fetch('/schedule/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: key, entries })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Exécution impossible');
+        const jobId = data.job_id || 'planifié';
+        const dayEntries = planning[key] || [];
+        dayEntries.forEach(entry => {
+          entry.jobId = jobId;
+          entry.status = 'queued';
+        });
+        scheduleReports[key] = buildReportFromEntries(key, dayEntries);
+        savePlanning();
+        renderCalendar();
+        renderDayDetails();
+        setExecuteStatus(`Job ${jobId} en cours (${data.mode || 'inline'}).`, 'success');
+      } catch (err) {
+        setExecuteStatus(`Erreur lors du lancement : ${err.message}`, 'error');
+      }
+    });
+
+    if (autoPlanBtn) {
+      autoPlanBtn.addEventListener('click', async () => {
+        setAutoPlanStatus('Génération du planning en cours…');
+        setButtonLoading(autoPlanBtn, true, 'Planification…');
+        try {
+          const response = await fetch('/schedule/auto-plan', { method: 'POST' });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.error || 'Impossible de générer le planning');
+          await fetchServerPlanning();
+          setAutoPlanStatus(`Planning généré (${payload.count || 0} entrées).`, 'success');
+        } catch (err) {
+          setAutoPlanStatus(`Erreur : ${err.message}`, 'error');
+        } finally {
+          setButtonLoading(autoPlanBtn, false);
+        }
+      });
+    }
+
+    scheduleForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      const providerId = providerSelect.value;
+      const certId = certSelect.value;
+      const channelValues = Array.from(scheduleForm.querySelectorAll('.channel-checkbox:checked')).map(c => c.value);
+      let link = (linkInput.value || '').trim();
+
+      if (!providerId || !certId || !topicType.value || !channelValues.length) {
+        setStatus('Provider, certification, type de sujet et au moins un canal sont obligatoires.', 'error');
+        return;
+      }
+
+      if (link && !/^https?:\/\//i.test(link)) {
+        link = `https://${link}`;
+      }
+
+      const providerName = providerSelect.options[providerSelect.selectedIndex].textContent;
+      const certName = certSelect.options[certSelect.selectedIndex].textContent;
+      const subjectLabel = topicType.options[topicType.selectedIndex].textContent;
+      const contentLabel = contentType.options[contentType.selectedIndex].textContent;
+      const dayKey = formatDateKey(selectedDate);
+
+      const entry = {
+        id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`,
+        day: dayKey,
+        providerId,
+        certId,
+        providerName,
+        certName,
+        subject: topicType.value,
+        subjectLabel,
+        contentType: contentType.value,
+        contentTypeLabel: contentLabel,
+        link,
+        time: timeInput.value || '09:00',
+        channels: channelValues,
+        note: (noteInput.value || '').trim(),
+        addImage: addImageToggle.checked,
+        status: 'queued'
+      };
+
+      try {
+        setStatus('Sauvegarde de la planification en cours…');
+        const savedEntry = await persistEntryToServer({ ...entry, day: dayKey });
+        const normalizedEntry = normaliseEntry(savedEntry);
+        planning[dayKey] = planning[dayKey] || [];
+        const existingIndex = planning[dayKey].findIndex(item => item.id === normalizedEntry.id);
+        if (existingIndex >= 0) {
+          planning[dayKey][existingIndex] = normalizedEntry;
+        } else {
+          planning[dayKey].push(normalizedEntry);
+        }
+        savePlanning();
+        refreshReportForDay(dayKey);
+        renderCalendar();
+        renderDayDetails();
+        scheduleForm.reset();
+        addImageToggle.checked = true;
+        certifications = [];
+        renderCertifications([]);
+        certSearch.disabled = true;
+        generateExamBtn.disabled = true;
+        updateActionsAvailability();
+        toggleScheduleModal(false);
+        setStatus('Action planifiée avec succès pour la date sélectionnée.', 'success');
+      } catch (err) {
+        setStatus(`Erreur lors de la sauvegarde : ${err.message}`, 'error');
+      }
+    });
+
+    prevMonthBtn.addEventListener('click', () => {
+      viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1);
+      renderCalendar();
+    });
+
+    nextMonthBtn.addEventListener('click', () => {
+      viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1);
+      renderCalendar();
+    });
+
+    if (reportDateFilter) {
+      reportDateFilter.addEventListener('change', () => {
+        const target = reportDateFilter.value || formatDateKey(selectedDate);
+        renderReport(target);
+      });
+    }
+
+    fetchProviders().then(() => {
+      renderCertifications([]);
+      updateActionsAvailability();
+    });
+    renderCalendar();
+    renderDayDetails();
+    fetchServerPlanning();
+  </script>
+</body>
+</html>

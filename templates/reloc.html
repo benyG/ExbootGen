@@ -3,108 +3,440 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Relocalisation IA</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Relocalisation IA · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
-    body { font-family: sans-serif; padding: 2rem; }
-    .panel { display: inline-block; width: 45%; vertical-align: top;
-             border: 1px solid #ccc; border-radius: 8px; padding: 1em; margin: 1%; }
-    .field { margin: .5em 0; }
-    label { font-weight: bold; display:block; margin-bottom:.3em; }
-    select, button { width:100%; padding:.5em; font-size:1em; }
-    #progress { width:100%; background:#eee; border-radius:4px; overflow:hidden; margin-top:1em; }
-    #bar      { width:0%; height:1em; background:#4caf50; transition:width .2s; }
-    #log      { white-space:pre-wrap; background:#f9f9f9; padding:.5em;
-                 height:8em; overflow-y:scroll; border:1px solid #ddd; margin-top:.5em; }
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 20% 20%, rgba(76,201,240,0.15), transparent 55%),
+                     radial-gradient(circle at 80% 30%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.22), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb {
+      position: fixed;
+      width: 32rem;
+      height: 32rem;
+      border-radius: 50%;
+      opacity: 0.45;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      background: radial-gradient(circle, rgba(71,245,192,0.32) 0%, rgba(4,7,17,0) 70%);
+      animation: drift 22s ease-in-out infinite;
+      z-index: 0;
+    }
+
+    .orb-1 { top: -12rem; left: -6rem; }
+    .orb-2 { bottom: -10rem; right: -4rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.25) 0%, rgba(4,7,17,0) 70%); }
+    .orb-3 { top: 45vh; right: 50%; transform: translateX(50%); animation-delay: -14s; background: radial-gradient(circle, rgba(244,114,182,0.28) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift {
+      0%, 100% { transform: translate3d(0,0,0) scale(1); }
+      45% { transform: translate3d(40px, -30px, 0) scale(1.05); }
+      75% { transform: translate3d(-30px, 25px, 0) scale(0.95); }
+    }
+
+    .stellar-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(4, 7, 17, 0.72);
+      backdrop-filter: saturate(180%) blur(18px);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .stellar-container { width: min(1200px, 92vw); margin: 0 auto; padding: 1.2rem 0 1.6rem; }
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 18px; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25)); border: 1px solid rgba(148, 163, 184, 0.2); color: var(--accent-strong); font-weight: 600; letter-spacing: 0.05em; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28); }
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .nav-toggle { display: none; width: 2.8rem; height: 2.8rem; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 19, 32, 0.68); color: var(--text-primary); align-items: center; justify-content: center; cursor: pointer; transition: transform 0.35s var(--transition), background 0.35s var(--transition); }
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+    .nav-toggle span, .nav-toggle span::before, .nav-toggle span::after { display: block; width: 18px; height: 2px; background: currentColor; border-radius: 999px; position: relative; transition: transform 0.35s ease, opacity 0.3s ease; }
+    .nav-toggle span::before, .nav-toggle span::after { content: ''; position: absolute; left: 0; }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.4rem; border-radius: var(--radius-lg); padding: 0.35rem; background: rgba(8, 12, 24, 0.55); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
+    .stellar-nav a { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.05rem; border-radius: 14px; text-decoration: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition); }
+    .stellar-nav a::after { content: ''; position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14)); opacity: 0; transition: opacity 0.35s var(--transition); z-index: -1; }
+    .stellar-nav a:hover { color: var(--text-primary); transform: translateY(-2px); }
+    .stellar-nav a:hover::after { opacity: 1; }
+    .stellar-nav a.active { color: var(--text-primary); }
+    .stellar-nav a.active::after { opacity: 1; box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18); }
+
+    .stellar-main { flex: 1; width: min(1200px, 92vw); margin: 0 auto; padding: 4.2rem 0 5.6rem; display: flex; flex-direction: column; gap: 2.8rem; position: relative; z-index: 1; }
+
+    .glass-card { background: var(--glass); border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-strong); padding: clamp(2rem, 3vw, 3rem); backdrop-filter: blur(26px); position: relative; overflow: hidden; }
+    .glass-card::before { content: ''; position: absolute; inset: 1px; border-radius: calc(var(--radius-xl) - 2px); border: 1px solid rgba(148, 163, 184, 0.12); pointer-events: none; }
+
+    .hero-intro h1 { margin: 0 0 1rem; font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.2rem, 4vw, 2.9rem); letter-spacing: -0.01em; }
+    .hero-intro p { margin: 0; color: var(--text-muted); line-height: 1.7; }
+
+    .panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem; }
+    .panel { border-radius: var(--radius-lg); padding: 1.8rem; background: rgba(8, 12, 24, 0.72); border: 1px solid rgba(148, 163, 184, 0.16); display: flex; flex-direction: column; gap: 1rem; box-shadow: 0 18px 40px rgba(3, 7, 18, 0.55); position: relative; }
+    .panel::after { content: attr(data-label); position: absolute; top: 1rem; right: 1.6rem; font-size: 0.75rem; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(124,247,255,0.6); }
+
+    label { font-weight: 500; font-size: 0.95rem; color: var(--text-primary); display: block; margin-bottom: 0.35rem; }
+    select, button, input[type="text"] { width: 100%; border-radius: 14px; border: 1px solid rgba(148, 163, 184, 0.22); padding: 0.75rem 0.95rem; background: rgba(10, 15, 28, 0.85); color: var(--text-primary); font-family: inherit; font-size: 0.95rem; transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease; }
+    select:focus, button:focus, input[type="text"]:focus { outline: none; border-color: rgba(71, 245, 192, 0.6); box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.22); }
+
+    #reloc-btn { width: fit-content; padding: 0.95rem 2.4rem; background: linear-gradient(135deg, rgba(71,245,192,0.9), rgba(124,247,255,0.85)); color: #020617; font-weight: 600; cursor: pointer; border: none; border-radius: 999px; box-shadow: 0 14px 35px rgba(71, 245, 192, 0.28); transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition); }
+    #reloc-btn:hover { transform: translateY(-3px); box-shadow: 0 18px 42px rgba(71,245,192,0.38); }
+
+    #progress { width: 100%; background: rgba(8, 12, 24, 0.72); border-radius: 999px; overflow: hidden; border: 1px solid rgba(148, 163, 184, 0.18); height: 12px; margin: 1.6rem 0 0.8rem; position: relative; }
+    #bar { height: 100%; width: 0; background: linear-gradient(90deg, rgba(71,245,192,0.9), rgba(124,247,255,0.9)); transition: width 0.35s ease; }
+
+    #log { white-space: pre-wrap; background: rgba(8, 12, 24, 0.75); padding: 1rem 1.2rem; height: 220px; overflow-y: auto; border: 1px solid rgba(148, 163, 184, 0.14); border-radius: 18px; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.85rem; line-height: 1.6; color: rgba(148, 215, 199, 0.92); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
+    #log::-webkit-scrollbar { width: 8px; }
+    #log::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.35); border-radius: 999px; }
+
+    .search-field { display: flex; flex-direction: column; gap: 0.75rem; }
+    .search-field input { background: rgba(10, 15, 28, 0.7); }
+    .action-link {
+      color: var(--accent-strong);
+      text-decoration: none;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .action-link.disabled {
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    [data-animate] { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    [data-animate].is-visible { opacity: 1; transform: translateY(0); }
+
+    footer { color: rgba(226, 232, 240, 0.55); text-align: center; padding: 2.4rem 0 3rem; font-size: 0.85rem; }
+
+    @media (max-width: 960px) {
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 1.2rem; }
+      .stellar-nav { flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
   </style>
 </head>
-<body>      
-  <h1>Relocalisation Question via IA</h1>
-  <div class="panel" id="src">
-    <h2>SOURCE</h2>
-    <div class="field"><label>Provider<select id="src-prov"></select></label></div>
-    <div class="field"><label>Certification<select id="src-cert"></select></label></div>
-    <div class="field"><label>Domaine<select id="src-mod"></select></label></div>
-  </div>
-  <div class="panel" id="dst">
-    <h2>DESTINATION</h2>
-    <div class="field"><label>Provider<select id="dst-prov"></select></label></div>
-    <div class="field"><label>Certification<select id="dst-cert"></select></label></div>
-  </div>
+<body>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+  <div class="stellar-orb orb-3"></div>
 
-  <button id="reloc-btn">Relocaliser</button>
-  <div id="progress"><div id="bar"></div></div>
-  <div id="log"></div>
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <span class="brand-mark">EX</span>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Console d'orchestration pédagogique</span>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
+        </button>
+      </div>
+      {% set active_page = 'relocate' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
 
-<script>
-async function loadJSON(u){ return (await fetch(u)).json(); }
-function fill(el, items){
-  el.innerHTML = '';
-  items.forEach(i=>{
-    const o = document.createElement('option');
-    o.value = i.id; o.text = i.name;
-    el.appendChild(o);
-  });
-}
+  <main class="stellar-main">
+    <section class="glass-card hero-intro" data-animate>
+      <h1>Relocalisez vos questions avec assistance IA</h1>
+      <p>Sélectionnez un domaine source, une certification cible et laissez l'IA orchestrer la redistribution avec reprise automatique et streaming d'événements.</p>
+    </section>
 
-async function initPanel(pref, hasModule){
-  const p = document.getElementById(pref+'-prov');
-  const c = document.getElementById(pref+'-cert');
-  const m = hasModule && document.getElementById(pref+'-mod');
+    <section class="panel-grid" data-animate>
+      <div class="panel" data-label="source">
+        <h2 style="margin:0; font-family: 'Space Grotesk', sans-serif; letter-spacing:0.04em;">Source</h2>
+        <div>
+          <label for="src-prov">Provider</label>
+          <select id="src-prov"></select>
+        </div>
+        <div>
+          <label for="src-cert">Certification</label>
+          <select id="src-cert"></select>
+        </div>
+        <div class="search-field">
+          <label for="src-mod">Domaine</label>
+          <input type="text" id="src-mod-search" placeholder="Rechercher...">
+          <select id="src-mod"></select>
+        </div>
+      </div>
 
-  const provs = await loadJSON('/api/providers');
-  fill(p, provs);
-  p.value = provs[0]?.id; p.dispatchEvent(new Event('change'));
+      <div class="panel" data-label="destination">
+        <h2 style="margin:0; font-family: 'Space Grotesk', sans-serif; letter-spacing:0.04em;">Destination</h2>
+        <div>
+          <label for="dst-prov">Provider</label>
+          <select id="dst-prov"></select>
+        </div>
+        <div>
+          <label for="dst-cert">Certification</label>
+          <select id="dst-cert"></select>
+        </div>
+      </div>
+    </section>
 
-  p.addEventListener('change', async()=>{
-    const cs = await loadJSON(`/api/certifications/${p.value}`);
-    fill(c, cs);
-    c.value = cs[0]?.id; c.dispatchEvent(new Event('change'));
-  });
+    <section class="glass-card" data-animate>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap;">
+        <button id="reloc-btn">Relocaliser maintenant</button>
+        <a id="fixQuestionLink" class="action-link disabled" href="#" aria-disabled="true">Fix question</a>
+      </div>
+      <div id="progress"><div id="bar"></div></div>
+      <div id="log" aria-live="polite"></div>
+    </section>
+  </main>
 
-  if(!m) return;
-  c.addEventListener('change', async()=>{
-    const ms = await loadJSON(`/api/modules/${c.value}`);
-    fill(m, ms);
-  });
-}
+  <footer>ExBoot Laboratory &mdash; La relocalisation IA devient fluide et lumineuse.</footer>
 
-document.addEventListener('DOMContentLoaded', ()=>{
-  initPanel('src', true);
-  initPanel('dst', false);
+  <script src="{{ url_for('static', filename='js/searchable-select.js') }}"></script>
 
-  document.getElementById('reloc-btn').onclick = ()=>{
-    const srcMod  = +document.getElementById('src-mod').value;
-    const dstCert = +document.getElementById('dst-cert').value;
-    if(!srcMod || !dstCert) return alert('Sélection manquante');
+  <script>
+    const toggle = document.getElementById('navToggle');
+    const nav = document.getElementById('stellarNav');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const isOpen = toggle.classList.toggle('is-open');
+        document.body.classList.toggle('nav-open', isOpen);
+        toggle.setAttribute('aria-expanded', isOpen);
+      });
+    }
 
-    const params = new URLSearchParams({
-      source_module_id:    srcMod,
-      destination_cert_id: dstCert,
-      batch_size:          10
+    const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
+    nav?.querySelectorAll('a[data-route]').forEach(link => {
+      const target = (link.dataset.route || '').replace(/\/$/, '') || '/';
+      if (target === '/' ? currentPath === '/' : currentPath.startsWith(target)) {
+        nav.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+        link.classList.add('active');
+      }
     });
-    const evt = new EventSource(`/api/stream_relocate?${params}`);
-    const bar = document.getElementById('bar'),
-          log = document.getElementById('log');
-    let batches = 0;
 
-    evt.onmessage = e => {
-      log.textContent += e.data + "\n";
-      if(e.data.startsWith('Batch offset')) {
-        batches++;
-        // Si vous connaissez le nombre total de batches, adaptez ici le %
-        bar.style.width = Math.min(100, batches*10)+'%';
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.2 });
+
+    document.querySelectorAll('[data-animate]').forEach(el => observer.observe(el));
+
+    async function loadJSON(u){ return (await fetch(u)).json(); }
+    function fill(el, items){
+      const helper = el && el.__searchableSelect;
+      if (helper) {
+        helper.setOptions(
+          (items || []).map(i => ({
+            value: i.id,
+            label: i.name,
+            dataset: { codeCert: i.code_cert || '' }
+          })),
+          { keepSearch: false }
+        );
+      } else {
+        el.innerHTML = '';
+        (items || []).forEach(i=>{
+          const o = document.createElement('option');
+          o.value = i.id; o.text = i.name;
+          if (i.code_cert) {
+            o.dataset.codeCert = i.code_cert;
+          }
+          el.appendChild(o);
+        });
       }
-      if(e.data.startsWith('DONE') || e.data.startsWith('Aucun')) {
-        bar.style.width = '100%';
-        evt.close();
+    }
+
+    async function initPanel(pref, hasModule, defProv=null, defCert=null, defModule=null){
+      const p = document.getElementById(pref+'-prov');
+      const c = document.getElementById(pref+'-cert');
+      const m = hasModule && document.getElementById(pref+'-mod');
+      const s = hasModule && document.getElementById(pref+'-mod-search');
+      let pendingModuleId = defModule;
+
+      const provSearch = window.makeSelectSearchable ? window.makeSelectSearchable(p, { placeholder: 'Rechercher un provider…' }) : null;
+      const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(c, { placeholder: 'Rechercher une certification…' }) : null;
+
+      const base = '{{ url_for('reloc.index') }}';
+      p.addEventListener('change', async()=>{
+        const cs = await loadJSON(`${base}api/certifications/${p.value}`);
+        fill(c, cs);
+        certSearch && certSearch.setSearchTerm('');
+        let sel = cs[0]?.id;
+        const found = defCert ? cs.find(x=>x.id===defCert) : null;
+        if(found) sel = found.id;
+        c.value = sel;
+        c.dispatchEvent(new Event('change'));
+      });
+
+      if(hasModule){
+        s.addEventListener('input', function(){
+          const term = this.value.toLowerCase();
+          Array.from(m.options).forEach(o=>{
+            o.style.display = o.text.toLowerCase().includes(term) ? '' : 'none';
+          });
+        });
+
+        c.addEventListener('change', async()=>{
+          const ms = await loadJSON(`${base}api/modules/${c.value}`);
+          fill(m, ms);
+          if(pendingModuleId){
+            const match = ms.find(item => item.id === pendingModuleId);
+            if(match){
+              m.value = match.id;
+              pendingModuleId = null;
+            }
+          }
+          s.value='';
+          s.dispatchEvent(new Event('input'));
+        });
       }
-    };
-    evt.onerror = () => {
-      log.textContent += 'Erreur de connexion SSE\n';
-      evt.close();
-    };
-  };
-});
-</script>
+
+      const provs = await loadJSON(base + 'api/providers');
+      fill(p, provs);
+      provSearch && provSearch.setSearchTerm('');
+      p.value = provs.find(x=>x.id===defProv)?.id || provs[0]?.id;
+      p.dispatchEvent(new Event('change'));
+    }
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const params = new URLSearchParams(window.location.search);
+      const sourceProviderId = Number(params.get('source_provider_id')) || 169;
+      const sourceCertId = Number(params.get('source_cert_id')) || 23;
+      const sourceModuleId = Number(params.get('source_module_id')) || null;
+      const destinationProviderId = Number(params.get('destination_provider_id')) || 169;
+      const destinationCertId = Number(params.get('destination_cert_id')) || 23;
+
+      initPanel('src', true, sourceProviderId, sourceCertId, sourceModuleId);
+      initPanel('dst', false, destinationProviderId, destinationCertId);
+
+      const fixLink = document.getElementById('fixQuestionLink');
+      const fixBase = '{{ url_for('fix_index') }}';
+
+      function updateFixLink(){
+        const dstProv = document.getElementById('dst-prov').value;
+        const dstCertSelect = document.getElementById('dst-cert');
+        const srcModule = document.getElementById('src-mod').selectedOptions[0];
+        const codeCert = srcModule?.dataset?.codeCert || '';
+        const matchingCert = Array.from(dstCertSelect.options).find(
+          opt => (opt.dataset?.codeCert || '') === codeCert
+        );
+        const dstCert = matchingCert?.value || dstCertSelect.value;
+        if(dstProv && dstCert){
+          fixLink.href = `${fixBase}?provider_id=${dstProv}&cert_id=${dstCert}`;
+          fixLink.classList.remove('disabled');
+          fixLink.setAttribute('aria-disabled', 'false');
+        } else {
+          fixLink.href = '#';
+          fixLink.classList.add('disabled');
+          fixLink.setAttribute('aria-disabled', 'true');
+        }
+      }
+
+      const base = '{{ url_for('reloc.index') }}';
+      const bar  = document.getElementById('bar');
+      const log  = document.getElementById('log');
+
+      async function checkAndRestart(srcMod, dstCert){
+        try{
+          const res = await fetch(`${base}api/question_count/${srcMod}`);
+          const {count} = await res.json();
+          if(count > 0){
+            log.textContent += `Relance automatique - questions restantes: ${count}\n`;
+            startReloc(srcMod, dstCert);
+          } else {
+            log.textContent += 'Relocalisation terminée\n';
+            bar.style.width = '100%';
+          }
+        }catch(e){
+          log.textContent += 'Erreur lors de la vérification du nombre de questions\n';
+        }
+      }
+
+      function startReloc(srcMod, dstCert){
+        const params = new URLSearchParams({
+          source_module_id:    srcMod,
+          destination_cert_id: dstCert,
+          batch_size:          10
+        });
+
+        const evt = new EventSource(`${base}api/stream_relocate?${params}`);
+        let batches = 0;
+
+        evt.onmessage = e => {
+          log.textContent += e.data + "\n";
+          log.scrollTop = log.scrollHeight;
+          if(e.data.startsWith('Batch')){
+            batches++;
+            bar.style.width = Math.min(100, batches*10)+'%';
+          }
+          if(e.data.startsWith('DONE') || e.data.startsWith('Aucun')){
+            evt.close();
+            checkAndRestart(srcMod, dstCert);
+          }
+        };
+
+        evt.onerror = () => {
+          log.textContent += 'Erreur de connexion SSE\n';
+          evt.close();
+          checkAndRestart(srcMod, dstCert);
+        };
+      }
+
+      document.getElementById('reloc-btn').onclick = ()=>{
+        const srcMod  = +document.getElementById('src-mod').value;
+        const dstCert = +document.getElementById('dst-cert').value;
+        if(!srcMod || !dstCert) return alert('Sélection manquante');
+        bar.style.width = '0%';
+        log.textContent = '';
+        startReloc(srcMod, dstCert);
+      };
+
+      document.getElementById('dst-prov').addEventListener('change', updateFixLink);
+      document.getElementById('dst-cert').addEventListener('change', updateFixLink);
+      document.getElementById('src-mod').addEventListener('change', updateFixLink);
+      updateFixLink();
+    });
+  </script>
 </body>
 </html>

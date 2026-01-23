@@ -3,143 +3,619 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Populate Questions - ExamBoot</title>
-  <!-- Tailwind CSS CDN -->
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Populate Questions · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 20% 20%, rgba(76,201,240,0.15), transparent 55%),
+                     radial-gradient(circle at 80% 30%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.22), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb {
+      position: fixed;
+      width: 32rem;
+      height: 32rem;
+      border-radius: 50%;
+      opacity: 0.45;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      background: radial-gradient(circle, rgba(71,245,192,0.32) 0%, rgba(4,7,17,0) 70%);
+      animation: drift 22s ease-in-out infinite;
+      z-index: 0;
+    }
+
+    .orb-1 { top: -12rem; left: -6rem; }
+    .orb-2 { bottom: -10rem; right: -4rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.25) 0%, rgba(4,7,17,0) 70%); }
+    .orb-3 { top: 45vh; right: 50%; transform: translateX(50%); animation-delay: -14s; background: radial-gradient(circle, rgba(244,114,182,0.28) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift {
+      0%, 100% { transform: translate3d(0,0,0) scale(1); }
+      45% { transform: translate3d(40px, -30px, 0) scale(1.05); }
+      75% { transform: translate3d(-30px, 25px, 0) scale(0.95); }
+    }
+
+    .stellar-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(4, 7, 17, 0.72);
+      backdrop-filter: saturate(180%) blur(18px);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .stellar-container { width: min(1200px, 92vw); margin: 0 auto; padding: 1.2rem 0 1.6rem; }
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 18px; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25)); border: 1px solid rgba(148, 163, 184, 0.2); color: var(--accent-strong); font-weight: 600; letter-spacing: 0.05em; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28); }
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .nav-toggle { display: none; width: 2.8rem; height: 2.8rem; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 19, 32, 0.68); color: var(--text-primary); align-items: center; justify-content: center; cursor: pointer; transition: transform 0.35s var(--transition), background 0.35s var(--transition); }
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+    .nav-toggle span, .nav-toggle span::before, .nav-toggle span::after { display: block; width: 18px; height: 2px; background: currentColor; border-radius: 999px; position: relative; transition: transform 0.35s ease, opacity 0.3s ease; }
+    .nav-toggle span::before, .nav-toggle span::after { content: ''; position: absolute; left: 0; }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.4rem; border-radius: var(--radius-lg); padding: 0.35rem; background: rgba(8, 12, 24, 0.55); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
+    .stellar-nav a { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.05rem; border-radius: 14px; text-decoration: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition); }
+    .stellar-nav a::after { content: ''; position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14)); opacity: 0; transition: opacity 0.35s var(--transition); z-index: -1; }
+    .stellar-nav a:hover { color: var(--text-primary); transform: translateY(-2px); }
+    .stellar-nav a:hover::after { opacity: 1; }
+    .stellar-nav a.active { color: var(--text-primary); }
+    .stellar-nav a.active::after { opacity: 1; box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18); }
+
+    .stellar-main { flex: 1; width: min(1200px, 92vw); margin: 0 auto; padding: 4.2rem 0 5.6rem; display: flex; flex-direction: column; gap: 2.8rem; position: relative; z-index: 1; }
+
+    .glass-card { background: var(--glass); border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-strong); padding: clamp(2rem, 3vw, 3rem); backdrop-filter: blur(26px); position: relative; overflow: hidden; }
+    .glass-card::before { content: ''; position: absolute; inset: 1px; border-radius: calc(var(--radius-xl) - 2px); border: 1px solid rgba(148, 163, 184, 0.12); pointer-events: none; }
+
+    .hero-intro h1 { margin: 0 0 1rem; font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.2rem, 4vw, 2.9rem); letter-spacing: -0.01em; }
+    .hero-intro p { margin: 0; color: var(--text-muted); line-height: 1.7; }
+
+    label { font-weight: 500; font-size: 0.95rem; color: var(--text-primary); display: block; margin-bottom: 0.35rem; }
+    select, button { width: 100%; border-radius: 14px; border: 1px solid rgba(148, 163, 184, 0.22); padding: 0.75rem 0.95rem; background: rgba(10, 15, 28, 0.85); color: var(--text-primary); font-family: inherit; font-size: 0.95rem; transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease; }
+    select:focus, button:focus { outline: none; border-color: rgba(71, 245, 192, 0.6); box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.22); }
+
+    .stellar-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 0.85rem 1.6rem; border-radius: 999px; background: linear-gradient(135deg, rgba(71,245,192,0.9), rgba(124,247,255,0.85)); color: #020617; font-weight: 600; text-decoration: none; border: none; cursor: pointer; box-shadow: 0 14px 35px rgba(71, 245, 192, 0.3); transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition); }
+    .stellar-button:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 18px 42px rgba(71, 245, 192, 0.38); }
+    .stellar-button.secondary { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.32); color: var(--text-primary); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.08); }
+    .stellar-button.secondary:hover { background: rgba(30, 41, 69, 0.75); box-shadow: 0 16px 38px rgba(15, 23, 42, 0.45); }
+
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.4rem; margin-top: 2rem; }
+
+    .distribution-panel { margin-top: 1.2rem; background: rgba(8, 12, 24, 0.92); border-radius: var(--radius-xl); border: 1px solid rgba(148, 163, 184, 0.22); box-shadow: 0 18px 45px rgba(4, 7, 17, 0.45); padding: 1.4rem; position: relative; display: none; }
+    .distribution-panel.is-open { display: block; }
+    .distribution-panel .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.6rem; }
+    .panel-title { margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 1.3rem; letter-spacing: 0.02em; }
+    .panel-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+
+    .distribution-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin: 1rem 0 1.4rem; }
+    .distribution-card { background: rgba(12, 16, 28, 0.75); border: 1px solid rgba(148, 163, 184, 0.18); border-radius: var(--radius-lg); padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.8rem; }
+    .distribution-card h3 { margin: 0; font-size: 1.05rem; letter-spacing: 0.02em; font-family: 'Space Grotesk', sans-serif; }
+    .distribution-row { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.45rem 0; border-top: 1px solid rgba(148,163,184,0.08); }
+    .distribution-row:first-of-type { border-top: none; }
+    .distribution-row strong { text-transform: capitalize; letter-spacing: 0.01em; }
+    .option-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.7rem; }
+    .option-row input[type="checkbox"] { width: auto; height: auto; }
+    .option-hint { color: var(--text-muted); font-size: 0.9rem; }
+    .scenario-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.5rem; }
+    .scenario-grid label { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.1rem; }
+    .scenario-grid input { width: 100%; border-radius: 10px; border: 1px solid rgba(148, 163, 184, 0.22); padding: 0.45rem 0.6rem; background: rgba(4, 7, 17, 0.6); color: var(--text-primary); }
+    .scenario-grid input:focus { outline: none; border-color: rgba(71, 245, 192, 0.5); box-shadow: 0 0 0 2px rgba(71, 245, 192, 0.18); }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.2rem; flex-wrap: wrap; }
+    .pill-button { padding: 0.65rem 1.2rem; border-radius: 999px; border: 1px solid rgba(148,163,184,0.22); background: rgba(15, 19, 32, 0.75); color: var(--text-primary); cursor: pointer; transition: transform 0.25s ease, background 0.25s ease, border-color 0.25s ease; }
+    .pill-button:hover { background: rgba(30,41,69,0.9); transform: translateY(-1px); border-color: rgba(148,163,184,0.32); }
+
+    .status-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.2rem; margin-top: 1.5rem; }
+    .status-card { border-radius: var(--radius-lg); padding: 1.4rem 1.6rem; background: rgba(8, 12, 24, 0.78); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: 0 16px 34px rgba(8, 12, 23, 0.48); display: flex; flex-direction: column; gap: 0.35rem; }
+    .status-card span { font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.16em; }
+    .status-card strong { font-size: 1.4rem; letter-spacing: -0.01em; }
+
+    #progressBar { width: 100%; background: rgba(8, 12, 24, 0.72); border-radius: 999px; overflow: hidden; border: 1px solid rgba(148, 163, 184, 0.18); height: 14px; margin: 1.8rem 0; position: relative; }
+    #progressBarFill { height: 100%; width: 0%; background: linear-gradient(90deg, rgba(71,245,192,0.9), rgba(124,247,255,0.9)); transition: width 0.45s ease; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 600; color: #020617; }
+
+    #progressLog { border: 1px solid rgba(148, 163, 184, 0.14); padding: 1rem 1.4rem; border-radius: 18px; background: rgba(8, 12, 24, 0.78); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); max-height: 360px; overflow-y: auto; }
+    #logList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.92rem; color: rgba(226, 232, 240, 0.85); }
+
+    [data-animate] { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    [data-animate].is-visible { opacity: 1; transform: translateY(0); }
+
+    footer { color: rgba(226, 232, 240, 0.55); text-align: center; padding: 2.4rem 0 3rem; font-size: 0.85rem; }
+
+    @media (max-width: 960px) {
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 1.2rem; }
+      .stellar-nav { flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
-<body class="bg-gray-100">
-  <div class="max-w-3xl mx-auto p-8 bg-white shadow-xl mt-12 rounded">
-    <h1 class="text-4xl font-bold text-center mb-8">Populate Questions</h1>
-    
-    {% if not is_populating %}
-    <!-- Formulaire de sélection -->
-    <form id="select-form" method="POST" action="/" class="space-y-6">
-      <div>
-        <label for="provider_id" class="block text-lg font-medium text-gray-700">Provider:</label>
-        <select name="provider_id" id="provider_id" class="mt-1 block w-full rounded border-gray-300 shadow-sm">
-          {% for provider in providers %}
-            <option value="{{ provider[0] }}">{{ provider[1] }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div>
-        <label for="cert_id" class="block text-lg font-medium text-gray-700">Certification:</label>
-        <select name="cert_id" id="cert_id" class="mt-1 block w-full rounded border-gray-300 shadow-sm">
-          <!-- Options chargées via AJAX -->
-        </select>
-      </div>
-      <div>
-        <button type="submit" class="w-full py-3 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
-          Populate
+<body>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+  <div class="stellar-orb orb-3"></div>
+
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <span class="brand-mark">EX</span>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Console d'orchestration pédagogique</span>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
         </button>
       </div>
-    </form>
+      {% set active_page = 'populate' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+  <main class="stellar-main">
+    <section class="glass-card hero-intro" data-animate>
+      <h1>Synchronisez une certification complète en un clic</h1>
+      <p>Déclenchez le pipeline de population pour analyser la certification, importer les domaines et charger les questions en suivi temps réel.</p>
+    </section>
+
+    {% if not is_populating %}
+    <section class="glass-card" data-animate>
+      <h2 class="text-2xl font-semibold" style="font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.03em;">Préparer une population</h2>
+      <form id="select-form" method="POST" action="{{ url_for('populate_index') }}" class="form-grid">
+        <input type="hidden" name="distribution" id="distributionInput" value='{{ distribution_defaults | tojson }}'>
+        <input type="hidden" name="apply_addition" id="applyAdditionInput" value="{{ 'true' if selected_apply_addition else 'false' }}">
+        <div>
+          <label for="provider_id">Provider</label>
+          <select name="provider_id" id="provider_id">
+            {% for provider in providers %}
+              <option value="{{ provider[0] }}">{{ provider[1] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="cert_id">Certification</label>
+          <select name="cert_id" id="cert_id"></select>
+        </div>
+        <div style="align-self:flex-end;">
+          <button type="button" id="toggleDistributionPanel" class="stellar-button secondary" style="width:100%;">Distribution</button>
+        </div>
+        <div style="align-self:flex-end;">
+          <button type="submit" class="stellar-button" style="width:100%;">Lancer la population</button>
+        </div>
+      </form>
+      <div id="distributionPanel" class="distribution-panel" aria-hidden="true">
+        <div class="panel-header">
+          <div>
+            <p class="panel-title">Personnaliser la distribution</p>
+            <p style="color: var(--text-muted); margin: 0;">Définissez le nombre de questions par niveau, type et scénario. Les valeurs laissées vides reviendront à 0 et la configuration par défaut sera utilisée si vous n'enregistrez pas de modifications.</p>
+            <div class="option-row">
+              <input type="checkbox" id="applyAdditionCheckbox">
+              <label for="applyAdditionCheckbox" style="margin-bottom:0;">Appliquer en Addition</label>
+              <span class="option-hint">Ajoute exactement les quantités saisies en plus des questions existantes.</span>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <button type="button" class="pill-button" id="cancelDistribution">Masquer</button>
+            <button type="button" class="pill-button" id="zeroDistribution">Set to 0</button>
+            <button type="button" class="pill-button" id="resetDistribution">Réinitialiser</button>
+            <button type="button" class="stellar-button" id="saveDistribution">Enregistrer</button>
+          </div>
+        </div>
+        <div class="distribution-grid">
+          {% for difficulty, question_types in distribution_defaults.items() %}
+          <div class="distribution-card">
+            <h3>{{ difficulty|capitalize }}</h3>
+            {% for qtype, scenarios in question_types.items() %}
+            <div class="distribution-row">
+              <strong>{{ qtype }}</strong>
+              <div class="scenario-grid">
+                {% for scenario, count in scenarios.items() %}
+                <div>
+                  <label>{{ scenario.replace('-', ' ') }}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    data-distribution-input
+                    data-difficulty="{{ difficulty }}"
+                    data-question-type="{{ qtype }}"
+                    data-scenario="{{ scenario }}"
+                    value="{{ count }}"
+                  >
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
     {% else %}
-    <!-- Page de progression -->
-    <div class="mb-4">
-      <p class="text-xl font-semibold">
-        Provider ID: <span class="font-normal">{{ provider_id }}</span>, Certification ID: <span class="font-normal">{{ cert_id }}</span>
-      </p>
-    </div>
-    
-    <!-- Affichage des compteurs -->
-    <div id="counterDisplay" class="mb-4 p-4 bg-gray-50 border rounded">
-      <p class="font-bold text-gray-800">Analyse Certification:</p>
-      <p id="analysisResult" class="text-gray-700">En attente...</p>
-      <p class="font-bold text-gray-800 mt-2">Domaines traités:</p>
-      <p id="domainCounter" class="text-gray-700">0 / 0</p>
-      <p class="font-bold text-gray-800 mt-2">Total Questions Importées:</p>
-      <p id="questionCounter" class="text-gray-700">0</p>
-    </div>
-    
-    <div class="mb-6 text-center space-x-2">
-      <button id="startPopulate" class="px-6 py-3 bg-green-600 text-white rounded hover:bg-green-700 transition">
-        Start Population Process
-      </button>
-      <button id="pausePopulate" class="px-6 py-3 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition">
-        Pause
-      </button>
-      <button id="resumePopulate" class="px-6 py-3 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition">
-        Resume
-      </button>
-    </div>
-    
-    <!-- Barre de progression -->
-    <div id="progressBar" class="w-full bg-gray-200 rounded-full h-6 mb-6">
-      <div id="progressBarFill" class="bg-blue-500 h-6 text-center text-white rounded-full" style="width: 0%;">0%</div>
-    </div>
-    
-    <!-- Zone de log de progression -->
-    <div id="progressLog" class="border border-gray-300 p-4 rounded">
-      <p class="font-bold text-gray-800 mb-2">Progress:</p>
-      <ul id="logList" class="list-disc pl-5 text-gray-700"></ul>
-    </div>
+    <section class="glass-card" data-animate>
+      <h2 style="font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.03em;">Population en direct</h2>
+      <p style="color: var(--text-muted);">Provider ID : <strong>{{ provider_id }}</strong> &mdash; Certification ID : <strong>{{ cert_id }}</strong></p>
+
+      <div class="status-board">
+        <div class="status-card">
+          <span>Analyse certification</span>
+          <strong id="analysisResult">En attente...</strong>
+        </div>
+        <div class="status-card">
+          <span>Domaines traités</span>
+          <strong id="domainCounter">0 / 0</strong>
+        </div>
+        <div class="status-card">
+          <span>Total questions importées</span>
+          <strong id="questionCounter">0</strong>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:0.8rem; flex-wrap:wrap; margin-top:1.6rem;">
+        <button id="startPopulate" class="stellar-button" type="button">Démarrer le processus</button>
+        <button id="pausePopulate" class="stellar-button secondary" type="button">Pause</button>
+        <button id="resumePopulate" class="stellar-button secondary" type="button">Reprendre</button>
+      </div>
+
+      <div id="progressBar">
+        <div id="progressBarFill">0%</div>
+      </div>
+
+      <div id="progressLog">
+        <p class="text-sm" style="margin-top:0; margin-bottom:0.8rem; color: var(--text-muted); letter-spacing:0.12em; text-transform:uppercase;">Flux d'exécution</p>
+        <ul id="logList"></ul>
+      </div>
+    </section>
     {% endif %}
-  </div>
-  
+  </main>
+
+  <footer>ExBoot Laboratory &mdash; Votre pipeline de population prend une nouvelle dimension.</footer>
+
+  <script>
+    const toggle = document.getElementById('navToggle');
+    const nav = document.getElementById('stellarNav');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const isOpen = toggle.classList.toggle('is-open');
+        document.body.classList.toggle('nav-open', isOpen);
+        toggle.setAttribute('aria-expanded', isOpen);
+      });
+    }
+
+    const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
+    nav?.querySelectorAll('a[data-route]').forEach(link => {
+      const target = (link.dataset.route || '').replace(/\/$/, '') || '/';
+      if (target === '/' ? currentPath === '/' : currentPath.startsWith(target)) {
+        nav.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+        link.classList.add('active');
+      }
+    });
+
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.2 });
+
+    document.querySelectorAll('[data-animate]').forEach(el => observer.observe(el));
+  </script>
+
+  <script src="{{ url_for('static', filename='js/searchable-select.js') }}"></script>
+
+  {% if not is_populating %}
   <script>
     $(document).ready(function(){
-        // Charger les certifications quand un provider est sélectionné.
-        $("#provider_id").change(function(){
-            $.post("/get_certifications", { provider_id: $(this).val() }, function(data){
-                $("#cert_id").empty();
-                $.each(data, function(i, item){
-                    $("#cert_id").append($("<option>", { 
-                        value: item.id,
-                        text : item.name 
-                    }));
-                });
-            }, "json");
+      const providerEl = document.getElementById('provider_id');
+      const certEl = document.getElementById('cert_id');
+      const providerSearch = window.makeSelectSearchable ? window.makeSelectSearchable(providerEl, { placeholder: 'Rechercher un provider…' }) : null;
+      const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certEl, { placeholder: 'Rechercher une certification…' }) : null;
+      const params = new URLSearchParams(window.location.search);
+      const preselectProviderId = params.get('provider_id');
+      const preselectCertId = params.get('cert_id');
+      let pendingCertId = preselectCertId;
+      const distributionInput = document.getElementById('distributionInput');
+      const applyAdditionInput = document.getElementById('applyAdditionInput');
+      const applyAdditionCheckbox = document.getElementById('applyAdditionCheckbox');
+      const defaultDistribution = {{ distribution_defaults | tojson }};
+
+      const distributionPanel = document.getElementById('distributionPanel');
+      const distributionToggle = document.getElementById('toggleDistributionPanel');
+
+      const getCurrentDistribution = () => {
+        try {
+          return JSON.parse(distributionInput.value) || defaultDistribution;
+        } catch (err) {
+          return defaultDistribution;
+        }
+      };
+
+      let distributionState = JSON.parse(JSON.stringify(getCurrentDistribution()));
+      let applyAdditionState = (applyAdditionInput?.value || '').toLowerCase() === 'true';
+
+      const syncInputsFromState = () => {
+        document.querySelectorAll('[data-distribution-input]').forEach(input => {
+          const { difficulty, questionType, scenario } = input.dataset;
+          const value = distributionState?.[difficulty]?.[questionType]?.[scenario];
+          input.value = typeof value === 'number' ? value : 0;
         });
-        
-        // Lancement du processus de population et mise à jour dynamique des logs et compteurs
+        if (applyAdditionCheckbox) {
+          applyAdditionCheckbox.checked = applyAdditionState;
+        }
+        if (applyAdditionInput) {
+          applyAdditionInput.value = applyAdditionState ? 'true' : 'false';
+        }
+      };
+
+      const openDistributionPanel = () => {
+        syncInputsFromState();
+        distributionPanel.classList.add('is-open');
+        distributionPanel.setAttribute('aria-hidden', 'false');
+        distributionToggle?.setAttribute('aria-expanded', 'true');
+      };
+
+      const closeDistributionPanel = () => {
+        distributionPanel.classList.remove('is-open');
+        distributionPanel.setAttribute('aria-hidden', 'true');
+        distributionToggle?.setAttribute('aria-expanded', 'false');
+      };
+
+      const buildZeroDistribution = () => {
+        const empty = {};
+        Object.entries(defaultDistribution || {}).forEach(([difficulty, questionTypes]) => {
+          empty[difficulty] = {};
+          Object.entries(questionTypes || {}).forEach(([questionType, scenarios]) => {
+            empty[difficulty][questionType] = {};
+            Object.keys(scenarios || {}).forEach(scenario => {
+              empty[difficulty][questionType][scenario] = 0;
+            });
+          });
+        });
+        return empty;
+      };
+
+      const collectDistribution = () => {
+        const updated = {};
+        document.querySelectorAll('[data-distribution-input]').forEach(input => {
+          const difficulty = input.dataset.difficulty;
+          const questionType = input.dataset.questionType;
+          const scenario = input.dataset.scenario;
+          const value = Number(input.value) || 0;
+          updated[difficulty] = updated[difficulty] || {};
+          updated[difficulty][questionType] = updated[difficulty][questionType] || {};
+          updated[difficulty][questionType][scenario] = value;
+        });
+        return updated;
+      };
+
+      distributionToggle.addEventListener('click', () => {
+        const isOpen = distributionPanel.classList.contains('is-open');
+        if (isOpen) {
+          closeDistributionPanel();
+        } else {
+          openDistributionPanel();
+        }
+      });
+
+      document.getElementById('cancelDistribution').addEventListener('click', () => {
+        syncInputsFromState();
+        closeDistributionPanel();
+      });
+      document.getElementById('zeroDistribution').addEventListener('click', () => {
+        distributionState = buildZeroDistribution();
+        syncInputsFromState();
+      });
+      document.getElementById('resetDistribution').addEventListener('click', () => {
+        distributionState = JSON.parse(JSON.stringify(defaultDistribution));
+        applyAdditionState = false;
+        syncInputsFromState();
+      });
+
+      document.getElementById('saveDistribution').addEventListener('click', () => {
+        distributionState = collectDistribution();
+        distributionInput.value = JSON.stringify(distributionState);
+        applyAdditionState = !!applyAdditionCheckbox?.checked;
+        applyAdditionInput.value = applyAdditionState ? 'true' : 'false';
+        closeDistributionPanel();
+      });
+
+      if (preselectProviderId) {
+        providerEl.value = preselectProviderId;
+      }
+
+      $("#provider_id").change(function(){
+        $.post("{{ url_for('get_certifications') }}", { provider_id: $(this).val() }, function(data){
+          const items = (data || []).map(item => ({ value: item.id, label: item.name }));
+          if (certSearch) {
+            const list = items.length ? items : [{ value: '', label: '— Aucune certification —' }];
+            const preferred = pendingCertId ? list.find(item => String(item.value) === String(pendingCertId)) : null;
+            const selectedValue = preferred ? preferred.value : (list[0]?.value ?? '');
+            certSearch.setOptions(list, { keepSearch: false, selectedValue });
+            certSearch.select.dispatchEvent(new Event('change'));
+            pendingCertId = null;
+          } else {
+            const $cert = $("#cert_id");
+            $cert.empty();
+            $.each(items.length ? items : [{ value: '', label: '— Aucune certification —' }], function(_, optionData){
+              $cert.append($("<option>", { value: optionData.value, text : optionData.label }));
+            });
+            if (pendingCertId) {
+              $cert.val(pendingCertId);
+              pendingCertId = null;
+            }
+            $cert.trigger('change');
+          }
+        }, "json");
+      }).trigger('change');
+    });
+  </script>
+  {% else %}
+  <script>
+    $(document).ready(function(){
+        let poller = null;
+        let lastLogIndex = 0;
+
+        const statusUrlTemplate = "{{ url_for('populate_status', job_id='__JOB__') }}";
+        const pauseUrlTemplate = "{{ url_for('pause_populate', job_id='__JOB__') }}";
+        const resumeUrlTemplate = "{{ url_for('resume_populate', job_id='__JOB__') }}";
+        const processUrl = "{{ url_for('populate_process') }}";
+        const distributionPayload = {{ (selected_distribution or distribution_defaults) | tojson }};
+        const applyAddition = {{ 'true' if selected_apply_addition else 'false' }};
+        let currentJobId = null;
+
+        function appendLog(message, cssClass){
+            const li = $("<li>").text(message);
+            if(cssClass){
+                li.addClass(cssClass);
+            }
+            $("#logList").append(li);
+            $("#progressLog").scrollTop($("#progressLog")[0].scrollHeight);
+        }
+
+        function fetchStatus(jobId){
+            if(!jobId){
+                return;
+            }
+            $.get(statusUrlTemplate.replace('__JOB__', jobId), function(resp){
+                if(resp && Array.isArray(resp.log)){
+                    for(; lastLogIndex < resp.log.length; lastLogIndex++){
+                        appendLog(resp.log[lastLogIndex]);
+                    }
+                }
+                if(resp && resp.counters){
+                    $("#analysisResult").text(resp.counters.analysis || "");
+                    $("#domainCounter").text((resp.counters.domainsProcessed || 0) + " / " + (resp.counters.totalDomains || 0));
+                    $("#questionCounter").text(resp.counters.totalQuestions || 0);
+                    var percent = 0;
+                    if(resp.counters.totalDomains){
+                        percent = Math.round((resp.counters.domainsProcessed / resp.counters.totalDomains) * 100);
+                    }
+                    $("#progressBarFill").css("width", percent + "%").text(percent + "%");
+                }
+                if(resp && resp.status){
+                    if(resp.status === "failed" && resp.error){
+                        appendLog("Erreur: " + resp.error, "text-red-400");
+                    }
+                    if(resp.status === "completed" || resp.status === "failed"){
+                        if(poller){
+                            clearInterval(poller);
+                            poller = null;
+                        }
+                        currentJobId = null;
+                    }
+                }
+            }, "json").fail(function(xhr){
+                if(poller){
+                    clearInterval(poller);
+                    poller = null;
+                }
+                if(xhr.status === 404){
+                    appendLog("Statut indisponible: job introuvable.", "text-red-400");
+                }
+            });
+        }
+
+        function startPolling(jobId){
+            if(poller){
+                clearInterval(poller);
+            }
+            poller = setInterval(function(){ fetchStatus(jobId); }, 1000);
+            fetchStatus(jobId);
+        }
+
         $("#startPopulate").click(function(){
             $("#logList").empty();
             $("#progressBarFill").css("width", "0%").text("0%");
-            // Réinitialiser les compteurs affichés
             $("#analysisResult").text("En attente...");
             $("#domainCounter").text("0 / 0");
             $("#questionCounter").text("0");
-            $.post("/populate_process", {
+            lastLogIndex = 0;
+            $.post(processUrl, {
                 provider_id: "{{ provider_id }}",
-                cert_id: "{{ cert_id }}"
-            }, function(response){
-                var logs = response.log;
-                var total = logs.length;
-                var i = 0;
-                if(response.counters) {
-                    $("#analysisResult").text(response.counters.analysis);
-                    $("#domainCounter").text(response.counters.domainsProcessed + " / " + response.counters.totalDomains);
-                    $("#questionCounter").text(response.counters.totalQuestions);
+                cert_id: "{{ cert_id }}",
+                distribution: JSON.stringify(distributionPayload || {}),
+                apply_addition: applyAddition ? 'true' : 'false'
+            }, function(resp){
+                if(resp && resp.job_id){
+                    currentJobId = resp.job_id;
+                    startPolling(currentJobId);
+                } else {
+                    appendLog("Impossible de démarrer le traitement.", "text-red-400");
                 }
-                function displayNextLog() {
-                    if (i < total) {
-                        $("#logList").append("<li>" + logs[i] + "</li>");
-                        var percent = Math.round(((i+1) / total) * 100);
-                        $("#progressBarFill").css("width", percent + "%").text(percent + "%");
-                        i++;
-                        setTimeout(displayNextLog, 500);
-                    }
-                }
-                displayNextLog();
-            }, "json");
+            }, "json").fail(function(xhr){
+                appendLog("Erreur au démarrage: " + xhr.responseText, "text-red-400");
+            });
         });
 
-        // Bouton de pause
         $("#pausePopulate").click(function(){
-            $.post("/pause_populate", {}, function(response){
-                $("#logList").append("<li>Processus mis en pause.</li>");
-            }, "json");
+            if(!currentJobId){
+                appendLog("Aucun traitement en cours.", "text-yellow-300");
+                return;
+            }
+            $.post(pauseUrlTemplate.replace('__JOB__', currentJobId), {}, function(){
+                appendLog("Processus mis en pause.");
+            }, "json").fail(function(){
+                appendLog("Impossible de mettre en pause le traitement.", "text-red-400");
+            });
         });
 
-        // Bouton de reprise
         $("#resumePopulate").click(function(){
-            $.post("/resume_populate", {}, function(response){
-                $("#logList").append("<li>Processus repris.</li>");
-            }, "json");
+            if(!currentJobId){
+                appendLog("Aucun traitement en cours.", "text-yellow-300");
+                return;
+            }
+            $.post(resumeUrlTemplate.replace('__JOB__', currentJobId), {}, function(){
+                appendLog("Processus repris.");
+            }, "json").fail(function(){
+                appendLog("Impossible de reprendre le traitement.", "text-red-400");
+            });
         });
     });
   </script>
+  {% endif %}
 </body>
 </html>

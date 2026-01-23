@@ -2,7 +2,8 @@ import os
 import re
 import json
 import uuid
-from typing import Dict, Any, List
+from pathlib import Path
+from typing import Dict, Any, List, Optional
 
 import fitz  # PyMuPDF
 import pytesseract
@@ -14,8 +15,14 @@ from config import DB_CONFIG
 routes_pdf = Blueprint("routes_pdf", __name__)
 
 # Dossier d’upload partagé
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
+if UPLOAD_DIR.exists() and not UPLOAD_DIR.is_dir():
+    backup_path = UPLOAD_DIR.with_suffix(UPLOAD_DIR.suffix + ".bak")
+    backup_path.write_bytes(UPLOAD_DIR.read_bytes())
+    UPLOAD_DIR.unlink()
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+else:
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # ------------------------------- DB -------------------------------
 
@@ -53,32 +60,23 @@ def extract_text_from_pdf(pdf_path: str,
         return text
 
     # Extraction native via PyMuPDF
-    doc = fitz.open(pdf_path)
-    start_idx = 1 if (skip_first_page and doc.page_count > 0) else 0
-    for i in range(start_idx, doc.page_count):
-        page = doc[i]
-        h = page.rect.height
-        top_cut = h * header_ratio
-        bottom_cut = h * (1.0 - footer_ratio)
+    with fitz.open(pdf_path) as doc:
+        start_idx = 1 if (skip_first_page and doc.page_count > 0) else 0
+        for i in range(start_idx, doc.page_count):
+            page = doc[i]
+            h = page.rect.height
+            top_cut = h * header_ratio
+            bottom_cut = h * (1.0 - footer_ratio)
 
-        # Récupère les blocks et ne garde que ceux entièrement dans la zone "corps"
-        blocks = page.get_text("blocks")  # (x0,y0,x1,y1, text, ...)
-        page_txt_parts = []
-        for b in blocks:
-            if len(b) < 5:
-                continue
-            x0, y0, x1, y1, btxt = b[:5]
-            if y0 >= top_cut and y1 <= bottom_cut and btxt and btxt.strip():
-                page_txt_parts.append(btxt)
+            clip = fitz.Rect(0, top_cut, page.rect.width, bottom_cut)
+            page_txt = page.get_text("text", clip=clip)
 
-        page_txt = "\n".join(page_txt_parts)
+            # Nettoyage : lignes "Page 3", "3/10", etc.
+            page_txt = re.sub(r"(?im)^\s*(page\s*)?\d+\s*(/\s*\d+)?\s*$", "", page_txt)
+            page_txt = re.sub(r"\n{3,}", "\n\n", page_txt).strip()
 
-        # Nettoyage : lignes "Page 3", "3/10", etc.
-        page_txt = re.sub(r"(?im)^\s*(page\s*)?\d+\s*(/\s*\d+)?\s*$", "", page_txt)
-        page_txt = re.sub(r"\n{3,}", "\n\n", page_txt).strip()
-
-        if page_txt:
-            text += page_txt + "\n"
+            if page_txt:
+                text += page_txt + "\n"
 
     return text
 
@@ -87,8 +85,27 @@ def extract_text_from_pdf(pdf_path: str,
 # --- Helpers: segmentation & parsing ---
 
 _NEWQ_RE = re.compile(r'(?im)^\s*NEW\s+QUESTION\s+(\d+)\b')  # ancre prioritaire
+_QUESTION_RE = re.compile(r'(?im)^\s*QUESTION\s*\d+\b')
+_NUMBERED_Q_RE = re.compile(r'(?m)^\s*\d+\s*[.)]\s+\S')
 _OPT_RE  = re.compile(r'^\s*([A-Oa-o])[\.\)]\s*(.+)$')        # A. / B) / c. ...
-_ANS_RE  = re.compile(r'(?im)\bAnswer\s*:\s*([A-O]|True|False)\b')
+_ANS_RE  = re.compile(r'(?im)^\s*Answer\s*:\s*(.+)$')
+
+
+def analyze_question_markers(text: str) -> dict:
+    """Pré-analyse : compte les marqueurs de questions pour estimer le total."""
+    counts = {
+        "new_question": len(_NEWQ_RE.findall(text)),
+        "question_label": len(_QUESTION_RE.findall(text)),
+        "numbered": len(_NUMBERED_Q_RE.findall(text)),
+    }
+    method = "unknown"
+    total_expected = 0
+    for key in ("new_question", "question_label", "numbered"):
+        if counts[key] > 0:
+            method = key
+            total_expected = counts[key]
+            break
+    return {"counts": counts, "method": method, "total_expected": total_expected}
 
 def _split_blocks(text: str) -> list[tuple[str, str]]:
     """
@@ -129,7 +146,7 @@ def _strip_after_explanation(block: str) -> str:
 
 # --- Fonction principale: détecter les questions ---
 
-def detect_questions(text: str, module_id: int) -> dict:
+def detect_questions(text: str, module_id: int, analysis: Optional[dict] = None) -> dict:
     """
     Parse le texte en questions/réponses.
     Priorités :
@@ -141,11 +158,22 @@ def detect_questions(text: str, module_id: int) -> dict:
       - Pour les autres questions : au moins 2 réponses
     """
     questions = []
+    if analysis is None:
+        analysis = analyze_question_markers(text)
 
     for qnum, raw_block in _split_blocks(text):
         block = _strip_after_explanation(raw_block)
 
-        # Retire toute ligne "Answer: X" (on l'ignore de toute façon)
+        # Extrait la/les réponses correctes (Answer: ...)
+        correct_tokens = set()
+        m_ans = _ANS_RE.search(block)
+        if m_ans:
+            ans_raw = m_ans.group(1)
+            correct_tokens = {
+                tok.strip().upper()
+                for tok in re.findall(r'[A-O]|True|False', ans_raw, re.I)
+            }
+        # Retire la ligne "Answer: ..." du bloc
         block = _ANS_RE.sub("", block).strip()
 
         # Lignes utiles
@@ -203,19 +231,21 @@ def detect_questions(text: str, module_id: int) -> dict:
         if first_opt_idx is None:
             # Heuristique True/False
             has_tf_hint = any(re.search(r'\b(True|False)\b', ln, re.I) for ln in lines)
-            if has_tf_hint:
+            if has_tf_hint or (correct_tokens and correct_tokens.issubset({"TRUE", "FALSE"})):
                 nature = "truefalse"
                 question_text = " ".join(lines).strip()
                 answers = [
-                    {"value": "True",  "target": None, "isok": 0},
-                    {"value": "False", "target": None, "isok": 0},
+                    {"value": "True",  "target": None, "isok": 1 if "TRUE" in correct_tokens else 0},
+                    {"value": "False", "target": None, "isok": 1 if "FALSE" in correct_tokens else 0},
                 ]
             else:
-                # pas exploitable → on ignore
-                continue
+                question_text = " ".join(lines).strip()
+                answers = []
         else:
             # Énoncé
             question_text = " ".join(lines[:first_opt_idx]).strip()
+            if not question_text:
+                question_text = " ".join(lines).strip()
 
             # Réponses multi-lignes
             cur_letter = None
@@ -229,7 +259,8 @@ def detect_questions(text: str, module_id: int) -> dict:
                 if not txt:
                     return
                 clean = txt.replace("*", "").replace("(Correct)", "").strip()
-                answers.append({"value": clean[:700], "target": None, "isok": 0})
+                isok = 1 if cur_letter in correct_tokens else 0
+                answers.append({"value": clean[:700], "target": None, "isok": isok})
                 cur_letter, cur_text_parts = None, []
 
             for l in lines[first_opt_idx:]:
@@ -244,9 +275,6 @@ def detect_questions(text: str, module_id: int) -> dict:
                         cur_text_parts.append(l.strip())
             flush_current()
 
-        # Filtre : au moins 2 réponses pour les cas "classiques"
-        if len(answers) < 2:
-            continue
         if not question_text:
             continue
 
@@ -259,7 +287,19 @@ def detect_questions(text: str, module_id: int) -> dict:
             "answers": answers
         })
 
-    return {"module_id": module_id, "questions": questions}
+    extracted_count = len(questions)
+    expected_count = analysis.get("total_expected") or extracted_count
+    gap = expected_count - extracted_count
+    report = {
+        "expected_questions": expected_count,
+        "extracted_questions": extracted_count,
+        "gap": gap,
+        "method": analysis.get("method"),
+        "marker_counts": analysis.get("counts", {}),
+        "questions_without_answers": sum(1 for q in questions if not q.get("answers")),
+    }
+
+    return {"module_id": module_id, "questions": questions, "analysis": report}
 
 # ---------------------- Routes optionnelles (Blueprint) ----------------------
 
@@ -331,13 +371,18 @@ def import_questions_route():
             q_imported += 1
 
             for ans in answers:
-                a_text = (ans.get("value") or "").strip()
-                if not a_text:
+                raw_val = (ans.get("value") or ans.get("text") or "").strip()
+                if not raw_val:
                     continue
-                a_text = a_text[:700]
+
+                answer_data = {
+                    k: v for k, v in ans.items() if k not in ("isok", "value", "text")
+                }
+                answer_data["value"] = raw_val
+                a_json = json.dumps(answer_data, ensure_ascii=False)[:700]
                 isok = 1 if int(ans.get("isok") or 0) == 1 else 0
 
-                cur.execute("INSERT INTO answers (text) VALUES (%s)", (a_text,))
+                cur.execute("INSERT INTO answers (text) VALUES (%s)", (a_json,))
                 answer_id = cur.lastrowid
                 a_imported += 1
 

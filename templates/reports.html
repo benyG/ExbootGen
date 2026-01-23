@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rapports dynamiques · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 20% 20%, rgba(76,201,240,0.15), transparent 55%),
+                     radial-gradient(circle at 80% 30%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.22), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --glass-soft: rgba(15, 19, 32, 0.82);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb { position: fixed; width: 32rem; height: 32rem; border-radius: 50%; opacity: 0.45; pointer-events: none; mix-blend-mode: screen; background: radial-gradient(circle, rgba(71,245,192,0.32) 0%, rgba(4,7,17,0) 70%); animation: drift 22s ease-in-out infinite; z-index: 0; }
+    .orb-1 { top: -12rem; left: -6rem; }
+    .orb-2 { bottom: -10rem; right: -4rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.25) 0%, rgba(4,7,17,0) 70%); }
+    .orb-3 { top: 45vh; right: 50%; transform: translateX(50%); animation-delay: -14s; background: radial-gradient(circle, rgba(244,114,182,0.28) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift { 0%, 100% { transform: translate3d(0,0,0) scale(1); } 45% { transform: translate3d(40px, -30px, 0) scale(1.05); } 75% { transform: translate3d(-30px, 25px, 0) scale(0.95); } }
+
+    .stellar-header { position: sticky; top: 0; z-index: 20; background: rgba(4,7,17,0.72); backdrop-filter: saturate(180%) blur(18px); border-bottom: 1px solid rgba(148,163,184,0.18); }
+    .stellar-container { width: min(1200px, 92vw); margin: 0 auto; padding: 1.2rem 0 1.6rem; }
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 18px; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25)); border: 1px solid rgba(148, 163, 184, 0.2); color: var(--accent-strong); font-weight: 600; letter-spacing: 0.05em; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28); }
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .nav-toggle { display: none; width: 2.8rem; height: 2.8rem; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 19, 32, 0.68); color: var(--text-primary); align-items: center; justify-content: center; cursor: pointer; transition: transform 0.35s var(--transition), background 0.35s var(--transition); }
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+    .nav-toggle span, .nav-toggle span::before, .nav-toggle span::after { display: block; width: 18px; height: 2px; background: currentColor; border-radius: 999px; position: relative; transition: transform 0.35s ease, opacity 0.3s ease; }
+    .nav-toggle span::before, .nav-toggle span::after { content: ''; position: absolute; left: 0; }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.4rem; border-radius: var(--radius-lg); padding: 0.35rem; background: rgba(8, 12, 24, 0.55); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
+    .stellar-nav a { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.05rem; border-radius: 14px; text-decoration: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition); }
+    .stellar-nav a::after { content: ''; position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14)); opacity: 0; transition: opacity 0.35s var(--transition); z-index: -1; }
+    .stellar-nav a:hover { color: var(--text-primary); transform: translateY(-2px); }
+    .stellar-nav a:hover::after { opacity: 1; }
+    .stellar-nav a.active { color: var(--text-primary); }
+    .stellar-nav a.active::after { opacity: 1; box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18); }
+
+    .stellar-main { flex: 1; width: min(1200px, 92vw); margin: 0 auto; padding: 4.2rem 0 5.6rem; display: flex; flex-direction: column; gap: 2.8rem; position: relative; z-index: 1; }
+
+    .glass-card { background: var(--glass); border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-strong); padding: clamp(2rem, 3vw, 3rem); backdrop-filter: blur(26px); position: relative; overflow: hidden; }
+    .glass-card::before { content: ''; position: absolute; inset: 1px; border-radius: calc(var(--radius-xl) - 2px); border: 1px solid rgba(148, 163, 184, 0.12); pointer-events: none; }
+
+    .hero-intro h1 { margin: 0 0 1rem; font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.2rem, 4vw, 2.9rem); letter-spacing: -0.01em; }
+    .hero-intro p { margin: 0; color: var(--text-muted); line-height: 1.7; }
+
+    .report-grid { display: grid; gap: 1.6rem; }
+
+    .report-panel { border-radius: var(--radius-lg); padding: 1.6rem 1.8rem; background: rgba(8, 12, 24, 0.75); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: 0 18px 40px rgba(3, 7, 18, 0.55); }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; cursor: pointer; }
+    .panel-header h2 { margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 1.35rem; letter-spacing: 0.04em; }
+    .panel-header span { font-size: 0.8rem; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(124,247,255,0.6); }
+    .panel-header svg { transition: transform 0.3s ease; }
+    .panel-header[aria-expanded="true"] svg { transform: rotate(180deg); }
+    .panel-content { margin-top: 1.6rem; display: none; }
+    .panel-content.active { display: block; }
+
+    table { width: 100%; border-collapse: collapse; background: rgba(7,12,22,0.65); border-radius: 14px; overflow: hidden; }
+    thead { background: rgba(15,23,42,0.85); }
+    th, td { padding: 0.75rem 1rem; text-align: left; font-size: 0.92rem; }
+    th { font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(226,232,240,0.65); }
+    tbody tr:nth-child(even) { background: rgba(15,23,42,0.5); }
+    tbody tr:hover { background: rgba(71,245,192,0.1); }
+    .table-link { color: var(--accent-strong); text-decoration: none; font-weight: 600; }
+    .table-link:hover { text-decoration: underline; }
+    .link-muted { color: var(--text-muted); font-size: 0.85rem; }
+    .provider-block { margin-bottom: 1.2rem; }
+    .provider-block h3 { margin: 0 0 0.6rem; font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.03em; }
+
+    footer { color: rgba(226, 232, 240, 0.55); text-align: center; padding: 2.4rem 0 3rem; font-size: 0.85rem; }
+
+    [data-animate] { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    [data-animate].is-visible { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 960px) {
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 1.2rem; }
+      .stellar-nav { flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+  <div class="stellar-orb orb-3"></div>
+
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <span class="brand-mark">EX</span>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Console d'orchestration pédagogique</span>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
+        </button>
+      </div>
+      {% set active_page = 'reports' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+  <main class="stellar-main">
+    <section class="glass-card hero-intro" data-animate>
+      <h1>Rapports lumineux sur vos banques de questions</h1>
+      <p>Explorez les métriques clés et dépliez chaque panneau pour accéder aux détails par certification, domaine et type de question.</p>
+    </section>
+
+    <section class="report-grid" data-animate>
+      <article class="report-panel" data-panel>
+        <div class="panel-header" role="button" aria-expanded="false">
+          <div>
+            <span>Publication</span>
+            <h2>Certifications non publiées & domaines par défaut</h2>
+          </div>
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="panel-content">
+          {% if unpublished_providers %}
+            {% for provider in unpublished_providers %}
+            <div class="provider-block">
+              <h3>{{ provider.provider_name }}</h3>
+              <div class="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Certification</th>
+                      <th>Total questions</th>
+                      <th>Questions domaine default</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for cert in provider.certifications %}
+                    <tr>
+                      <td>
+                        <a class="table-link" href="{{ url_for('dom.index') }}?provider_id={{ provider.provider_id }}&cert_id={{ cert.id }}">{{ cert.name }}</a>
+                      </td>
+                      <td>{{ cert.total_questions }}</td>
+                      <td>{{ cert.default_questions }}</td>
+                      <td>
+                        {% if cert.default_module_id and cert.default_cert_id and cert.default_provider_id %}
+                          <a class="table-link" href="{{ url_for('pdf.index') }}?provider_id={{ cert.default_provider_id }}&cert_id={{ cert.default_cert_id }}&module_id={{ cert.default_module_id }}">Go to default</a>
+                        {% else %}
+                          <span class="link-muted">Domaine default introuvable</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p style="color: var(--text-muted);">Aucune certification non publiée pour le moment.</p>
+          {% endif %}
+        </div>
+      </article>
+
+      <article class="report-panel" data-panel>
+        <div class="panel-header" role="button" aria-expanded="false">
+          <div>
+            <span>Inventaire</span>
+            <h2>Certifications sans domaines associés</h2>
+          </div>
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="panel-content">
+          {% if missing_domains %}
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Certification</th>
+                  <th>Identifiant</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for cert in missing_domains %}
+                <tr>
+                  <td>{{ cert.name }}</td>
+                  <td>{{ cert.id }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p style="color: var(--text-muted);">Chaque certification dispose déjà d'au moins un domaine.</p>
+          {% endif %}
+        </div>
+      </article>
+
+      <article class="report-panel" data-panel>
+        <div class="panel-header" role="button" aria-expanded="false">
+          <div>
+            <span>Vue globale</span>
+            <h2>Questions par domaine — Certification {{ certification_id }}</h2>
+          </div>
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="panel-content">
+          {% if domain_counts %}
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Domaine</th>
+                  <th>Nombre de questions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for domain in domain_counts %}
+                <tr>
+                  <td>{{ domain.name }}</td>
+                  <td>{{ domain.total_questions }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p style="color: var(--text-muted);">Aucune question trouvée pour cette certification.</p>
+          {% endif %}
+        </div>
+      </article>
+
+      <article class="report-panel" data-panel>
+        <div class="panel-header" role="button" aria-expanded="false">
+          <div>
+            <span>Activité 30 jours</span>
+            <h2>Questions ajoutées ou modifiées par jour et certification</h2>
+          </div>
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="panel-content">
+          {% if question_activity %}
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Certification</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for day in question_activity %}
+                  {% if day.certifications %}
+                    {% for cert in day.certifications %}
+                    <tr>
+                      {% if loop.first %}
+                      <td rowspan="{{ day.certifications|length }}">{{ day.day }}</td>
+                      {% endif %}
+                      <td>{{ cert.certification_name }}</td>
+                      <td>{{ cert.total }}</td>
+                    </tr>
+                    {% endfor %}
+                  {% else %}
+                    <tr>
+                      <td>{{ day.day }}</td>
+                      <td colspan="2" style="color: var(--text-muted);">Aucune activité</td>
+                    </tr>
+                  {% endif %}
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p style="color: var(--text-muted);">Aucune activité récente à afficher.</p>
+          {% endif %}
+        </div>
+      </article>
+
+      <article class="report-panel" data-panel>
+        <div class="panel-header" role="button" aria-expanded="false">
+          <div>
+            <span>Anomalies</span>
+            <h2>Certifications sans réponse correcte</h2>
+          </div>
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="panel-content">
+          {% if missing_correct %}
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Certification</th>
+                  <th>Questions sans réponse correcte</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for cert in missing_correct %}
+                <tr>
+                  <td>{{ cert.name }}</td>
+                  <td>{{ cert.missing_questions }}</td>
+                </tr>
+                {% if cert.id == certification_id and missing_correct_domains %}
+                <tr>
+                  <td colspan="2">
+                    <div class="glass-card" style="padding:1.2rem; margin-top:1rem;">
+                      <h3 style="margin:0 0 1rem; font-family:'Space Grotesk', sans-serif; letter-spacing:0.03em;">Détails par domaine</h3>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Domaine</th>
+                            <th>Questions sans réponse correcte</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for domain in missing_correct_domains %}
+                          <tr>
+                            <td>{{ domain.name }}</td>
+                            <td>{{ domain.missing_questions }}</td>
+                          </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p style="color: var(--text-muted);">Toutes les certifications disposent d'au moins une réponse correcte par question.</p>
+          {% endif %}
+        </div>
+      </article>
+
+      <article class="report-panel" data-panel>
+        <div class="panel-header" role="button" aria-expanded="false">
+          <div>
+            <span>Complétude</span>
+            <h2>Questions sans réponses par domaine et type</h2>
+          </div>
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="panel-content">
+          {% if missing_answers %}
+          {% set type_labels = {"qcm": "QCM", "drag-n-drop": "Drag & Drop", "matching": "Matching"} %}
+          <table>
+            <thead>
+              <tr>
+                <th>Certification</th>
+                <th>Domaine</th>
+                {% for key, label in type_labels.items() %}
+                <th>{{ label }}</th>
+                {% endfor %}
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for domain in missing_answers %}
+              <tr>
+                <td>{{ domain.certification_name }}</td>
+                <td>{{ domain.name }}</td>
+                {% for key, label in type_labels.items() %}
+                <td>{{ domain.counts[key] }}</td>
+                {% endfor %}
+                <td>{{ domain.total }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p style="color: var(--text-muted);">Toutes les questions disposent déjà d'au moins une réponse.</p>
+          {% endif %}
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer>ExBoot Laboratory &mdash; Les données au service de décisions éclairées.</footer>
+
+  <script>
+    const toggle = document.getElementById('navToggle');
+    const nav = document.getElementById('stellarNav');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const isOpen = toggle.classList.toggle('is-open');
+        document.body.classList.toggle('nav-open', isOpen);
+        toggle.setAttribute('aria-expanded', isOpen);
+      });
+    }
+
+    const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
+    nav?.querySelectorAll('a[data-route]').forEach(link => {
+      const target = (link.dataset.route || '').replace(/\/$/, '') || '/';
+      if (target === '/' ? currentPath === '/' : currentPath.startsWith(target)) {
+        nav.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+        link.classList.add('active');
+      }
+    });
+
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.2 });
+
+    document.querySelectorAll('[data-animate]').forEach(el => observer.observe(el));
+
+    document.querySelectorAll('[data-panel]').forEach(panel => {
+      const header = panel.querySelector('.panel-header');
+      const content = panel.querySelector('.panel-content');
+      if (!header || !content) return;
+      header.addEventListener('click', () => {
+        const expanded = header.getAttribute('aria-expanded') === 'true';
+        document.querySelectorAll('[data-panel] .panel-header').forEach(h => h.setAttribute('aria-expanded', 'false'));
+        document.querySelectorAll('[data-panel] .panel-content').forEach(c => c.classList.remove('active'));
+        if (!expanded) {
+          header.setAttribute('aria-expanded', 'true');
+          content.classList.add('active');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

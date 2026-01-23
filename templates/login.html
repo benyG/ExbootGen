@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connexion · ExbootGen</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: radial-gradient(circle at 20% 20%, rgba(71, 245, 192, 0.18), transparent 50%),
+            radial-gradient(circle at 80% 10%, rgba(124, 247, 255, 0.2), transparent 55%),
+            #050815;
+      --panel: rgba(10, 14, 24, 0.75);
+      --border: rgba(148, 163, 184, 0.35);
+      --accent: #47f5c0;
+      --text: #e2e8f0;
+      --muted: rgba(226, 232, 240, 0.7);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      color: var(--text);
+      padding: 1.5rem;
+    }
+
+    .card {
+      width: min(420px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 1.75rem;
+      box-shadow: 0 25px 40px rgba(5, 8, 21, 0.45);
+    }
+
+    h1 {
+      margin: 0 0 0.25rem;
+      font-size: 1.45rem;
+      letter-spacing: 0.01em;
+    }
+
+    p { margin: 0 0 1.25rem; color: var(--muted); }
+
+    label {
+      display: block;
+      font-size: 0.9rem;
+      margin-bottom: 0.35rem;
+      color: var(--muted);
+    }
+
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 0.7rem 0.85rem;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.02);
+      color: inherit;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    input[type="text"]:focus, input[type="password"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.15);
+    }
+
+    button {
+      width: 100%;
+      margin-top: 0.9rem;
+      padding: 0.75rem 1rem;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #47f5c0, #7cf7ff);
+      color: #04101b;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.01em;
+      box-shadow: 0 12px 25px rgba(71, 245, 192, 0.25);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    button:hover { transform: translateY(-1px); box-shadow: 0 14px 30px rgba(71, 245, 192, 0.32); }
+    button:active { transform: translateY(0); }
+
+    .error {
+      margin-top: 0.75rem;
+      padding: 0.7rem 0.9rem;
+      border-radius: 12px;
+      background: rgba(239, 68, 68, 0.1);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Connexion</h1>
+    <p>Accès réservé aux utilisateurs autorisés. Utilisez vos identifiants pour continuer.</p>
+    <form method="post">
+      <label for="username">Nom d'utilisateur</label>
+      <input id="username" name="username" type="text" autocomplete="username" required>
+
+      <label for="password">Mot de passe</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+      <button type="submit">Se connecter</button>
+      {% if error %}
+      <div class="error">{{ error }}</div>
+      {% endif %}
+    </form>
+  </div>
+</body>
+</html>

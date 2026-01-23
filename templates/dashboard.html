@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 15% 10%, rgba(56,189,248,0.18), transparent 55%),
+                     radial-gradient(circle at 75% 20%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.2), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --glass-soft: rgba(15, 19, 32, 0.82);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb { position: fixed; width: 30rem; height: 30rem; border-radius: 50%; opacity: 0.45; pointer-events: none; mix-blend-mode: screen; background: radial-gradient(circle, rgba(71,245,192,0.28) 0%, rgba(4,7,17,0) 70%); animation: drift 24s ease-in-out infinite; z-index: 0; }
+    .orb-1 { top: -12rem; left: -4rem; }
+    .orb-2 { bottom: -12rem; right: -6rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.24) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift { 0%, 100% { transform: translate3d(0,0,0) scale(1); } 45% { transform: translate3d(40px, -30px, 0) scale(1.05); } 75% { transform: translate3d(-30px, 25px, 0) scale(0.95); } }
+
+    .stellar-header { position: sticky; top: 0; z-index: 20; background: rgba(4,7,17,0.72); backdrop-filter: saturate(180%) blur(18px); border-bottom: 1px solid rgba(148,163,184,0.18); }
+    .stellar-container { width: min(1200px, 92vw); margin: 0 auto; padding: 1.2rem 0 1.6rem; }
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 18px; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25)); border: 1px solid rgba(148, 163, 184, 0.2); color: var(--accent-strong); font-weight: 600; letter-spacing: 0.05em; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28); }
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .nav-toggle { display: none; width: 2.8rem; height: 2.8rem; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 19, 32, 0.68); color: var(--text-primary); align-items: center; justify-content: center; cursor: pointer; transition: transform 0.35s var(--transition), background 0.35s var(--transition); }
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+    .nav-toggle span, .nav-toggle span::before, .nav-toggle span::after { display: block; width: 18px; height: 2px; background: currentColor; border-radius: 999px; position: relative; transition: transform 0.35s ease, opacity 0.3s ease; }
+    .nav-toggle span::before, .nav-toggle span::after { content: ''; position: absolute; left: 0; }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.4rem; border-radius: var(--radius-lg); padding: 0.35rem; background: rgba(8, 12, 24, 0.55); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
+    .stellar-nav a { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.05rem; border-radius: 14px; text-decoration: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition); }
+    .stellar-nav a::after { content: ''; position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14)); opacity: 0; transition: opacity 0.35s var(--transition); z-index: -1; }
+    .stellar-nav a:hover { color: var(--text-primary); transform: translateY(-2px); }
+    .stellar-nav a:hover::after { opacity: 1; }
+    .stellar-nav a.active { color: var(--text-primary); }
+    .stellar-nav a.active::after { opacity: 1; box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18); }
+
+    .stellar-main { flex: 1; width: min(1200px, 92vw); margin: 0 auto; padding: 3.6rem 0 5rem; display: flex; flex-direction: column; gap: 2.4rem; position: relative; z-index: 1; }
+
+    .glass-card { background: var(--glass); border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-strong); padding: clamp(1.8rem, 2.8vw, 2.8rem); backdrop-filter: blur(26px); position: relative; overflow: hidden; }
+    .glass-card::before { content: ''; position: absolute; inset: 1px; border-radius: calc(var(--radius-xl) - 2px); border: 1px solid rgba(148, 163, 184, 0.12); pointer-events: none; }
+
+    .hero h1 { margin: 0 0 0.9rem; font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.2rem, 4vw, 2.9rem); letter-spacing: -0.01em; }
+    .hero p { margin: 0; color: var(--text-muted); line-height: 1.7; max-width: 70ch; }
+
+    .filters { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-top: 1.5rem; }
+    .filter-group { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.82rem; color: var(--text-muted); }
+    .filter-group label { font-weight: 500; }
+    .filter-group select,
+    .filter-group input {
+      padding: 0.7rem 0.9rem;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      background: rgba(10, 14, 24, 0.75);
+      color: var(--text-primary);
+      font-size: 0.9rem;
+    }
+    .filter-group--context { grid-column: 1 / -1; }
+    .context-toggle { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+    .context-pill { position: relative; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.6rem 0.85rem; border-radius: 999px; border: 1px solid rgba(148, 163, 184, 0.28); background: rgba(10, 14, 24, 0.55); color: var(--text-muted); cursor: pointer; transition: all 0.3s var(--transition); font-size: 0.85rem; }
+    .context-pill input { position: absolute; opacity: 0; pointer-events: none; }
+    .context-pill.is-active { color: var(--text-primary); border-color: rgba(124,247,255,0.45); background: rgba(56,189,248,0.16); box-shadow: 0 10px 22px rgba(56, 189, 248, 0.15); }
+    .context-pill span { font-weight: 600; }
+    .apply-button { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.7rem 1.2rem; border-radius: var(--radius-md); border: 1px solid rgba(148, 163, 184, 0.28); background: rgba(71,245,192,0.2); color: var(--text-primary); font-weight: 600; cursor: pointer; transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition); }
+    .apply-button:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(56, 189, 248, 0.18); }
+    .apply-button .spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(56, 189, 248, 0.25); border-top-color: #38bdf8; animation: spin 0.8s linear infinite; display: none; }
+    .apply-button.is-loading .spinner { display: inline-block; }
+    .apply-button.is-loading span { opacity: 0.7; }
+    .apply-button.is-loading { background: rgba(56, 189, 248, 0.18); border-color: rgba(56, 189, 248, 0.5); }
+    .apply-button:disabled { cursor: wait; opacity: 0.85; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1.2rem; }
+    .kpi-card { background: var(--glass-soft); border-radius: var(--radius-lg); border: 1px solid rgba(148, 163, 184, 0.18); padding: 1.4rem; box-shadow: 0 18px 40px rgba(3, 7, 18, 0.45); display: flex; flex-direction: column; gap: 0.5rem; }
+    .kpi-card span { font-size: 0.85rem; color: var(--text-muted); }
+    .kpi-card strong { font-size: 1.6rem; font-family: 'Space Grotesk', sans-serif; }
+    .kpi-card em { font-style: normal; font-size: 0.85rem; color: #5eead4; }
+
+    .section-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.2rem; }
+    .section-header h2 { margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 1.4rem; }
+    .section-header span { color: var(--text-muted); font-size: 0.9rem; }
+
+    .chart-grid { display: grid; gap: 1.4rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .chart-card { background: rgba(8, 12, 24, 0.75); border-radius: var(--radius-lg); border: 1px solid rgba(148, 163, 184, 0.16); padding: 1.4rem; box-shadow: 0 18px 40px rgba(3, 7, 18, 0.55); display: flex; flex-direction: column; gap: 1rem; }
+    .chart-title { font-size: 0.95rem; font-weight: 600; }
+    .chart-visual { height: 180px; border-radius: 16px; background: linear-gradient(135deg, rgba(71,245,192,0.12), rgba(124,247,255,0.12)); border: 1px solid rgba(124,247,255,0.18); position: relative; overflow: hidden; padding: 1rem; display: flex; align-items: flex-end; gap: 1rem; }
+    .chart-visual--pie { align-items: center; justify-content: center; flex-direction: column; gap: 0.8rem; height: auto; min-height: 220px; }
+    .chart-visual::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgba(124,247,255,0.06), rgba(124,247,255,0.06) 12px, transparent 12px, transparent 24px); opacity: 0.6; pointer-events: none; }
+    .chart-vertical { display: flex; width: 100%; align-items: flex-end; gap: 1rem; z-index: 1; }
+    .chart-vertical .bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 0.5rem; align-items: center; }
+    .chart-vertical .bar-fill { width: 100%; height: var(--size, 0%); border-radius: 12px; background: linear-gradient(180deg, rgba(71,245,192,0.9), rgba(71,245,192,0.2)); box-shadow: 0 10px 20px rgba(71, 245, 192, 0.25); }
+    .chart-vertical .bar-label { font-size: 0.75rem; color: var(--text-muted); }
+    .chart-metric-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; width: 100%; z-index: 1; }
+    .chart-metric-list li { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; color: var(--text-muted); }
+    .chart-metric-list .bar-track { flex: 1; height: 10px; background: rgba(15, 23, 42, 0.7); border-radius: 999px; overflow: hidden; border: 1px solid rgba(148, 163, 184, 0.18); }
+    .chart-metric-list .bar-fill { height: 100%; width: var(--size, 0%); background: linear-gradient(90deg, rgba(124,247,255,0.9), rgba(71,245,192,0.5)); }
+    .chart-metric-list .bar-value { color: var(--text-primary); font-weight: 600; min-width: 2.5rem; text-align: right; }
+    .chart-progress { height: 12px; background: rgba(15, 23, 42, 0.7); border-radius: 999px; overflow: hidden; border: 1px solid rgba(148, 163, 184, 0.2); }
+    .chart-progress span { display: block; height: 100%; width: var(--size, 0%); background: linear-gradient(90deg, rgba(71,245,192,0.9), rgba(124,247,255,0.6)); }
+    .pie-chart { width: 150px; height: 150px; border-radius: 50%; position: relative; z-index: 1; box-shadow: inset 0 0 25px rgba(15, 23, 42, 0.5); }
+    .pie-hole { position: absolute; inset: 18%; background: rgba(8, 12, 24, 0.9); border-radius: 50%; border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: inset 0 0 15px rgba(15, 23, 42, 0.6); }
+    .pie-legend { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.5rem; width: 100%; z-index: 1; }
+    .pie-legend li { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.85rem; color: var(--text-muted); }
+    .pie-legend strong { color: var(--text-primary); }
+    .pie-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--dot-color, #7cf7ff); box-shadow: 0 0 8px rgba(124, 247, 255, 0.4); flex-shrink: 0; }
+
+    .insight-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .insight-card { padding: 1.2rem 1.4rem; border-radius: var(--radius-lg); background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(94, 234, 212, 0.28); }
+    .insight-card h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+    .insight-card p { margin: 0; color: var(--text-muted); font-size: 0.88rem; }
+
+    .user-grid { display: grid; gap: 1.2rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .user-pill { padding: 0.85rem 1rem; border-radius: 14px; background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(148, 163, 184, 0.2); display: flex; flex-direction: column; gap: 0.3rem; text-decoration: none; color: var(--text-primary); }
+    .user-pill span { color: var(--text-muted); font-size: 0.85rem; }
+    .user-pill strong { font-size: 1rem; }
+
+    .table-card { background: rgba(8, 12, 24, 0.75); border-radius: var(--radius-lg); border: 1px solid rgba(148, 163, 184, 0.16); padding: 1.4rem; box-shadow: 0 18px 40px rgba(3, 7, 18, 0.55); }
+    table { width: 100%; border-collapse: collapse; border-radius: 14px; overflow: hidden; }
+    thead { background: rgba(15,23,42,0.85); }
+    th, td { padding: 0.75rem 1rem; text-align: left; font-size: 0.92rem; }
+    th { font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(226,232,240,0.65); }
+    tbody tr:nth-child(even) { background: rgba(15,23,42,0.5); }
+
+    footer { color: rgba(226, 232, 240, 0.55); text-align: center; padding: 2.4rem 0 3rem; font-size: 0.85rem; }
+
+    @media (max-width: 960px) {
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 1.2rem; }
+      .stellar-nav { flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <span class="brand-mark">EX</span>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Tableaux de bord marketing & performance</span>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
+        </button>
+      </div>
+      {% set active_page = 'dashboard' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+  <main class="stellar-main">
+    <section class="glass-card hero" data-animate>
+      <h1>Dashboard</h1>
+      <p>Suivez les performances des utilisateurs, certifications et revenus avec des filtres avancés par période, segments et domaines. Cette vue est conçue pour piloter les objectifs marketing et l'efficacité pédagogique.</p>
+      <form class="filters" method="get">
+        <div class="filter-group">
+          <label for="date-start">Du</label>
+          <input id="date-start" name="start" type="date" value="{{ start_date }}">
+        </div>
+        <div class="filter-group">
+          <label for="date-end">Au</label>
+          <input id="date-end" name="end" type="date" value="{{ end_date }}">
+        </div>
+        <div class="filter-group">
+          <label for="plan">Segment</label>
+          <select id="plan" name="plan">
+            {% for option in plan_options %}
+            <option value="{{ option.value }}" {% if option.value|string == selected_plan|string %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="cert">Certification</label>
+          <select id="cert" name="cert_id">
+            <option value="">Toutes les certifications</option>
+            {% for cert in certifications %}
+            <option value="{{ cert.id }}" {% if cert.id == selected_cert %}selected{% endif %}>{{ cert.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="filter-group filter-group--context">
+          <label>Contexte</label>
+          <div class="context-toggle">
+            <label class="context-pill {% if context_mode == 'global' %}is-active{% endif %}">
+              <input type="radio" name="context" value="global" {% if context_mode == 'global' %}checked{% endif %}>
+              <span>Global</span>
+            </label>
+            <label class="context-pill {% if context_mode == 'user' %}is-active{% endif %}">
+              <input type="radio" name="context" value="user" {% if context_mode == 'user' %}checked{% endif %}>
+              <span>Utilisateur</span>
+            </label>
+          </div>
+        </div>
+        {% if context_mode == 'user' %}
+        <div class="filter-group">
+          <label for="user">Recherche utilisateur (email)</label>
+          <input id="user" name="user" type="text" placeholder="ex. fatima@exboot.com" value="{{ selected_user }}" list="user-suggestions">
+          <datalist id="user-suggestions">
+            {% for option in user_select_options %}
+            <option value="{{ option.email }}">{{ option.name }}{% if option.account_type == 'Guest' or option.name == 'Guest' %} · Visiteur{% endif %}</option>
+            {% endfor %}
+          </datalist>
+        </div>
+        <div class="filter-group">
+          <label for="user-select">Utilisateur détecté</label>
+          <select id="user-select" name="user_id">
+            <option value="">Sélectionner un utilisateur</option>
+            {% for option in user_select_options %}
+            <option value="{{ option.id }}" {% if option.id == selected_user_id %}selected{% endif %}>
+              {{ option.name }} · {{ option.email }}{% if option.account_type == 'Guest' or option.name == 'Guest' %} (Visiteur){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div class="filter-group">
+          <label>&nbsp;</label>
+          <button type="submit" class="apply-button">
+            <span>Appliquer</span>
+            <span class="spinner" aria-hidden="true"></span>
+          </button>
+        </div>
+      </form>
+    </section>
+
+    {% if context_mode == 'user' and user_matches and not user_snapshot %}
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>Sélectionner un utilisateur</h2>
+        <span>Choisissez une fiche pour ouvrir le dashboard ciblé</span>
+      </div>
+      <div class="user-grid">
+        {% for match in user_matches %}
+        <a class="user-pill" href="{{ url_for('dashboard', start=start_date, end=end_date, plan=selected_plan, cert_id=selected_cert, user=selected_user, user_id=match.id, context='user') }}">
+          <strong>{{ match.name }}</strong>
+          <span>{{ match.email }}</span>
+          <span>Plan: {{ match.plan }} · {{ match.account_type or '—' }}{% if match.account_type == 'Guest' or match.name == 'Guest' %} · Visiteur{% endif %}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if context_mode == 'user' and user_snapshot %}
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>Dashboard utilisateur</h2>
+        <span>{{ user_snapshot.profile.name }} · {{ user_snapshot.profile.email }}</span>
+      </div>
+      <div class="kpi-grid">
+        <article class="kpi-card">
+          <span>Sessions</span>
+          <strong>{{ user_snapshot.kpis.sessions }}</strong>
+          <em>Sur la période</em>
+        </article>
+        <article class="kpi-card">
+          <span>Examens assignés</span>
+          <strong>{{ user_snapshot.kpis.assigned_exams }}</strong>
+          <em>Sur la période</em>
+        </article>
+        <article class="kpi-card">
+          <span>Examens complétés</span>
+          <strong>{{ user_snapshot.kpis.completed_exams }}</strong>
+          <em>Finalisés</em>
+        </article>
+        <article class="kpi-card">
+          <span>Taux de complétion</span>
+          <strong>{{ user_snapshot.kpis.completion_rate }}</strong>
+          <em>Assignés → complétés</em>
+        </article>
+        <article class="kpi-card">
+          <span>Temps moyen / examen</span>
+          <strong>{{ user_snapshot.kpis.avg_exam_duration }}</strong>
+          <em>Durée moyenne</em>
+        </article>
+        <article class="kpi-card">
+          <span>Abonnement</span>
+          <strong>{{ user_snapshot.kpis.active_subscription }}</strong>
+          <em>Statut actuel</em>
+        </article>
+      </div>
+      <div class="chart-grid" style="margin-top:1.6rem;">
+        <div class="chart-card">
+          <div class="chart-title">Complétion des examens</div>
+          <div class="chart-visual" style="align-items:center;">
+            <div style="width:100%; z-index:1;">
+              <div class="chart-progress"><span style="--size: {{ user_snapshot.completion_rate_percent }}%;"></span></div>
+              <div style="margin-top:0.8rem; font-size:0.9rem; color:var(--text-muted);">
+                {{ user_snapshot.kpis.completion_rate }} des examens assignés.
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Sessions par jour</div>
+          <div class="chart-visual" style="align-items:center;">
+            {% if user_snapshot.session_timeline %}
+            <ul class="chart-metric-list">
+              {% for item in user_snapshot.session_timeline %}
+              <li>
+                <span>{{ item.day }}</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ item.percent }}%;"></div></div>
+                <span class="bar-value">{{ item.total }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Aucune session sur la période.</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Scores aux examens</div>
+          <div class="chart-visual chart-visual--pie">
+            {% if user_snapshot.score_breakdown %}
+            <div class="pie-chart" style="background: conic-gradient({% for score in user_snapshot.score_breakdown %}{{ score.slice_color }} {{ score.slice_start }}% {{ score.slice_end }}%{% if not loop.last %}, {% endif %}{% endfor %});">
+              <div class="pie-hole"></div>
+            </div>
+            <ul class="pie-legend">
+              {% for score in user_snapshot.score_breakdown %}
+              <li>
+                <span style="display:flex; align-items:center; gap:0.5rem;">
+                  <span class="pie-dot" style="--dot-color: {{ score.slice_color }}"></span>
+                  {{ score.label }}
+                </span>
+                <span><strong>{{ score.share_percent }}%</strong> · {{ score.total }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Scores indisponibles sur la période.</span>
+            {% endif %}
+          </div>
+          <ul style="margin:0; padding-left:1rem; color:var(--text-muted); font-size:0.9rem;">
+            <li>Score moyen: <strong style="color:var(--text-primary);">{{ user_snapshot.avg_score_display }}</strong></li>
+            {% if user_snapshot.scores_by_cert %}
+              {% for cert in user_snapshot.scores_by_cert %}
+              <li>{{ cert.name }} <strong style="color:var(--text-primary);">({{ cert.avg_score_display }})</strong></li>
+              {% endfor %}
+            {% else %}
+              <li>Pas de score détaillé par certification.</li>
+            {% endif %}
+          </ul>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Examens par type</div>
+          <div class="chart-visual" style="align-items:center;">
+            {% if user_snapshot.exam_types %}
+            <ul class="chart-metric-list">
+              {% for item in user_snapshot.exam_types %}
+              <li>
+                <span>{{ item.type }}</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ item.percent }}%;"></div></div>
+                <span class="bar-value">{{ item.total }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Type d'examen non disponible.</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Complétions par certification</div>
+          <div class="chart-visual" style="align-items:center;">
+            {% if user_snapshot.completions_by_cert %}
+            <ul class="chart-metric-list">
+              {% for cert in user_snapshot.completions_by_cert %}
+              <li>
+                <span>{{ cert.name }}</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ cert.percent }}%;"></div></div>
+                <span class="bar-value">{{ cert.completions }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Aucune complétion sur la période.</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if context_mode == 'global' %}
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>KPIs marketing & performance</h2>
+        <span>Vue synthétique des comptes inscrits (hors visiteurs)</span>
+      </div>
+      <div class="kpi-grid">
+        <article class="kpi-card">
+          <span>Utilisateurs actifs</span>
+          <strong>{{ kpis.active_users }}</strong>
+          <em>Sur la période sélectionnée</em>
+        </article>
+        <article class="kpi-card">
+          <span>Nouveaux inscrits</span>
+          <strong>{{ kpis.new_users }}</strong>
+          <em>Comptes réellement inscrits</em>
+        </article>
+        <article class="kpi-card">
+          <span>Visiteurs invités</span>
+          <strong>{{ kpis.guest_users }}</strong>
+          <em>{{ kpis.guest_active }} actifs · {{ kpis.guest_sessions }} sessions</em>
+        </article>
+        <article class="kpi-card">
+          <span>Taux de conversion</span>
+          <strong>{{ kpis.conversion_rate }}</strong>
+          <em>Abonnements actifs / utilisateurs</em>
+        </article>
+        <article class="kpi-card">
+          <span>Examens complétés</span>
+          <strong>{{ kpis.completed_exams }}</strong>
+          <em>{{ kpis.guest_completed_exams }} par visiteurs</em>
+        </article>
+        <article class="kpi-card">
+          <span>CA abonnement</span>
+          <strong>{{ kpis.revenue }}</strong>
+          <em>Revenus sur la période</em>
+        </article>
+        <article class="kpi-card">
+          <span>Engagement moyen</span>
+          <strong>{{ kpis.engagement }} sessions</strong>
+          <em>Sessions / utilisateur actif</em>
+        </article>
+      </div>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>Acquisition & croissance</h2>
+        <span>Inscriptions, conversions, sources</span>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">Nouveaux vs récurrents</div>
+          <div class="chart-visual">
+            <div class="chart-vertical">
+              <div class="bar">
+                <div class="bar-fill" style="--size: {{ acquisition_breakdown.new_percent }}%;"></div>
+                <span class="bar-label">Nouveaux</span>
+              </div>
+              <div class="bar">
+                <div class="bar-fill" style="--size: {{ acquisition_breakdown.returning_percent }}%;"></div>
+                <span class="bar-label">Récurrents</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:0.9rem; color:var(--text-muted);">
+            <span>Nouveaux: <strong style="color:var(--text-primary);">{{ acquisition.new_users }}</strong></span>
+            <span>Récurrents: <strong style="color:var(--text-primary);">{{ acquisition.returning_users }}</strong></span>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Funnel d'inscription → certification</div>
+          <div class="chart-visual" style="align-items:center;">
+            <ul class="chart-metric-list">
+              <li>
+                <span>Inscrits</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ acquisition_funnel.new_percent }}%;"></div></div>
+                <span class="bar-value">{{ acquisition.new_users }}</span>
+              </li>
+              <li>
+                <span>Abonnés</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ acquisition_funnel.active_percent }}%;"></div></div>
+                <span class="bar-value">{{ acquisition.active_subscriptions }}</span>
+              </li>
+              <li>
+                <span>Examens</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ acquisition_funnel.completed_percent }}%;"></div></div>
+                <span class="bar-value">{{ kpis.completed_exams }}</span>
+              </li>
+            </ul>
+          </div>
+          <ul style="margin:0; padding-left:1rem; color:var(--text-muted); font-size:0.9rem;">
+            <li>Nouveaux inscrits: <strong style="color:var(--text-primary);">{{ acquisition.new_users }}</strong></li>
+            <li>Abonnements actifs: <strong style="color:var(--text-primary);">{{ acquisition.active_subscriptions }}</strong></li>
+            <li>Examens complétés: <strong style="color:var(--text-primary);">{{ kpis.completed_exams }}</strong></li>
+          </ul>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Sources d'acquisition</div>
+          <div class="chart-visual" style="align-items:center;">
+            {% if locations %}
+            <ul class="chart-metric-list">
+              {% for loc in locations %}
+              <li>
+                <span>{{ loc.label }}</span>
+                <div class="bar-track"><div class="bar-fill" style="--size: {{ loc.percent }}%;"></div></div>
+                <span class="bar-value">{{ loc.total }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Aucune localisation disponible.</span>
+            {% endif %}
+          </div>
+          <ul style="margin:0; padding-left:1rem; color:var(--text-muted); font-size:0.9rem;">
+            {% if locations %}
+              {% for loc in locations %}
+              <li>{{ loc.label }} <strong style="color:var(--text-primary);">({{ loc.total }})</strong></li>
+              {% endfor %}
+            {% else %}
+              <li>Aucune localisation disponible sur la période.</li>
+            {% endif %}
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>Performance utilisateurs & examens</h2>
+        <span>Scores, temps et complétions</span>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <div class="chart-title">Examens complétés par certification</div>
+          <div class="chart-visual chart-visual--pie">
+            {% if performance.completions_by_cert %}
+            <div class="pie-chart" style="background: conic-gradient({% for cert in performance.completions_by_cert %}{{ cert.slice_color }} {{ cert.slice_start }}% {{ cert.slice_end }}%{% if not loop.last %}, {% endif %}{% endfor %});">
+              <div class="pie-hole"></div>
+            </div>
+            <ul class="pie-legend">
+              {% for cert in performance.completions_by_cert %}
+              <li>
+                <span style="display:flex; align-items:center; gap:0.5rem;">
+                  <span class="pie-dot" style="--dot-color: {{ cert.slice_color }}"></span>
+                  {{ cert.name }}
+                </span>
+                <span><strong>{{ cert.share_percent }}%</strong> · {{ cert.completions }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Aucune certification complétée.</span>
+            {% endif %}
+          </div>
+          <ul style="margin:0; padding-left:1rem; color:var(--text-muted); font-size:0.9rem;">
+            {% if performance.completions_by_cert %}
+              {% for cert in performance.completions_by_cert %}
+              <li>{{ cert.name }} <strong style="color:var(--text-primary);">({{ cert.completions }})</strong></li>
+              {% endfor %}
+            {% else %}
+              <li>Aucune certification complétée sur la période.</li>
+            {% endif %}
+          </ul>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Taux de complétion examens</div>
+          <div class="chart-visual" style="align-items:center;">
+            <div style="width:100%; z-index:1;">
+              <div class="chart-progress"><span style="--size: {{ performance.completion_rate_percent }}%;"></span></div>
+              <div style="margin-top:0.8rem; font-size:0.9rem; color:var(--text-muted);">
+                {{ performance.completion_rate_display }} des examens assignés.
+              </div>
+            </div>
+          </div>
+          <div style="font-size:0.95rem; color:var(--text-muted);">
+            <strong style="color:var(--text-primary);">{{ performance.completion_rate_display }}</strong> des examens assignés sont terminés.
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Temps moyen par examen</div>
+          <div class="chart-visual" style="align-items:center;">
+            <div style="width:100%; z-index:1;">
+              <div class="chart-progress"><span style="--size: {{ performance.avg_exam_duration_percent }}%;"></span></div>
+              <div style="margin-top:0.8rem; font-size:0.9rem; color:var(--text-muted);">
+                Temps moyen: <strong style="color:var(--text-primary);">{{ performance.avg_exam_duration_display }}</strong>
+              </div>
+            </div>
+          </div>
+          <div style="font-size:0.95rem; color:var(--text-muted);">
+            Temps moyen: <strong style="color:var(--text-primary);">{{ performance.avg_exam_duration_display }}</strong>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Certifications avec le plus d'utilisateurs</div>
+          <div class="chart-visual chart-visual--pie">
+            {% if cert_popularity %}
+            <div class="pie-chart" style="background: conic-gradient({% for cert in cert_popularity %}{{ cert.slice_color }} {{ cert.slice_start }}% {{ cert.slice_end }}%{% if not loop.last %}, {% endif %}{% endfor %});">
+              <div class="pie-hole"></div>
+            </div>
+            <ul class="pie-legend">
+              {% for cert in cert_popularity %}
+              <li>
+                <span style="display:flex; align-items:center; gap:0.5rem;">
+                  <span class="pie-dot" style="--dot-color: {{ cert.slice_color }}"></span>
+                  {{ cert.name }}
+                </span>
+                <span><strong>{{ cert.share_percent }}%</strong> · {{ cert.user_count }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <span style="color:var(--text-muted); font-size:0.9rem;">Aucune inscription sur la période.</span>
+            {% endif %}
+          </div>
+          <ul style="margin:0; padding-left:1rem; color:var(--text-muted); font-size:0.9rem;">
+            {% if cert_popularity %}
+              {% for cert in cert_popularity %}
+              <li>{{ cert.name }} <strong style="color:var(--text-primary);">({{ cert.user_count }})</strong></li>
+              {% endfor %}
+            {% else %}
+              <li>Aucune inscription sur la période.</li>
+            {% endif %}
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>Insights & alertes</h2>
+        <span>Éléments actionnables</span>
+      </div>
+      <div class="insight-grid">
+        {% for insight in insights %}
+        <div class="insight-card">
+          <h3>{{ insight.title }}</h3>
+          <p>{{ insight.description }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <div class="section-header">
+        <h2>Tableau détaillé</h2>
+        <span>Suivi opérationnel & export</span>
+      </div>
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Utilisateur</th>
+              <th>Email</th>
+              <th>Sessions</th>
+              <th>Examens complétés</th>
+              <th>Certification dominante</th>
+              <th>Complétions</th>
+              <th>Dernière activité</th>
+              <th>Plan</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if top_users %}
+              {% for user in top_users %}
+              <tr>
+                <td>{{ user.name }}</td>
+                <td>{{ user.email }}</td>
+                <td>{{ user.sessions }}</td>
+                <td>{{ user.exams_completed }}</td>
+                <td>{{ user.top_cert }}</td>
+                <td>{{ user.top_cert_completions }}</td>
+                <td>{{ user.last_activity_display }}</td>
+                <td>{{ user.plan_label }}</td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="8">Aucune activité utilisateur sur la période.</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+  </main>
+
+  <footer>ExBoot Laboratory · Tableau de bord marketing et performance</footer>
+
+  <script>
+    const navToggle = document.getElementById('navToggle');
+    if (navToggle) {
+      navToggle.addEventListener('click', () => {
+        const isOpen = navToggle.classList.toggle('is-open');
+        document.body.classList.toggle('nav-open', isOpen);
+        navToggle.setAttribute('aria-expanded', String(isOpen));
+      });
+    }
+
+    const filterForm = document.querySelector('.filters');
+    if (filterForm) {
+      filterForm.addEventListener('submit', () => {
+        const applyButton = filterForm.querySelector('.apply-button');
+        if (applyButton) {
+          applyButton.classList.add('is-loading');
+          applyButton.disabled = true;
+        }
+      });
+    }
+  </script>
+</body>
+</html>

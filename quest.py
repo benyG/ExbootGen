@@ -1,16 +1,16 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify
 import mysql.connector
 import json
 from config import DB_CONFIG
 
-app = Flask(__name__)
+quest_bp = Blueprint('quest', __name__)
 
-@app.route('/')
+@quest_bp.route('/')
 def index():
     return render_template('import_questions.html')
 
 # --- Dropdown APIs ---
-@app.route('/api/providers')
+@quest_bp.route('/api/providers')
 def api_providers():
     conn = mysql.connector.connect(**DB_CONFIG)
     cur = conn.cursor(dictionary=True)
@@ -19,7 +19,7 @@ def api_providers():
     cur.close(); conn.close()
     return jsonify(rows)
 
-@app.route('/api/certifications/<int:prov_id>')
+@quest_bp.route('/api/certifications/<int:prov_id>')
 def api_certs(prov_id):
     conn = mysql.connector.connect(**DB_CONFIG)
     cur = conn.cursor(dictionary=True)
@@ -28,7 +28,7 @@ def api_certs(prov_id):
     cur.close(); conn.close()
     return jsonify(rows)
 
-@app.route('/api/modules/<int:cert_id>')
+@quest_bp.route('/api/modules/<int:cert_id>')
 def api_modules(cert_id):
     conn = mysql.connector.connect(**DB_CONFIG)
     cur = conn.cursor(dictionary=True)
@@ -38,7 +38,7 @@ def api_modules(cert_id):
     return jsonify(rows)
 
 # --- Insert question (une par une) ---
-@app.route('/api/questions', methods=['POST'])
+@quest_bp.route('/api/questions', methods=['POST'])
 def api_questions():
     data = request.get_json() or {}
     module_id = data.get('module_id')
@@ -101,19 +101,24 @@ def api_questions():
             else:
                 raise
 
-        # Réponses (JSON) + liaisons quest_ans
+        # Réponses stockées en JSON + liaisons quest_ans
         for ans in question.get('answers', []):
-            ans_data = {k: v for k, v in ans.items() if k != 'isok'}
-            ans_json = json.dumps(ans_data, ensure_ascii=False)
-            isok = int(ans.get('isok', 0))
+            raw_val = (ans.get('value') or ans.get('text') or '').strip()
+            if not raw_val:
+                continue
 
-            # Insert ou reuse answer
+            answer_data = {k: v for k, v in ans.items() if k not in ('isok', 'value', 'text')}
+            answer_data['value'] = raw_val
+            a_json = json.dumps(answer_data, ensure_ascii=False)[:700]
+            isok = 1 if int(ans.get('isok') or 0) == 1 else 0
+
+            # Insert ou réutilise answer
             try:
-                cur.execute("INSERT INTO answers (text, created_at) VALUES (%s,NOW())", (ans_json,))
+                cur.execute("INSERT INTO answers (text, created_at) VALUES (%s,NOW())", (a_json,))
                 ans_id = cur.lastrowid
             except mysql.connector.Error as e:
                 if e.errno == 1062:
-                    cur.execute("SELECT id FROM answers WHERE text=%s LIMIT 1", (ans_json,))
+                    cur.execute("SELECT id FROM answers WHERE text=%s LIMIT 1", (a_json,))
                     r = cur.fetchone()
                     ans_id = r[0] if r else None
                 else:
@@ -141,6 +146,4 @@ def api_questions():
 
     cur.close(); conn.close()
     return jsonify({'id': question_id, 'status': 'inserted'})
-    
-if __name__ == '__main__':
-    app.run(debug=True, port=9002)
+

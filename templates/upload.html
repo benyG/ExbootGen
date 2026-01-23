@@ -1,170 +1,920 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <title>Import PDF Questions</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; padding-top: 40px; }
-        .container { max-width: 900px; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        h2 { text-align: center; margin-bottom: 20px; }
-        label { font-weight: bold; margin-top: 10px; }
-        #jsonPreview { background-color: #1e1e1e; color: #d4d4d4; border-radius: 6px; padding: 10px; font-size: 14px; }
-        #confirmImport { margin-top: 10px; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Importer un PDF de questions · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 20% 20%, rgba(76,201,240,0.15), transparent 55%),
+                     radial-gradient(circle at 80% 30%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.22), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --glass-soft: rgba(15, 19, 32, 0.82);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb {
+      position: fixed;
+      width: 32rem;
+      height: 32rem;
+      border-radius: 50%;
+      opacity: 0.45;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      background: radial-gradient(circle, rgba(71,245,192,0.32) 0%, rgba(4,7,17,0) 70%);
+      animation: drift 22s ease-in-out infinite;
+      z-index: 0;
+    }
+
+    .orb-1 { top: -12rem; left: -6rem; }
+    .orb-2 { bottom: -10rem; right: -4rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.25) 0%, rgba(4,7,17,0) 70%); }
+    .orb-3 { top: 45vh; right: 50%; transform: translateX(50%); animation-delay: -14s; background: radial-gradient(circle, rgba(244,114,182,0.28) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift {
+      0%, 100% { transform: translate3d(0,0,0) scale(1); }
+      45% { transform: translate3d(40px, -30px, 0) scale(1.05); }
+      75% { transform: translate3d(-30px, 25px, 0) scale(0.95); }
+    }
+
+    .stellar-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(4, 7, 17, 0.72);
+      backdrop-filter: saturate(180%) blur(18px);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .stellar-container { width: min(1200px, 92vw); margin: 0 auto; padding: 1.2rem 0 1.6rem; }
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 18px; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25)); border: 1px solid rgba(148, 163, 184, 0.2); color: var(--accent-strong); font-weight: 600; letter-spacing: 0.05em; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28); }
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .nav-toggle { display: none; width: 2.8rem; height: 2.8rem; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 19, 32, 0.68); color: var(--text-primary); align-items: center; justify-content: center; cursor: pointer; transition: transform 0.35s var(--transition), background 0.35s var(--transition); }
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+    .nav-toggle span, .nav-toggle span::before, .nav-toggle span::after { display: block; width: 18px; height: 2px; background: currentColor; border-radius: 999px; position: relative; transition: transform 0.35s ease, opacity 0.3s ease; }
+    .nav-toggle span::before, .nav-toggle span::after { content: ''; position: absolute; left: 0; }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.4rem; border-radius: var(--radius-lg); padding: 0.35rem; background: rgba(8, 12, 24, 0.55); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
+    .stellar-nav a { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.05rem; border-radius: 14px; text-decoration: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition); }
+    .stellar-nav a::after { content: ''; position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14)); opacity: 0; transition: opacity 0.35s var(--transition); z-index: -1; }
+    .stellar-nav a:hover { color: var(--text-primary); transform: translateY(-2px); }
+    .stellar-nav a:hover::after { opacity: 1; }
+    .stellar-nav a.active { color: var(--text-primary); }
+    .stellar-nav a.active::after { opacity: 1; box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18); }
+
+    .stellar-main { flex: 1; width: min(1200px, 92vw); margin: 0 auto; padding: 4.2rem 0 5.6rem; display: flex; flex-direction: column; gap: 2.8rem; position: relative; z-index: 1; }
+
+    .glass-card { background: var(--glass); border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-strong); padding: clamp(2rem, 3vw, 3rem); backdrop-filter: blur(26px); position: relative; overflow: hidden; }
+    .glass-card::before { content: ''; position: absolute; inset: 1px; border-radius: calc(var(--radius-xl) - 2px); border: 1px solid rgba(148, 163, 184, 0.12); pointer-events: none; }
+
+    .hero-intro h1 { margin: 0 0 1rem; font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.2rem, 4vw, 2.9rem); letter-spacing: -0.01em; }
+    .hero-intro p { margin: 0; color: var(--text-muted); line-height: 1.7; }
+
+    label { font-weight: 500; font-size: 0.95rem; color: var(--text-primary); display: block; margin-bottom: 0.35rem; }
+    select, input, textarea, button { width: 100%; border-radius: 14px; border: 1px solid rgba(148, 163, 184, 0.22); padding: 0.75rem 0.95rem; background: rgba(10, 15, 28, 0.85); color: var(--text-primary); font-family: inherit; font-size: 0.95rem; transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease; }
+    select:focus, input:focus, textarea:focus, button:focus { outline: none; border-color: rgba(71, 245, 192, 0.6); box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.22); }
+
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.4rem; margin-top: 1.6rem; }
+    .form-grid textarea { grid-column: 1 / -1; }
+    .file-picker { display: flex; gap: 0.6rem; align-items: center; }
+    #fileSearch { min-width: 250px; }
+    .selected-files { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+    .file-chip { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.7rem; border-radius: 12px; background: rgba(124, 247, 255, 0.08); border: 1px solid rgba(124,247,255,0.25); color: var(--text-primary); font-size: 0.9rem; }
+    .file-chip button { border: none; background: rgba(255,255,255,0.08); color: var(--text-primary); border-radius: 10px; padding: 0.2rem 0.5rem; cursor: pointer; }
+    .file-chip button:hover { background: rgba(255,255,255,0.16); }
+
+    .stellar-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 0.85rem 1.6rem; border-radius: 999px; background: linear-gradient(135deg, rgba(71,245,192,0.9), rgba(124,247,255,0.85)); color: #020617; font-weight: 600; text-decoration: none; border: none; cursor: pointer; box-shadow: 0 14px 35px rgba(71, 245, 192, 0.3); transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition); }
+    .stellar-button:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 18px 42px rgba(71, 245, 192, 0.38); }
+    .stellar-button.secondary { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.32); color: var(--text-primary); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.08); }
+
+    .json-preview { margin-top: 2rem; display: none; flex-direction: column; gap: 1rem; }
+    .json-preview.active { display: flex; }
+    .json-preview textarea { min-height: 320px; background: rgba(15, 23, 42, 0.75); font-family: 'JetBrains Mono', 'Fira Code', monospace; color: rgba(226, 232, 240, 0.85); border: 1px solid rgba(148,163,184,0.2); }
+
+    #reportContainer { margin-top: 1.2rem; }
+    .report-preview { display: grid; gap: 0.8rem; font-size: 0.92rem; color: #d4e2f7; }
+    .report-card {
+      padding: 0.9rem 1rem;
+      border-radius: 14px;
+      background: rgba(12, 18, 33, 0.55);
+      border: 1px solid rgba(120, 160, 220, 0.2);
+      display: grid;
+      gap: 0.4rem;
+    }
+    .report-card strong { color: #f2f6ff; font-size: 0.95rem; }
+    .report-metrics { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; font-size: 0.88rem; }
+    .report-metrics span { color: #c5d6f0; }
+    .report-highlight { color: #9ad1ff; font-weight: 600; }
+    .action-link {
+      color: var(--accent-strong);
+      text-decoration: none;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .action-link.disabled {
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .inline-field {
+      display: flex;
+      gap: 0.6rem;
+      align-items: flex-end;
+    }
+    .inline-field input {
+      flex: 1;
+    }
+
+    #loadingOverlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(4,7,17,0.72); backdrop-filter: blur(10px); display:none; align-items:center; justify-content:center; z-index:50; }
+    #loadingOverlay.show { display:flex; }
+    .loader { border:6px solid rgba(148,163,184,0.2); border-top:6px solid rgba(71,245,192,0.8); border-radius:50%; width:70px; height:70px; animation:spin 1s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    [data-animate] { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    [data-animate].is-visible { opacity: 1; transform: translateY(0); }
+
+    footer { color: rgba(226, 232, 240, 0.55); text-align: center; padding: 2.4rem 0 3rem; font-size: 0.85rem; }
+
+    @media (max-width: 960px) {
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 1.2rem; }
+      .stellar-nav { flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
 </head>
 <body>
-<div class="container">
-    <h2>📄 Import PDF Questions</h2>
-    <form id="uploadForm" enctype="multipart/form-data" class="mb-4">
-        <div class="mb-3">
-            <label>Provider:</label>
-            <select name="provider_id" id="providerSelect" class="form-select" required></select>
-        </div>
-        <div class="mb-3">
-            <label>Certification:</label>
-            <select name="cert_id" id="certSelect" class="form-select" required></select>
-        </div>
-        <div class="mb-3">
-            <label>Module:</label>
-            <select name="module_id" id="moduleSelect" class="form-select" required></select>
-        </div>
-        <div class="mb-3">
-            <label>PDF File:</label>
-            <input type="file" name="file" class="form-control" accept=".pdf,application/pdf" required>
-        </div>
-        <button type="submit" id="analyzeBtn" class="btn btn-primary w-100">Analyser PDF</button>
-    </form>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+  <div class="stellar-orb orb-3"></div>
 
-    <div id="jsonContainer" style="display:none;">
-        <h4>📋 JSON extrait</h4>
-        <textarea id="jsonPreview" class="form-control" style="height:300px; font-family: monospace;" readonly></textarea>
-        <button id="confirmImport" class="btn btn-success w-100 mt-3">✅ Confirmer Import</button>
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <span class="brand-mark">EX</span>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Console d'orchestration pédagogique</span>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
+        </button>
+      </div>
+      {% set active_page = 'pdf_import' %}
+      {% include '_nav.html' %}
     </div>
-</div>
+  </header>
 
-<script>
-// helper
-function option(text, value) {
-    const o = document.createElement("option");
-    o.textContent = text; o.value = value;
-    return o;
-}
+  <main class="stellar-main">
+    <section class="glass-card hero-intro" data-animate>
+      <h1>Analysez vos PDF et extrayez le JSON idéal</h1>
+      <p>Sélectionnez votre cible, indiquez le fichier à analyser et obtenez un JSON prêt à être importé dans la base ExBoot.</p>
+    </section>
 
-// 1) Providers -> auto-sélection + cascade
-fetch("/api/providers").then(r => r.json()).then(data => {
+    <section class="glass-card" data-animate>
+      <form id="uploadForm" class="form-grid">
+        <div>
+          <label>Provider</label>
+          <select name="provider_id" id="providerSelect" required></select>
+        </div>
+        <div>
+          <label>Certification</label>
+          <select name="cert_id" id="certSelect" required></select>
+        </div>
+        <div>
+          <label>Module</label>
+          <input type="text" id="moduleSearch" placeholder="Rechercher...">
+          <select name="module_id" id="moduleSelect" required></select>
+        </div>
+        <div class="inline-field">
+          <div style="flex:1;">
+            <label for="codeCertInput">Code certification (descr2 / code_cert)</label>
+            <input type="text" id="codeCertInput" placeholder="Ex: CCNA" maxlength="120">
+          </div>
+          <button type="button" id="saveCodeCert" class="stellar-button secondary">Save</button>
+        </div>
+        <div>
+          <label>Dossier PDF</label>
+          <input type="text" id="dirInput" placeholder="/chemin/vers/dossier" value="{{ default_pdf_dir }}" required>
+        </div>
+        <div>
+          <label for="fileSearch">Rechercher parmi les PDF</label>
+          <input type="text" id="fileSearch" placeholder="Filtrer les fichiers disponibles" maxlength="250">
+          <label>Fichier(s) PDF</label>
+          <div class="file-picker">
+            <input type="text" id="fileInput" list="pdfList" placeholder="Commencez à taper..." style="width:300px;">
+            <button type="button" id="addFileBtn" class="stellar-button secondary">Ajouter</button>
+            <button type="button" id="addAllBtn" class="stellar-button secondary">Ajouter tout</button>
+          </div>
+          <datalist id="pdfList"></datalist>
+          <div id="pdfResults" class="selected-files" aria-live="polite" style="margin-top:0.5rem;"></div>
+          <div id="selectedFiles" class="selected-files" aria-live="polite"></div>
+          <small class="hint">Ajoutez autant de fichiers que nécessaire, un par un.</small>
+        </div>
+        <div style="grid-column:1 / -1; display:flex; justify-content:flex-end; gap:0.8rem;">
+          <button type="button" id="syncBtn" class="stellar-button secondary" title="Synchroniser les domaines">Synchro</button>
+          <button type="submit" id="analyzeBtn" class="stellar-button">Analyser le PDF</button>
+        </div>
+        <div style="grid-column:1 / -1; display:flex; justify-content:flex-end;">
+          <a id="relocateLink" class="action-link disabled" href="#" aria-disabled="true">Relocate now</a>
+        </div>
+      </form>
+
+      <div class="json-preview" id="jsonContainer">
+        <div class="note" id="jsonTitle">Aperçu JSON extrait</div>
+        <textarea id="jsonPreview" readonly></textarea>
+        <div style="display:flex; gap:0.8rem;">
+          <button id="confirmImport" class="stellar-button">Confirmer l'import</button>
+          <button type="button" id="resetPreview" class="stellar-button secondary">Effacer l'aperçu</button>
+        </div>
+      </div>
+
+      <div class="json-preview" id="reportContainer">
+        <div class="note">Rapport d'extraction</div>
+        <div id="reportPreview" class="report-preview"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>ExBoot Laboratory &mdash; L'analyse de PDF devient un ballet lumineux.</footer>
+
+  <div id="loadingOverlay"><div class="loader"></div></div>
+
+  <script src="{{ url_for('static', filename='js/searchable-select.js') }}"></script>
+
+  <script>
+    const toggle = document.getElementById('navToggle');
+    const nav = document.getElementById('stellarNav');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const isOpen = toggle.classList.toggle('is-open');
+        document.body.classList.toggle('nav-open', isOpen);
+        toggle.setAttribute('aria-expanded', isOpen);
+      });
+    }
+
+    const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
+    nav?.querySelectorAll('a[data-route]').forEach(link => {
+      const target = (link.dataset.route || '').replace(/\/$/, '') || '/';
+      if (target === '/' ? currentPath === '/' : currentPath.startsWith(target)) {
+        nav.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+        link.classList.add('active');
+      }
+    });
+
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.2 });
+
+    document.querySelectorAll('[data-animate]').forEach(el => observer.observe(el));
+
+    function option(text, value, dataset = {}) {
+      const o = document.createElement("option");
+      o.textContent = text; o.value = value;
+      Object.entries(dataset || {}).forEach(([k, v]) => { o.dataset[k] = v; });
+      return o;
+    }
+
+    const base = '{{ url_for('pdf.index') }}';
+    const apiBase = base.endsWith('/') ? base : `${base}/`;
+
     const providerSelect = document.getElementById("providerSelect");
-    providerSelect.innerHTML = "";
-    if (!data || data.length === 0) {
-        providerSelect.appendChild(option("— Aucun provider —", ""));
-        return;
-    }
-    data.forEach(p => providerSelect.appendChild(option(p.name, p.id)));
-    providerSelect.value = data[0].id;
-    providerSelect.dispatchEvent(new Event("change"));
-});
-
-// 2) Provider change -> Certifications (puis cascade vers Modules)
-document.getElementById("providerSelect").addEventListener("change", function () {
-    const prov_id = this.value;
     const certSelect = document.getElementById("certSelect");
-    const modSelect  = document.getElementById("moduleSelect");
+    const relocateLink = document.getElementById("relocateLink");
+    const codeCertInput = document.getElementById("codeCertInput");
+    const saveCodeCertBtn = document.getElementById("saveCodeCert");
+    const params = new URLSearchParams(window.location.search);
+    const preselectProviderId = Number(params.get('provider_id'));
+    const preselectCertId = Number(params.get('cert_id'));
+    let pendingCertId = Number.isFinite(preselectCertId) ? preselectCertId : null;
+    let pendingModuleId = Number(params.get('module_id'));
+    const providerSearch = window.makeSelectSearchable ? window.makeSelectSearchable(providerSelect, { placeholder: 'Rechercher un provider…' }) : null;
+    const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(certSelect, { placeholder: 'Rechercher une certification…' }) : null;
+    const relocateBase = '{{ url_for('reloc.index') }}';
+    const updateCodeCertUrl = `${apiBase}api/update-code-cert`;
+    const resolveCertUrl = `${apiBase}api/resolve-cert-by-code`;
+    let destinationLookup = { certId: '', providerId: '' };
 
-    certSelect.innerHTML = "";
-    modSelect.innerHTML  = "";
-
-    if (!prov_id) {
-        certSelect.appendChild(option("— Aucune certification —", ""));
-        modSelect.appendChild(option("— Aucun module —", ""));
-        return;
+    function getSelectedCertCode() {
+        return (certSelect.selectedOptions[0]?.dataset?.codeCert || '').trim();
     }
 
-    fetch(`/api/certifications/${prov_id}`).then(r => r.json()).then(data => {
-        certSelect.innerHTML = "";
-        if (!data || data.length === 0) {
-            certSelect.appendChild(option("— Aucune certification —", ""));
+    function getSelectedModuleCode() {
+        const moduleSelect = document.getElementById("moduleSelect");
+        return (moduleSelect.selectedOptions[0]?.dataset?.codeCert || '').trim();
+    }
+
+    function syncCodeCertInput() {
+        const moduleCode = getSelectedModuleCode();
+        const certCode = getSelectedCertCode();
+        codeCertInput.value = moduleCode || certCode || '';
+    }
+
+    async function resolveDestinationByCode(codeCert) {
+        if (!codeCert) {
+            destinationLookup = { certId: '', providerId: '' };
+            return destinationLookup;
+        }
+        try {
+            const res = await fetch(`${resolveCertUrl}?code_cert=${encodeURIComponent(codeCert)}`);
+            const data = await res.json();
+            destinationLookup = {
+                certId: data?.cert_id || '',
+                providerId: data?.provider_id || ''
+            };
+        } catch (err) {
+            destinationLookup = { certId: '', providerId: '' };
+        }
+        return destinationLookup;
+    }
+
+    async function updateRelocateLink() {
+        const moduleSelect = document.getElementById("moduleSelect");
+        const sourceProviderId = providerSelect.value;
+        const moduleCode = getSelectedModuleCode();
+        const sourceCertId = certSelect.value;
+        const moduleId = moduleSelect.value;
+        await resolveDestinationByCode(moduleCode);
+        const destinationCertId = destinationLookup.certId;
+        const destinationProviderId = destinationLookup.providerId;
+        if (
+            relocateLink &&
+            moduleId &&
+            sourceCertId &&
+            sourceProviderId &&
+            destinationCertId &&
+            destinationProviderId
+        ) {
+            relocateLink.href = `${relocateBase}?source_module_id=${moduleId}&source_provider_id=${sourceProviderId}&source_cert_id=${sourceCertId}&destination_provider_id=${destinationProviderId}&destination_cert_id=${destinationCertId}`;
+            relocateLink.classList.remove("disabled");
+            relocateLink.setAttribute("aria-disabled", "false");
+        } else if (relocateLink) {
+            relocateLink.href = "#";
+            relocateLink.classList.add("disabled");
+            relocateLink.setAttribute("aria-disabled", "true");
+        }
+    }
+
+    fetch(apiBase + "api/providers").then(r => r.json()).then(data => {
+        const items = (data || []).map(p => ({ value: p.id, label: p.name }));
+        const defProv = items.find(p => Number(p.value) === 169);
+        const preferredProv = Number.isFinite(preselectProviderId)
+            ? items.find(p => Number(p.value) === preselectProviderId)
+            : null;
+        const list = items.length ? items : [{ value: '', label: '— Aucun provider —' }];
+        const selectedValue = preferredProv ? preferredProv.value : (defProv ? defProv.value : (list[0]?.value ?? ''));
+        if (providerSearch) {
+            providerSearch.setOptions(list, { keepSearch: false, selectedValue });
+            providerSearch.select.dispatchEvent(new Event("change"));
+        } else {
+            providerSelect.innerHTML = "";
+            list.forEach(opt => providerSelect.appendChild(option(opt.label, opt.value)));
+            if (list.length) {
+                providerSelect.value = selectedValue;
+                providerSelect.dispatchEvent(new Event("change"));
+            }
+        }
+    });
+
+    providerSelect.addEventListener("change", function () {
+        const prov_id = this.value;
+        const modSelect  = document.getElementById("moduleSelect");
+
+        modSelect.innerHTML  = "";
+        if (certSearch) {
+            certSearch.setOptions([], { keepSearch: false, selectedValue: '' });
+        } else {
+            certSelect.innerHTML = "";
+        }
+
+        if (!prov_id) {
+            const fallbackCert = { value: '', label: '— Aucune certification —' };
+            if (certSearch) {
+                certSearch.setOptions([fallbackCert], { keepSearch: false, selectedValue: '' });
+            } else {
+                certSelect.appendChild(option(fallbackCert.label, fallbackCert.value, fallbackCert.dataset));
+            }
             modSelect.appendChild(option("— Aucun module —", ""));
+            updateRelocateLink();
             return;
         }
-        data.forEach(c => certSelect.appendChild(option(c.name, c.id)));
-        certSelect.value = data[0].id;
-        certSelect.dispatchEvent(new Event("change"));
-    }).catch(() => {
-        certSelect.innerHTML = ""; modSelect.innerHTML = "";
-        certSelect.appendChild(option("— Erreur chargement —", ""));
+
+        fetch(`${apiBase}api/certifications/${prov_id}`).then(r => r.json()).then(data => {
+            const items = (data || []).map(c => ({
+                value: c.id,
+                label: c.name,
+                dataset: { codeCert: c.code_cert || '' }
+            }));
+            let list = items.length ? items : [{ value: '', label: '— Aucune certification —' }];
+            let selectedValue = list[0]?.value ?? '';
+            const preferredCert = pendingCertId && items.find(c => Number(c.value) === pendingCertId);
+            if (preferredCert) {
+                selectedValue = preferredCert.value;
+                pendingCertId = null;
+            } else if (items.length && Number(prov_id) === 169) {
+                const defCert = items.find(c => Number(c.value) === 23);
+                if (defCert) {
+                    selectedValue = defCert.value;
+                }
+            }
+            if (certSearch) {
+                certSearch.setOptions(list, { keepSearch: false, selectedValue });
+                certSearch.select.dispatchEvent(new Event("change"));
+            } else {
+                certSelect.innerHTML = "";
+                list.forEach(opt => certSelect.appendChild(option(opt.label, opt.value, opt.dataset)));
+                certSelect.value = selectedValue;
+                certSelect.dispatchEvent(new Event("change"));
+            }
+        }).catch(() => {
+            if (certSearch) {
+                certSearch.setOptions([{ value: '', label: '— Erreur chargement —' }], { keepSearch: false, selectedValue: '' });
+                certSearch.select.dispatchEvent(new Event("change"));
+            } else {
+                certSelect.innerHTML = "";
+                certSelect.appendChild(option("— Erreur chargement —", ""));
+                certSelect.dispatchEvent(new Event("change"));
+            }
+            modSelect.innerHTML = "";
+            modSelect.appendChild(option("— Aucun module —", ""));
+            updateRelocateLink();
+        });
     });
-});
 
-// 3) Certification change -> Modules (auto-sélection du 1er)
-document.getElementById("certSelect").addEventListener("change", function () {
-    const cert_id = this.value;
-    const modSelect = document.getElementById("moduleSelect");
+    const dirInput = document.getElementById("dirInput");
+    const fileSearch = document.getElementById("fileSearch");
+    const fileInput = document.getElementById("fileInput");
+    const pdfList   = document.getElementById("pdfList");
+    const pdfResults = document.getElementById("pdfResults");
+    const addFileBtn = document.getElementById("addFileBtn");
+    const addAllBtn = document.getElementById("addAllBtn");
+    const selectedFilesContainer = document.getElementById("selectedFiles");
 
-    modSelect.innerHTML = "";
-    if (!cert_id) {
-        modSelect.appendChild(option("— Aucun module —", ""));
-        return;
-    }
+    const renderPdfResults = (items, query) => {
+        pdfResults.innerHTML = "";
 
-    fetch(`/api/modules/${cert_id}`).then(r => r.json()).then(data => {
+        if (!dirInput.value.trim()) {
+            const msg = document.createElement("div");
+            msg.textContent = "Indiquez d'abord un dossier PDF.";
+            msg.style.color = "var(--text-muted)";
+            pdfResults.appendChild(msg);
+            return;
+        }
+
+        if (!query) {
+            const msg = document.createElement("div");
+            msg.textContent = "Tapez un mot-clé pour rechercher vos PDF.";
+            msg.style.color = "var(--text-muted)";
+            pdfResults.appendChild(msg);
+            return;
+        }
+
+        if (!items.length) {
+            const msg = document.createElement("div");
+            msg.textContent = "Aucun PDF correspondant.";
+            msg.style.color = "var(--text-muted)";
+            pdfResults.appendChild(msg);
+            return;
+        }
+
+        const list = document.createElement("div");
+        list.style.display = "flex";
+        list.style.flexWrap = "wrap";
+        list.style.gap = "0.5rem";
+
+        items.forEach(p => {
+            const chip = document.createElement("div");
+            chip.className = "file-chip";
+            chip.textContent = p;
+            chip.title = "Cliquer pour sélectionner";
+            chip.tabIndex = 0;
+            chip.addEventListener("click", () => {
+                fileInput.value = p;
+                addCurrentFile();
+            });
+            chip.addEventListener("keydown", (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    chip.click();
+                }
+            });
+            list.appendChild(chip);
+        });
+
+        pdfResults.appendChild(list);
+    };
+
+    const refreshPdfList = () => {
+        const root = dirInput.value.trim();
+        const query = fileSearch.value.trim() || fileInput.value.trim();
+        if (!root || query.length === 0) {
+            pdfList.innerHTML = "";
+            renderPdfResults([], query);
+            return;
+        }
+        fetch(`${apiBase}api/search-pdfs?root=${encodeURIComponent(root)}&q=${encodeURIComponent(query)}`)
+            .then(r => r.json())
+            .then(data => {
+                pdfList.innerHTML = "";
+                data.forEach(p => {
+                    const opt = document.createElement("option");
+                    opt.value = p;
+                    pdfList.appendChild(opt);
+                });
+                renderPdfResults(data, query);
+            });
+    };
+
+    certSelect.addEventListener("change", function () {
+        const cert_id = this.value;
+        const modSelect = document.getElementById("moduleSelect");
+
+        updateRelocateLink();
+        syncCodeCertInput();
+        const selectedOption = this.selectedOptions[0];
+        const defaultQuery = (selectedOption?.dataset?.codeCert || '').trim();
+        fileSearch.value = defaultQuery || '';
+        refreshPdfList();
+
         modSelect.innerHTML = "";
-        if (!data || data.length === 0) {
+        if (!cert_id) {
             modSelect.appendChild(option("— Aucun module —", ""));
             return;
         }
-        data.forEach(m => modSelect.appendChild(option(m.name, m.id)));
-        modSelect.value = data[0].id;
-    }).catch(() => {
-        modSelect.appendChild(option("— Erreur chargement —", ""));
+
+        fetch(`${apiBase}api/modules/${cert_id}`).then(r => r.json()).then(data => {
+            modSelect.innerHTML = "";
+            if (!data || data.length === 0) {
+                modSelect.appendChild(option("— Aucun module —", ""));
+                updateRelocateLink();
+                syncCodeCertInput();
+                return;
+            }
+            data.forEach(m => modSelect.appendChild(option(m.name, m.id, { codeCert: m.code_cert || '' })));
+            if (Number.isFinite(pendingModuleId)) {
+                const match = data.find(m => Number(m.id) === pendingModuleId);
+                if (match) {
+                    modSelect.value = match.id;
+                    pendingModuleId = null;
+                }
+            }
+            modSearch.value = "";
+            modSearch.dispatchEvent(new Event('input'));
+            const selectedModule = modSelect.selectedOptions[0];
+            const moduleCode = (selectedModule?.dataset?.codeCert || '').trim();
+            if (moduleCode) {
+                fileSearch.value = moduleCode;
+                refreshPdfList();
+            }
+            updateRelocateLink();
+            syncCodeCertInput();
+        }).catch(() => {
+            modSelect.appendChild(option("— Erreur chargement —", ""));
+            updateRelocateLink();
+            syncCodeCertInput();
+        });
     });
-});
 
-// 4) Soumission pour analyse PDF
-let currentSession = null;
-document.getElementById("uploadForm").addEventListener("submit", async function(e) {
-    e.preventDefault();
-    const btn = document.getElementById("analyzeBtn");
-    btn.disabled = true;
+    document.getElementById("moduleSelect").addEventListener("change", function () {
+        const selectedOption = this.selectedOptions[0];
+        const defaultQuery = (selectedOption?.dataset?.codeCert || '').trim();
+        fileSearch.value = defaultQuery || fileSearch.value;
+        refreshPdfList();
+        updateRelocateLink();
+        syncCodeCertInput();
+    });
 
-    try {
-        const formData = new FormData(this);
-        const res = await fetch("/upload-pdf", { method: "POST", body: formData });
-        const data = await res.json();
-        if (data.status === "ok") {
-            currentSession = data.session_id;
-            document.getElementById("jsonPreview").value = JSON.stringify(data.json_data, null, 4);
-            document.getElementById("jsonContainer").style.display = "block";
-        } else {
-            alert("Erreur : " + (data.message || "analyse impossible"));
+    if (saveCodeCertBtn) {
+        saveCodeCertBtn.addEventListener("click", async () => {
+            const certId = certSelect.value;
+            const moduleId = document.getElementById("moduleSelect").value;
+            const codeCert = (codeCertInput.value || '').trim();
+            if (!certId || !moduleId || !codeCert) {
+                alert("Sélectionnez une certification, un module et renseignez le code certification.");
+                return;
+            }
+            saveCodeCertBtn.disabled = true;
+            try {
+                const res = await fetch(updateCodeCertUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ cert_id: certId, module_id: moduleId, code_cert: codeCert })
+                });
+                const data = await res.json();
+                if (data.status !== "ok") {
+                    throw new Error(data.message || "Erreur lors de la mise à jour.");
+                }
+                const certOption = certSelect.selectedOptions[0];
+                if (certOption) {
+                    certOption.dataset.codeCert = codeCert;
+                }
+                const moduleOption = document.getElementById("moduleSelect").selectedOptions[0];
+                if (moduleOption) {
+                    moduleOption.dataset.codeCert = codeCert;
+                }
+                updateRelocateLink();
+                alert("✅ Code certification mis à jour.");
+            } catch (err) {
+                alert(err.message || "Erreur lors de la mise à jour.");
+            } finally {
+                saveCodeCertBtn.disabled = false;
+            }
+        });
+    }
+
+    const selectedFiles = [];
+
+    const renderSelectedFiles = () => {
+        selectedFilesContainer.innerHTML = "";
+        if (!selectedFiles.length) {
+            const empty = document.createElement("span");
+            empty.textContent = "Aucun fichier sélectionné";
+            empty.style.color = "var(--text-muted)";
+            selectedFilesContainer.appendChild(empty);
+            return;
         }
-    } catch (err) {
-        alert("Erreur réseau : " + err);
-    } finally {
-        btn.disabled = false;
-    }
-});
+        selectedFiles.forEach((path, idx) => {
+            const chip = document.createElement("div");
+            chip.className = "file-chip";
+            chip.textContent = path;
+            const removeBtn = document.createElement("button");
+            removeBtn.type = "button";
+            removeBtn.textContent = "✕";
+            removeBtn.addEventListener("click", () => {
+                selectedFiles.splice(idx, 1);
+                renderSelectedFiles();
+            });
+            chip.appendChild(removeBtn);
+            selectedFilesContainer.appendChild(chip);
+        });
+    };
 
-// 5) Confirmation import (affiche les bonnes clés de la réponse)
-document.getElementById("confirmImport").addEventListener("click", async function() {
-    if (!currentSession) {
-        alert("Aucune session d’analyse en mémoire. Analyse un PDF d’abord.");
-        return;
-    }
-    const formData = new FormData();
-    formData.append("session_id", currentSession);
+    const normalizePath = (dir, file) => {
+        const cleanDir = dir.replace(/\/+$/, "");
+        return cleanDir ? `${cleanDir}/${file}` : file;
+    };
 
-    try {
-        const res = await fetch("/import-questions", { method: "POST", body: formData });
-        const data = await res.json();
-        if (data.status === "ok") {
-            alert(`✅ Import terminé : ${data.imported_questions} questions, ${data.imported_answers} réponses`);
-        } else {
-            alert("❌ Erreur import : " + (data.message || "échec"));
+    const addFileToSelection = (fullPath) => {
+        if (!fullPath) return false;
+        if (selectedFiles.includes(fullPath)) return false;
+        selectedFiles.push(fullPath);
+        return true;
+    };
+
+    const addCurrentFile = () => {
+        const dir = dirInput.value.trim();
+        const file = fileInput.value.trim();
+        if (!file) {
+            alert("Indiquez un fichier à ajouter.");
+            return;
         }
-    } catch (err) {
-        alert("Erreur réseau : " + err);
-    }
-});
-</script>
+        const fullPath = normalizePath(dir, file);
+        if (addFileToSelection(fullPath)) {
+            renderSelectedFiles();
+        }
+        fileInput.value = "";
+    };
+
+    const addAllFiles = () => {
+        const dir = dirInput.value.trim();
+        const options = Array.from(pdfList.options).map(o => o.value.trim()).filter(Boolean);
+        if (!options.length) {
+            alert("Aucun fichier filtré à ajouter.");
+            return;
+        }
+
+        let addedCount = 0;
+        options.forEach(file => {
+            const fullPath = normalizePath(dir, file);
+            if (addFileToSelection(fullPath)) {
+                addedCount++;
+            }
+        });
+
+        if (addedCount) {
+            renderSelectedFiles();
+        } else {
+            alert("Tous les fichiers filtrés sont déjà sélectionnés.");
+        }
+    };
+
+    addFileBtn.addEventListener("click", addCurrentFile);
+    addAllBtn.addEventListener("click", addAllFiles);
+    fileInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            addCurrentFile();
+        }
+    });
+
+    fileSearch.addEventListener("input", refreshPdfList);
+    fileInput.addEventListener("input", refreshPdfList);
+    dirInput.addEventListener("input", () => {
+        pdfList.innerHTML = "";
+        renderPdfResults([], fileSearch.value.trim());
+    });
+
+    let currentSession = null;
+    const reportContainer = document.getElementById("reportContainer");
+    const reportPreview = document.getElementById("reportPreview");
+
+    const renderReport = (files) => {
+        reportPreview.innerHTML = "";
+        if (!files || !files.length) {
+            reportPreview.textContent = "Aucun rapport disponible.";
+            return;
+        }
+        files.forEach(file => {
+            const analysis = file?.json_data?.analysis;
+            const card = document.createElement("div");
+            card.className = "report-card";
+            const title = document.createElement("strong");
+            title.textContent = file.filename || "Fichier PDF";
+            card.appendChild(title);
+
+            if (!analysis) {
+                const msg = document.createElement("div");
+                msg.textContent = "Aucune analyse détectée pour ce fichier.";
+                card.appendChild(msg);
+                reportPreview.appendChild(card);
+                return;
+            }
+
+            const metrics = document.createElement("div");
+            metrics.className = "report-metrics";
+            metrics.innerHTML = `
+                <span>Attendu: <span class="report-highlight">${analysis.expected_questions}</span></span>
+                <span>Extrait: <span class="report-highlight">${analysis.extracted_questions}</span></span>
+                <span>Écart: <span class="report-highlight">${analysis.gap}</span></span>
+                <span>Méthode: ${analysis.method || '—'}</span>
+                <span>Sans réponses: ${analysis.questions_without_answers}</span>
+            `;
+            card.appendChild(metrics);
+
+            const markers = document.createElement("div");
+            const counts = analysis.marker_counts || {};
+            markers.textContent = `Marqueurs: NEW QUESTION=${counts.new_question ?? 0}, QUESTION=${counts.question_label ?? 0}, Numérotés=${counts.numbered ?? 0}`;
+            card.appendChild(markers);
+
+            reportPreview.appendChild(card);
+        });
+    };
+    document.getElementById("uploadForm").addEventListener("submit", async function(e) {
+        e.preventDefault();
+        const btn = document.getElementById("analyzeBtn");
+        btn.disabled = true;
+        const overlay = document.getElementById("loadingOverlay");
+        overlay.classList.add('show');
+
+        try {
+            const formData = new FormData();
+            formData.append("module_id", document.getElementById("moduleSelect").value);
+            if (!selectedFiles.length) {
+                alert("Ajoutez au moins un fichier à analyser.");
+                return;
+            }
+            formData.append("file_paths", JSON.stringify(selectedFiles));
+            const res = await fetch(apiBase + "upload-pdf", { method: "POST", body: formData });
+            const data = await res.json();
+            if (data.status === "ok") {
+                currentSession = data.session_id;
+                const sanitizedFiles = (data.files || []).map(file => {
+                    const jsonData = { ...(file.json_data || {}) };
+                    delete jsonData.analysis;
+                    return { ...file, json_data: jsonData };
+                });
+                document.getElementById("jsonPreview").value = JSON.stringify({ files: sanitizedFiles }, null, 4);
+                document.getElementById("jsonTitle").textContent = `Aperçu JSON extrait (${data.files.length} fichier(s))`;
+                document.getElementById("jsonContainer").classList.add("active");
+                reportContainer.classList.add("active");
+                renderReport(data.files);
+            } else {
+                alert("Erreur : " + (data.message || "analyse impossible"));
+            }
+        } catch (err) {
+            alert("Erreur réseau : " + err);
+        } finally {
+            btn.disabled = false;
+            overlay.classList.remove('show');
+        }
+    });
+
+    document.getElementById("confirmImport").addEventListener("click", async function() {
+        if (!currentSession) {
+            alert("Aucune session d’analyse en mémoire. Analysez un PDF d’abord.");
+            return;
+        }
+        const formData = new FormData();
+        formData.append("session_id", currentSession);
+        const overlay = document.getElementById("loadingOverlay");
+        const btn = this;
+        btn.disabled = true;
+        overlay.classList.add('show');
+
+        try {
+            const res = await fetch(apiBase + "import-questions", { method: "POST", body: formData });
+            const data = await res.json();
+            if (data.status === "ok") {
+                alert(`✅ Import terminé : ${data.imported_questions} questions, ${data.imported_answers} réponses`);
+            } else {
+                alert("❌ Erreur import : " + (data.message || "échec"));
+            }
+        } catch (err) {
+            alert("Erreur réseau : " + err);
+        } finally {
+            btn.disabled = false;
+            overlay.classList.remove('show');
+        }
+    });
+
+    document.getElementById("syncBtn")?.addEventListener("click", async function () {
+        const btn = this;
+        const overlay = document.getElementById("loadingOverlay");
+        btn.disabled = true;
+        overlay.classList.add('show');
+        try {
+            const res = await fetch(apiBase + "api/sync-code-cert", { method: "POST" });
+            const data = await res.json();
+            if (data.status === "ok") {
+                alert(`✅ Synchronisation terminée. ${data.inserted || 0} domaine(s) créé(s), ${data.updated || 0} mis à jour.`);
+            } else {
+                alert("❌ Échec synchro : " + (data.message || "inconnu"));
+            }
+        } catch (err) {
+            alert("Erreur réseau : " + err);
+        } finally {
+            btn.disabled = false;
+            overlay.classList.remove('show');
+        }
+    });
+
+    document.getElementById("resetPreview").addEventListener("click", function(){
+      currentSession = null;
+      document.getElementById("jsonPreview").value = '';
+      document.getElementById("jsonContainer").classList.remove("active");
+      reportContainer.classList.remove("active");
+      reportPreview.innerHTML = '';
+    });
+
+    renderSelectedFiles();
+    renderPdfResults([], "");
+
+    const modSearch = document.getElementById('moduleSearch');
+    const moduleSelect = document.getElementById('moduleSelect');
+    modSearch.addEventListener('input', function(){
+        const term = this.value.toLowerCase();
+        Array.from(moduleSelect.options).forEach(o => {
+            o.style.display = o.text.toLowerCase().includes(term) ? '' : 'none';
+        });
+    });
+  </script>
 </body>
 </html>
