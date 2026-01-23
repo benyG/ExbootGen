@@ -1,16 +1,21 @@
+import base64
+import io
 import os
 import re
 import json
 import uuid
+import html
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 import fitz  # PyMuPDF
+from PIL import Image
 import pytesseract
 import mysql.connector
+from google.cloud import storage
 from flask import Blueprint, request, jsonify
 from pdf2image import convert_from_path
-from config import DB_CONFIG
+from config import DB_CONFIG, GCS_BUCKET_NAME, GCS_UPLOAD_FOLDER
 
 routes_pdf = Blueprint("routes_pdf", __name__)
 
@@ -32,11 +37,165 @@ def db_conn():
 
 # ------------------------- Extraction du texte -------------------------
 
+_OCR_CONFIDENCE_MIN = 40
+_OCR_WORDS_MIN = 4
+_TABLE_MIN_ROWS = 2
+_TABLE_MIN_COLS = 2
+_TABLE_COL_TOLERANCE = 40
+
+
+def _clean_extracted_text(page_txt: str) -> str:
+    page_txt = re.sub(r"(?im)^\s*(page\s*)?\d+\s*(/\s*\d+)?\s*$", "", page_txt)
+    page_txt = re.sub(r"\n{3,}", "\n\n", page_txt).strip()
+    return page_txt
+
+
+def _pixmap_to_pil(pix: fitz.Pixmap) -> Image.Image:
+    mode = "RGB" if pix.alpha == 0 else "RGBA"
+    return Image.frombytes(mode, [pix.width, pix.height], pix.samples)
+
+
+def _upload_pil_to_gcs(pil_img: Image.Image) -> str | None:
+    buffer = io.BytesIO()
+    pil_img.save(buffer, format="PNG")
+    buffer.seek(0)
+    object_name = f"{GCS_UPLOAD_FOLDER.rstrip('/')}/{uuid.uuid4().hex}.png"
+    try:
+        client = storage.Client()
+        bucket = client.bucket(GCS_BUCKET_NAME)
+        blob = bucket.blob(object_name)
+        blob.upload_from_file(buffer, content_type="image/png")
+        return blob.public_url
+    except Exception:
+        return None
+
+
+def _image_to_data_uri(pil_img: Image.Image) -> str:
+    buffer = io.BytesIO()
+    pil_img.save(buffer, format="PNG")
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def _extract_ocr_words(pil_img: Image.Image) -> list[dict]:
+    data = pytesseract.image_to_data(pil_img, lang="fra+eng", output_type=pytesseract.Output.DICT)
+    words = []
+    count = len(data.get("text", []))
+    for i in range(count):
+        text = (data["text"][i] or "").strip()
+        if not text:
+            continue
+        try:
+            conf = float(data.get("conf", [0])[i])
+        except Exception:
+            conf = 0.0
+        words.append(
+            {
+                "text": text,
+                "conf": conf,
+                "left": int(data["left"][i]),
+                "top": int(data["top"][i]),
+                "width": int(data["width"][i]),
+                "height": int(data["height"][i]),
+                "line_num": int(data.get("line_num", [0])[i] or 0),
+            }
+        )
+    return words
+
+
+def _infer_table_from_words(words: list[dict]) -> str | None:
+    if not words:
+        return None
+    strong_words = [w for w in words if w["conf"] >= _OCR_CONFIDENCE_MIN]
+    if len(strong_words) < _OCR_WORDS_MIN:
+        return None
+
+    lines: dict[int, list[dict]] = {}
+    for w in strong_words:
+        line_key = w["line_num"]
+        lines.setdefault(line_key, []).append(w)
+    row_candidates = [sorted(line, key=lambda w: w["left"]) for line in lines.values() if len(line) >= _TABLE_MIN_COLS]
+    if len(row_candidates) < _TABLE_MIN_ROWS:
+        return None
+
+    x_centers = []
+    for line in row_candidates:
+        for w in line:
+            x_centers.append(w["left"] + w["width"] / 2)
+    x_centers.sort()
+    columns = []
+    for x in x_centers:
+        if not columns or abs(x - columns[-1]) > _TABLE_COL_TOLERANCE:
+            columns.append(x)
+        else:
+            columns[-1] = (columns[-1] + x) / 2
+    if len(columns) < _TABLE_MIN_COLS:
+        return None
+
+    rows_html = []
+    for line in row_candidates:
+        cells = [""] * len(columns)
+        for w in line:
+            center = w["left"] + w["width"] / 2
+            idx = min(range(len(columns)), key=lambda i: abs(columns[i] - center))
+            if cells[idx]:
+                cells[idx] += f" {w['text']}"
+            else:
+                cells[idx] = w["text"]
+        cell_html = "".join(f"<td>{html.escape(cell.strip())}</td>" for cell in cells)
+        rows_html.append(f"<tr>{cell_html}</tr>")
+    return "<table>" + "".join(rows_html) + "</table>"
+
+
+def _classify_image_content(pil_img: Image.Image) -> dict:
+    words = _extract_ocr_words(pil_img)
+    avg_conf = 0.0
+    if words:
+        avg_conf = sum(w["conf"] for w in words) / len(words)
+    has_text = len(words) >= _OCR_WORDS_MIN and avg_conf >= _OCR_CONFIDENCE_MIN
+    table_html = _infer_table_from_words(words) if has_text else None
+    return {
+        "has_text": has_text,
+        "text": " ".join(w["text"] for w in words).strip(),
+        "table_html": table_html,
+    }
+
+
+def _extract_visual_block(page: fitz.Page, rect: fitz.Rect) -> str:
+    pix = page.get_pixmap(clip=rect, dpi=200)
+    pil_img = _pixmap_to_pil(pix)
+    analysis = _classify_image_content(pil_img)
+    if analysis["table_html"]:
+        return analysis["table_html"]
+    if analysis["has_text"] and analysis["text"]:
+        return analysis["text"]
+    url = _upload_pil_to_gcs(pil_img)
+    if not url:
+        url = _image_to_data_uri(pil_img)
+    return f'<img src="{url}" alt="pdf-image" />'
+
+
+def _extract_mixed_content(page: fitz.Page, clip: fitz.Rect) -> str:
+    parts = []
+    blocks = page.get_text("blocks", clip=clip)
+    blocks = sorted(blocks, key=lambda b: (b[1], b[0]))
+    for x0, y0, x1, y1, text, _, block_type in blocks:
+        rect = fitz.Rect(x0, y0, x1, y1)
+        if block_type == 0:
+            cleaned = _clean_extracted_text(text)
+            if cleaned:
+                parts.append(cleaned)
+        elif block_type == 1:
+            parts.append(_extract_visual_block(page, rect))
+    return "\n".join(parts).strip()
+
+
 def extract_text_from_pdf(pdf_path: str,
                           use_ocr: bool = False,
                           skip_first_page: bool = True,
                           header_ratio: float = 0.10,
-                          footer_ratio: float = 0.10) -> str:
+                          footer_ratio: float = 0.10,
+                          detect_visuals: bool = False) -> str:
     """
     Extrait le texte utile :
       - ignore la 1ère page (skip_first_page=True)
@@ -69,11 +228,11 @@ def extract_text_from_pdf(pdf_path: str,
             bottom_cut = h * (1.0 - footer_ratio)
 
             clip = fitz.Rect(0, top_cut, page.rect.width, bottom_cut)
-            page_txt = page.get_text("text", clip=clip)
-
-            # Nettoyage : lignes "Page 3", "3/10", etc.
-            page_txt = re.sub(r"(?im)^\s*(page\s*)?\d+\s*(/\s*\d+)?\s*$", "", page_txt)
-            page_txt = re.sub(r"\n{3,}", "\n\n", page_txt).strip()
+            if detect_visuals:
+                page_txt = _extract_mixed_content(page, clip)
+            else:
+                page_txt = page.get_text("text", clip=clip)
+                page_txt = _clean_extracted_text(page_txt)
 
             if page_txt:
                 text += page_txt + "\n"
@@ -319,7 +478,14 @@ def upload_pdf_route():
     save_path = os.path.join(UPLOAD_DIR, filename)
     file.save(save_path)
 
-    text = extract_text_from_pdf(save_path, use_ocr=False, skip_first_page=True, header_ratio=0.10, footer_ratio=0.10)
+    text = extract_text_from_pdf(
+        save_path,
+        use_ocr=False,
+        skip_first_page=True,
+        header_ratio=0.10,
+        footer_ratio=0.10,
+        detect_visuals=True,
+    )
     data = detect_questions(text, module_id)
     session_id = str(uuid.uuid4())
 
