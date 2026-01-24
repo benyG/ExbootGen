@@ -2072,6 +2072,39 @@ def mcp_unpublished_certifications():
     return jsonify(db.get_unpublished_certifications_report())
 
 
+@app.route("/api/mcp/client/providers")
+def mcp_client_providers():
+    """Return providers for MCP client selects."""
+
+    providers = [
+        {"id": provider_id, "name": name}
+        for provider_id, name in db.get_providers()
+    ]
+    return jsonify({"providers": providers})
+
+
+@app.route("/api/mcp/client/certifications/<int:provider_id>")
+def mcp_client_certifications(provider_id: int):
+    """Return certifications with codes for MCP client selects."""
+
+    certifications = [
+        {"id": cert_id, "name": name, "code": code}
+        for cert_id, name, code in db.get_certifications_by_provider_with_code(provider_id)
+    ]
+    return jsonify({"certifications": certifications})
+
+
+@app.route("/api/mcp/client/modules/<int:cert_id>")
+def mcp_client_modules(cert_id: int):
+    """Return modules (domains) for MCP client selects."""
+
+    modules = [
+        {"id": module_id, "name": name}
+        for module_id, name in db.get_domains_by_certification(cert_id)
+    ]
+    return jsonify({"modules": modules})
+
+
 @app.route("/populate", methods=["GET", "POST"])
 def populate_index():
     if request.method == "POST":
