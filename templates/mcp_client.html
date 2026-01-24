@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Client MCP · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 15% 10%, rgba(56,189,248,0.18), transparent 55%),
+                     radial-gradient(circle at 75% 20%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.2), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --glass-soft: rgba(15, 19, 32, 0.82);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb { position: fixed; width: 32rem; height: 32rem; border-radius: 50%; opacity: 0.45; pointer-events: none; mix-blend-mode: screen; background: radial-gradient(circle, rgba(71,245,192,0.32) 0%, rgba(4,7,17,0) 70%); animation: drift 22s ease-in-out infinite; z-index: 0; }
+    .orb-1 { top: -12rem; left: -6rem; }
+    .orb-2 { bottom: -12rem; right: -6rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.24) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift { 0%, 100% { transform: translate3d(0,0,0) scale(1); } 45% { transform: translate3d(40px, -30px, 0) scale(1.05); } 75% { transform: translate3d(-30px, 25px, 0) scale(0.95); } }
+
+    .stellar-header { position: sticky; top: 0; z-index: 20; background: rgba(4,7,17,0.72); backdrop-filter: saturate(180%) blur(18px); border-bottom: 1px solid rgba(148,163,184,0.18); }
+    .stellar-container { width: min(1200px, 92vw); margin: 0 auto; padding: 1.2rem 0 1.6rem; }
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 18px; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25)); border: 1px solid rgba(148, 163, 184, 0.2); color: var(--accent); font-weight: 600; letter-spacing: 0.05em; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28); }
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .nav-toggle { display: none; width: 2.8rem; height: 2.8rem; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 19, 32, 0.68); color: var(--text-primary); align-items: center; justify-content: center; cursor: pointer; transition: transform 0.35s var(--transition), background 0.35s var(--transition); }
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+    .nav-toggle span, .nav-toggle span::before, .nav-toggle span::after { display: block; width: 18px; height: 2px; background: currentColor; border-radius: 999px; position: relative; transition: transform 0.35s ease, opacity 0.3s ease; }
+    .nav-toggle span::before, .nav-toggle span::after { content: ''; position: absolute; left: 0; }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.4rem; border-radius: var(--radius-lg); padding: 0.35rem; background: rgba(8, 12, 24, 0.55); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
+    .stellar-nav a { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.05rem; border-radius: 14px; text-decoration: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition); }
+    .stellar-nav a::after { content: ''; position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14)); opacity: 0; transition: opacity 0.35s var(--transition); z-index: -1; }
+    .stellar-nav a:hover { color: var(--text-primary); transform: translateY(-2px); }
+    .stellar-nav a:hover::after { opacity: 1; }
+    .stellar-nav a.active { color: var(--text-primary); }
+    .stellar-nav a.active::after { opacity: 1; box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18); }
+
+    .stellar-main { flex: 1; width: min(1200px, 92vw); margin: 0 auto; padding: 3.4rem 0 4.5rem; display: flex; flex-direction: column; gap: 2rem; position: relative; z-index: 1; }
+
+    .glass-card { background: var(--glass); border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-strong); padding: clamp(1.6rem, 2.8vw, 2.4rem); backdrop-filter: blur(26px); position: relative; overflow: hidden; }
+    .glass-card::before { content: ''; position: absolute; inset: 1px; border-radius: calc(var(--radius-xl) - 2px); border: 1px solid rgba(148, 163, 184, 0.12); pointer-events: none; }
+
+    h1 { margin: 0 0 0.8rem; font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.1rem, 3.4vw, 2.7rem); }
+    h2 { margin: 0; font-family: 'Space Grotesk', sans-serif; }
+    p { margin: 0; color: var(--text-muted); line-height: 1.6; }
+    label { font-size: 0.9rem; color: var(--text-muted); display: block; margin-bottom: 0.4rem; }
+
+    .section-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+
+    .pill-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.6rem 1.2rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(71,245,192,0.16);
+      color: var(--text-primary);
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition);
+    }
+    .pill-button:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(56, 189, 248, 0.18); }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    .table th, .table td {
+      text-align: left;
+      padding: 0.65rem 0.85rem;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .table th { color: var(--text-muted); font-weight: 600; }
+
+    .grid { display: grid; gap: 1.2rem; }
+    .grid-2 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+
+    input, textarea, select {
+      width: 100%;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: var(--glass-soft);
+      color: var(--text-primary);
+      padding: 0.65rem 0.75rem;
+      font-family: inherit;
+      font-size: 0.9rem;
+    }
+    textarea { min-height: 110px; resize: vertical; }
+    select[multiple] { min-height: 150px; }
+
+    .filter-input { margin-bottom: 0.6rem; }
+
+    .output {
+      background: rgba(15, 19, 32, 0.9);
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      padding: 1rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+      color: #d1fae5;
+    }
+
+    .helper { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.4rem; }
+    .empty-state { padding: 1rem; color: var(--text-muted); }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(4, 7, 17, 0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      z-index: 50;
+    }
+    .modal-backdrop.is-visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal {
+      width: min(720px, 90vw);
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      box-shadow: var(--shadow-strong);
+      position: relative;
+    }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+    .modal-actions { display: flex; gap: 0.8rem; justify-content: flex-end; margin-top: 1.5rem; }
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.4rem;
+      cursor: pointer;
+    }
+
+    .status-list { display: grid; gap: 0.75rem; }
+    .status-card { padding: 0.8rem 1rem; border-radius: var(--radius-md); border: 1px solid rgba(148, 163, 184, 0.2); background: rgba(15, 19, 32, 0.7); }
+    .status-title { font-weight: 600; margin-bottom: 0.3rem; }
+    .status-meta { font-size: 0.85rem; color: var(--text-muted); }
+
+    @media (max-width: 960px) {
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 1.2rem; }
+      .stellar-nav { flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <div class="brand-mark">EX</div>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Client MCP</span>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
+        </button>
+      </div>
+      {% set active_page = 'mcp_client' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+  <main class="stellar-main">
+    <section class="glass-card">
+      <h1>Client MCP</h1>
+      <p>Choisissez un tool MCP, paramétrez-le via un formulaire dynamique (recherche en base) puis lancez l’action et suivez son avancement.</p>
+    </section>
+
+    <section class="glass-card">
+      <div class="section-header">
+        <h2>Découverte des tools MCP</h2>
+        <button class="pill-button" id="refreshTools">Rafraîchir</button>
+      </div>
+      <div id="toolsTable"></div>
+    </section>
+
+    <section class="glass-card">
+      <div class="section-header">
+        <h2>Invocation d’un tool</h2>
+        <button class="pill-button" id="openToolModal">Configurer & lancer</button>
+      </div>
+      <div class="grid grid-2">
+        <div>
+          <label for="toolSelect">Tool</label>
+          <select id="toolSelect"></select>
+          <div class="helper">Sélectionnez un tool pour ouvrir son formulaire dédié.</div>
+        </div>
+        <div>
+          <label>Statut</label>
+          <div class="output" id="toolOutput">Aucune exécution pour l’instant.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="glass-card">
+      <div class="section-header">
+        <h2>Plan complet automatisé (orchestrate + run)</h2>
+        <div>
+          <button class="pill-button" id="previewPlan">Générer le plan</button>
+          <button class="pill-button" id="runPlan">Exécuter le plan</button>
+        </div>
+      </div>
+      <div class="grid grid-3">
+        <div>
+          <label for="planProviderFilter">Recherche fournisseur</label>
+          <input class="filter-input" id="planProviderFilter" type="search" placeholder="Filtrer fournisseurs...">
+          <select id="planProvider"></select>
+        </div>
+        <div>
+          <label for="planCertFilter">Recherche certification</label>
+          <input class="filter-input" id="planCertFilter" type="search" placeholder="Filtrer certifications...">
+          <select id="planCert"></select>
+        </div>
+        <div>
+          <label for="planCodeCert">code_cert</label>
+          <input id="planCodeCert" type="text" placeholder="AZ-900">
+        </div>
+        <div>
+          <label for="planSearchRoot">search_root</label>
+          <input id="planSearchRoot" type="text" placeholder="C:\\dumps\\dumps" value="C:\\dumps\\dumps">
+        </div>
+      </div>
+      <div class="grid grid-2" style="margin-top: 1.2rem;">
+        <div>
+          <label for="planFilePaths">file_paths (une ligne par fichier)</label>
+          <textarea id="planFilePaths"></textarea>
+        </div>
+      </div>
+      <div class="helper" id="planEligibility"></div>
+      <div class="helper" id="planError"></div>
+      <div class="output" id="planOutput">Aucun plan généré.</div>
+      <div class="output" id="runOutput" style="margin-top: 1rem;">Aucune exécution pour l’instant.</div>
+    </section>
+
+    <section class="glass-card">
+      <div class="section-header">
+        <h2>Suivi des actions MCP</h2>
+        <button class="pill-button" id="refreshRuns">Historique runs</button>
+      </div>
+      <div class="status-list" id="jobStatusList"></div>
+      <div class="output" id="runsOutput" style="margin-top: 1rem;">Aucun run chargé.</div>
+    </section>
+  </main>
+
+  <div class="modal-backdrop" id="toolModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalTitle">Configurer un tool</h2>
+        <button class="close-btn" id="closeToolModal" aria-label="Fermer">×</button>
+      </div>
+      <div id="modalFields" class="grid grid-2"></div>
+      <div class="helper" id="modalError"></div>
+      <div class="modal-actions">
+        <button class="pill-button" id="modalRun">Lancer le tool</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const toggle = document.getElementById('navToggle');
+    const nav = document.getElementById('stellarNav');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        const isOpen = toggle.classList.toggle('is-open');
+        document.body.classList.toggle('nav-open', isOpen);
+        toggle.setAttribute('aria-expanded', isOpen);
+      });
+    }
+
+    const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
+    nav?.querySelectorAll('a[data-route]').forEach(link => {
+      const target = (link.dataset.route || '').replace(/\/$/, '') || '/';
+      if (target === '/' ? currentPath === '/' : currentPath.startsWith(target)) {
+        nav.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+        link.classList.add('active');
+      }
+    });
+
+    const state = {
+      providers: [],
+      certifications: {},
+      modules: {},
+      jobs: [],
+      toolSchemas: {},
+    };
+
+    async function fetchJSON(url, options) {
+      const resp = await fetch(url, options);
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`${resp.status} ${resp.statusText} - ${text}`);
+      }
+      return resp.json();
+    }
+
+    function parseLineList(text) {
+      return text
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+    }
+
+    function clearElement(element) {
+      while (element.firstChild) {
+        element.removeChild(element.firstChild);
+      }
+    }
+
+    function fillSelect(select, options, placeholder) {
+      clearElement(select);
+      const defaultOption = document.createElement('option');
+      defaultOption.value = '';
+      defaultOption.textContent = placeholder;
+      select.appendChild(defaultOption);
+      options.forEach((option) => {
+        const opt = document.createElement('option');
+        opt.value = option.id;
+        opt.textContent = option.label;
+        opt.dataset.code = option.code || '';
+        select.appendChild(opt);
+      });
+    }
+
+    function attachFilter(filterInput, select) {
+      if (filterInput.dataset.bound === 'true') {
+        return;
+      }
+      filterInput.dataset.bound = 'true';
+      filterInput.addEventListener('input', () => {
+        const query = filterInput.value.toLowerCase();
+        [...select.options].forEach((opt, index) => {
+          if (index === 0) {
+            opt.hidden = false;
+            return;
+          }
+          const match = opt.textContent.toLowerCase().includes(query);
+          opt.hidden = !match;
+        });
+      });
+    }
+
+    async function loadProviders() {
+      if (state.providers.length) {
+        return state.providers;
+      }
+      const data = await fetchJSON('/api/mcp/client/providers');
+      state.providers = (data.providers || []).map((item) => ({
+        id: item.id,
+        label: `${item.name} (#${item.id})`,
+      }));
+      return state.providers;
+    }
+
+    async function loadCertifications(providerId) {
+      if (!providerId) {
+        return [];
+      }
+      if (state.certifications[providerId]) {
+        return state.certifications[providerId];
+      }
+      const data = await fetchJSON(`/api/mcp/client/certifications/${providerId}`);
+      state.certifications[providerId] = (data.certifications || []).map((item) => ({
+        id: item.id,
+        label: `${item.name} (#${item.id})`,
+        code: item.code || '',
+      }));
+      return state.certifications[providerId];
+    }
+
+    async function loadModules(certId) {
+      if (!certId) {
+        return [];
+      }
+      if (state.modules[certId]) {
+        return state.modules[certId];
+      }
+      const data = await fetchJSON(`/api/mcp/client/modules/${certId}`);
+      state.modules[certId] = (data.modules || []).map((item) => ({
+        id: item.id,
+        label: `${item.name} (#${item.id})`,
+      }));
+      return state.modules[certId];
+    }
+
+    function renderTools(tools) {
+      if (!tools.length) {
+        document.getElementById('toolsTable').innerHTML = '<div class="empty-state">Aucun tool MCP exposé.</div>';
+        return;
+      }
+      const rows = tools.map(tool => `
+        <tr>
+          <td>${tool.name}</td>
+          <td>${tool.method}</td>
+          <td>${tool.endpoint}</td>
+        </tr>
+      `).join('');
+      document.getElementById('toolsTable').innerHTML = `
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Méthode</th>
+              <th>Endpoint</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    function fillToolSelect(tools) {
+      const select = document.getElementById('toolSelect');
+      clearElement(select);
+      if (!tools.length) {
+        const opt = document.createElement('option');
+        opt.textContent = 'Aucun tool';
+        opt.value = '';
+        select.appendChild(opt);
+        return;
+      }
+      tools.forEach((tool) => {
+        const opt = document.createElement('option');
+        opt.value = tool.name;
+        opt.textContent = `${tool.name} (${tool.method})`;
+        select.appendChild(opt);
+      });
+    }
+
+    function buildToolSchemas() {
+      state.toolSchemas = {
+        unpublished_certifications: { label: 'Certifications non publiées', fields: [] },
+        sync_domains: {
+          label: 'Synchroniser domaines',
+          fields: [
+            { id: 'provider_id', label: 'Fournisseur', type: 'provider', includeInPayload: false },
+            { id: 'cert_id', label: 'Certification', type: 'cert', required: true, providerField: 'provider_id' },
+          ],
+        },
+        import_local_pdfs: {
+          label: 'Importer PDF local',
+          fields: [
+            { id: 'provider_id', label: 'Fournisseur', type: 'provider', includeInPayload: false },
+            { id: 'cert_id', label: 'Certification', type: 'cert', required: true, providerField: 'provider_id' },
+            { id: 'code_cert', label: 'code_cert', type: 'text' },
+            { id: 'search_root', label: 'search_root', type: 'text' },
+            { id: 'file_paths', label: 'file_paths (une ligne par fichier)', type: 'lines' },
+          ],
+        },
+        relocate_questions: {
+          label: 'Relocaliser questions',
+          fields: [
+            { id: 'source_provider_id', label: 'Fournisseur source', type: 'provider', includeInPayload: false },
+            { id: 'source_cert_id', label: 'Certif source', type: 'cert', required: true, includeInPayload: false, providerField: 'source_provider_id' },
+            { id: 'source_module_id', label: 'Module source', type: 'module', required: true, certField: 'source_cert_id' },
+            { id: 'provider_id', label: 'Fournisseur cible', type: 'provider', includeInPayload: false },
+            { id: 'destination_cert_id', label: 'Certification cible', type: 'cert', required: true, providerField: 'provider_id' },
+            { id: 'batch_size', label: 'batch_size', type: 'number' },
+            { id: 'workers', label: 'workers', type: 'number' },
+          ],
+        },
+        fix_questions: {
+          label: 'Corriger questions',
+          fields: [
+            { id: 'provider_id', label: 'Fournisseur', type: 'provider', required: true },
+            { id: 'cert_id', label: 'Certification', type: 'cert', required: true, providerField: 'provider_id' },
+            { id: 'action', label: 'action', type: 'select', options: [
+              { value: 'assign', label: 'assign' },
+              { value: 'drag', label: 'drag' },
+              { value: 'matching', label: 'matching' },
+            ] },
+          ],
+        },
+        generate_blueprints: {
+          label: 'Générer blueprints',
+          fields: [
+            { id: 'provider_id', label: 'Fournisseur', type: 'provider', includeInPayload: false },
+            { id: 'cert_id', label: 'Certification', type: 'cert', required: true, providerField: 'provider_id' },
+            { id: 'mode', label: 'mode', type: 'select', options: [
+              { value: 'missing', label: 'missing' },
+              { value: 'all', label: 'all' },
+            ] },
+            { id: 'module_ids', label: 'Modules concernés', type: 'module-multi' },
+          ],
+        },
+      };
+    }
+
+    function ensureModalVisible(visible) {
+      const modal = document.getElementById('toolModal');
+      modal.classList.toggle('is-visible', visible);
+    }
+
+    function createSelectField(field, selectId, filterId) {
+      const wrapper = document.createElement('div');
+      const label = document.createElement('label');
+      label.textContent = field.label;
+      label.setAttribute('for', selectId);
+      const filter = document.createElement('input');
+      filter.className = 'filter-input';
+      filter.id = filterId;
+      filter.type = 'search';
+      filter.placeholder = `Rechercher ${field.label.toLowerCase()}...`;
+      const select = document.createElement('select');
+      select.id = selectId;
+      wrapper.appendChild(label);
+      wrapper.appendChild(filter);
+      wrapper.appendChild(select);
+      return { wrapper, select, filter };
+    }
+
+    function createInputField(field, inputId) {
+      const wrapper = document.createElement('div');
+      const label = document.createElement('label');
+      label.textContent = field.label;
+      label.setAttribute('for', inputId);
+      const input = document.createElement(field.type === 'lines' ? 'textarea' : 'input');
+      input.id = inputId;
+      if (field.type === 'number') {
+        input.type = 'number';
+      } else if (field.type === 'text') {
+        input.type = 'text';
+      }
+      wrapper.appendChild(label);
+      wrapper.appendChild(input);
+      return { wrapper, input };
+    }
+
+    function createSelectOptions(field, select) {
+      fillSelect(select, field.options.map((opt) => ({
+        id: opt.value,
+        label: opt.label,
+      })), 'Sélectionner');
+    }
+
+    async function buildModalForm(toolName) {
+      const modalFields = document.getElementById('modalFields');
+      clearElement(modalFields);
+      const schema = state.toolSchemas[toolName];
+      document.getElementById('modalTitle').textContent = schema ? schema.label : 'Configurer un tool';
+      if (!schema) {
+        return;
+      }
+
+      for (const field of schema.fields) {
+        if (field.type === 'provider') {
+          const { wrapper, select, filter } = createSelectField(field, `modal-${field.id}`, `modal-${field.id}-filter`);
+          const providers = await loadProviders();
+          fillSelect(select, providers, 'Sélectionner un fournisseur');
+          attachFilter(filter, select);
+          modalFields.appendChild(wrapper);
+          continue;
+        }
+
+        if (field.type === 'cert') {
+          const { wrapper, select, filter } = createSelectField(field, `modal-${field.id}`, `modal-${field.id}-filter`);
+          modalFields.appendChild(wrapper);
+          attachFilter(filter, select);
+          const providerFieldId = field.providerField || schema.fields.find((item) => item.type === 'provider')?.id;
+          const providerSelect = providerFieldId ? document.getElementById(`modal-${providerFieldId}`) : null;
+          const updateCerts = async () => {
+            const providerId = providerSelect ? providerSelect.value : '';
+            const certs = providerId ? await loadCertifications(providerId) : [];
+            fillSelect(select, certs, 'Sélectionner une certification');
+            const codeTarget = document.getElementById('modal-code_cert');
+            if (codeTarget && select.selectedOptions[0]?.dataset.code) {
+              codeTarget.value = select.selectedOptions[0].dataset.code;
+            }
+          };
+          if (providerSelect) {
+            providerSelect.addEventListener('change', updateCerts);
+          }
+          select.addEventListener('change', () => {
+            const codeTarget = document.getElementById('modal-code_cert');
+            if (codeTarget) {
+              codeTarget.value = select.selectedOptions[0]?.dataset.code || '';
+            }
+          });
+          await updateCerts();
+          continue;
+        }
+
+        if (field.type === 'module') {
+          const { wrapper, select, filter } = createSelectField(field, `modal-${field.id}`, `modal-${field.id}-filter`);
+          modalFields.appendChild(wrapper);
+          attachFilter(filter, select);
+          const certFieldId = field.certField || schema.fields.find((item) => item.id === 'source_cert_id')?.id || schema.fields.find((item) => item.type === 'cert')?.id;
+          const certSelect = certFieldId ? document.getElementById(`modal-${certFieldId}`) : null;
+          const updateModules = async () => {
+            const certId = certSelect ? certSelect.value : '';
+            const modules = certId ? await loadModules(certId) : [];
+            fillSelect(select, modules, 'Sélectionner un module');
+          };
+          if (certSelect) {
+            certSelect.addEventListener('change', updateModules);
+          }
+          await updateModules();
+          continue;
+        }
+
+        if (field.type === 'module-multi') {
+          const wrapper = document.createElement('div');
+          const label = document.createElement('label');
+          label.textContent = field.label;
+          const filter = document.createElement('input');
+          filter.className = 'filter-input';
+          filter.type = 'search';
+          filter.id = `modal-${field.id}-filter`;
+          const select = document.createElement('select');
+          select.id = `modal-${field.id}`;
+          select.multiple = true;
+          wrapper.appendChild(label);
+          wrapper.appendChild(filter);
+          wrapper.appendChild(select);
+          modalFields.appendChild(wrapper);
+          attachFilter(filter, select);
+          const certFieldId = field.certField || schema.fields.find((item) => item.type === 'cert')?.id;
+          const certSelect = certFieldId ? document.getElementById(`modal-${certFieldId}`) : null;
+          const updateModules = async () => {
+            const certId = certSelect ? certSelect.value : '';
+            const modules = certId ? await loadModules(certId) : [];
+            fillSelect(select, modules, 'Modules');
+          };
+          if (certSelect) {
+            certSelect.addEventListener('change', updateModules);
+          }
+          await updateModules();
+          continue;
+        }
+
+        if (field.type === 'select') {
+          const wrapper = document.createElement('div');
+          const label = document.createElement('label');
+          label.textContent = field.label;
+          const select = document.createElement('select');
+          select.id = `modal-${field.id}`;
+          wrapper.appendChild(label);
+          wrapper.appendChild(select);
+          modalFields.appendChild(wrapper);
+          createSelectOptions(field, select);
+          continue;
+        }
+
+        const { wrapper } = createInputField(field, `modal-${field.id}`);
+        modalFields.appendChild(wrapper);
+      }
+    }
+
+    function gatherModalPayload(toolName) {
+      const schema = state.toolSchemas[toolName];
+      const payload = {};
+      if (!schema) {
+        return payload;
+      }
+      schema.fields.forEach((field) => {
+        const include = field.includeInPayload !== false;
+        if (!include) {
+          return;
+        }
+        const element = document.getElementById(`modal-${field.id}`);
+        if (!element) {
+          return;
+        }
+        if (field.type === 'module-multi') {
+          const values = [...element.selectedOptions].map((opt) => Number(opt.value)).filter(Boolean);
+          if (values.length) {
+            payload[field.id] = values;
+          }
+          return;
+        }
+        if (field.type === 'lines') {
+          const list = parseLineList(element.value || '');
+          if (list.length) {
+            payload[field.id] = list;
+          }
+          return;
+        }
+        const rawValue = element.value;
+        if (rawValue === '') {
+          return;
+        }
+        if (field.type === 'number' || field.type === 'module' || field.type === 'cert' || field.type === 'provider') {
+          payload[field.id] = Number(rawValue);
+        } else {
+          payload[field.id] = rawValue;
+        }
+      });
+      return payload;
+    }
+
+    function findMissingFields(toolName) {
+      const schema = state.toolSchemas[toolName];
+      if (!schema) {
+        return [];
+      }
+      return schema.fields.filter((field) => field.required).filter((field) => {
+        const element = document.getElementById(`modal-${field.id}`);
+        if (!element) {
+          return false;
+        }
+        if (field.type === 'module-multi') {
+          return element.selectedOptions.length === 0;
+        }
+        return !element.value;
+      });
+    }
+
+    function addJobStatus(job) {
+      state.jobs.unshift(job);
+      renderJobStatus();
+    }
+
+    function renderJobStatus() {
+      const container = document.getElementById('jobStatusList');
+      clearElement(container);
+      if (!state.jobs.length) {
+        container.innerHTML = '<div class="empty-state">Aucune action en cours.</div>';
+        return;
+      }
+      state.jobs.forEach((job) => {
+        const card = document.createElement('div');
+        card.className = 'status-card';
+        card.innerHTML = `
+          <div class="status-title">${job.label}</div>
+          <div class="status-meta">Job ID: ${job.job_id || '-'} · Statut: ${job.status || '-'}</div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    async function refreshRuns() {
+      try {
+        const data = await fetchJSON('/api/mcp/run/history');
+        document.getElementById('runsOutput').textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        document.getElementById('runsOutput').textContent = `Erreur: ${err.message}`;
+      }
+    }
+
+    async function pollFixStatus(job) {
+      if (!job.job_id) {
+        return;
+      }
+      try {
+        const data = await fetchJSON(`/api/mcp/fix/status/${job.job_id}`);
+        job.status = data.status || job.status;
+        renderJobStatus();
+        if (data.status && data.status !== 'queued' && data.status !== 'running') {
+          job.done = true;
+        }
+      } catch (err) {
+        job.status = `error: ${err.message}`;
+        renderJobStatus();
+      }
+    }
+
+    function startJobPolling() {
+      setInterval(() => {
+        state.jobs.filter((job) => !job.done && job.job_id).forEach((job) => {
+          pollFixStatus(job);
+        });
+      }, 5000);
+    }
+
+    async function loadTools() {
+      try {
+        const data = await fetchJSON('/api/mcp/tools');
+        const tools = data.tools || [];
+        renderTools(tools);
+        fillToolSelect(tools);
+      } catch (err) {
+        document.getElementById('toolsTable').innerHTML = `<div class="empty-state">Erreur de chargement: ${err.message}</div>`;
+      }
+    }
+
+    function gatherPlanPayload() {
+      const payload = {
+        cert_id: Number(document.getElementById('planCert').value || 0) || null,
+        provider_id: Number(document.getElementById('planProvider').value || 0) || null,
+        code_cert: document.getElementById('planCodeCert').value.trim() || null,
+        batch_size: 10,
+        workers: 4,
+        fix_action: 'assign',
+        blueprint_mode: 'missing',
+        search_root: document.getElementById('planSearchRoot').value.trim() || 'C:\\\\dumps\\\\dumps',
+        file_paths: parseLineList(document.getElementById('planFilePaths').value || ''),
+      };
+
+      Object.keys(payload).forEach((key) => {
+        if (payload[key] === null || payload[key] === '' || payload[key] === undefined) {
+          delete payload[key];
+        }
+        if (Array.isArray(payload[key]) && payload[key].length === 0) {
+          delete payload[key];
+        }
+      });
+
+      return payload;
+    }
+
+    async function populatePlanProviders() {
+      const providers = await loadProviders();
+      const providerSelect = document.getElementById('planProvider');
+      fillSelect(providerSelect, providers, 'Sélectionner un fournisseur');
+      attachFilter(document.getElementById('planProviderFilter'), providerSelect);
+    }
+
+    async function updatePlanCertifications() {
+      const providerSelect = document.getElementById('planProvider');
+      const certSelect = document.getElementById('planCert');
+      const providerId = providerSelect.value;
+      const certs = providerId ? await loadCertifications(providerId) : [];
+      fillSelect(certSelect, certs, 'Sélectionner une certification');
+      attachFilter(document.getElementById('planCertFilter'), certSelect);
+    }
+
+    function updatePlanCodeCert() {
+      const certSelect = document.getElementById('planCert');
+      const codeCert = certSelect.selectedOptions[0]?.dataset.code;
+      if (codeCert) {
+        document.getElementById('planCodeCert').value = codeCert;
+      }
+    }
+
+    async function updatePlanEligibility() {
+      const eligibilityEl = document.getElementById('planEligibility');
+      eligibilityEl.textContent = '';
+      const certId = Number(document.getElementById('planCert').value || 0);
+      if (!certId) {
+        return;
+      }
+      try {
+        const data = await fetchJSON('/api/mcp/unpublished-certifications');
+        const target = (data || []).find((row) => Number(row.cert_id) === certId);
+        if (!target) {
+          eligibilityEl.textContent = 'Certification non trouvée dans le rapport MCP.';
+          return;
+        }
+        if (!target.automation_eligible) {
+          eligibilityEl.textContent = `Non éligible (pub=${target.pub_status}).`;
+          return;
+        }
+        eligibilityEl.textContent = `Éligible (pub=2). Domaine default: ${target.default_module_id || 'à créer'} · Questions par défaut: ${target.default_questions}`;
+      } catch (err) {
+        eligibilityEl.textContent = `Erreur d’éligibilité: ${err.message}`;
+      }
+    }
+
+    document.getElementById('refreshTools').addEventListener('click', loadTools);
+    document.getElementById('toolSelect').addEventListener('change', async () => {
+      const toolName = document.getElementById('toolSelect').value;
+      if (!toolName) {
+        return;
+      }
+      document.getElementById('modalError').textContent = '';
+      await buildModalForm(toolName);
+      ensureModalVisible(true);
+    });
+    document.getElementById('openToolModal').addEventListener('click', async () => {
+      const toolName = document.getElementById('toolSelect').value;
+      document.getElementById('modalError').textContent = '';
+      if (!toolName) {
+        document.getElementById('modalError').textContent = 'Sélectionnez un tool.';
+        return;
+      }
+      await buildModalForm(toolName);
+      ensureModalVisible(true);
+    });
+    document.getElementById('closeToolModal').addEventListener('click', () => ensureModalVisible(false));
+
+    document.getElementById('modalRun').addEventListener('click', async () => {
+      const toolName = document.getElementById('toolSelect').value;
+      const modalError = document.getElementById('modalError');
+      modalError.textContent = '';
+      try {
+        const missingFields = findMissingFields(toolName);
+        if (missingFields.length) {
+          modalError.textContent = `Champs requis manquants: ${missingFields.map((field) => field.label).join(', ')}`;
+          return;
+        }
+        const payload = gatherModalPayload(toolName);
+        const data = await fetchJSON('/api/mcp/call', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool: toolName, payload }),
+        });
+        document.getElementById('toolOutput').textContent = JSON.stringify(data, null, 2);
+        ensureModalVisible(false);
+        if (data.result && data.result.job_id) {
+          const job = { label: toolName, job_id: data.result.job_id, status: data.result.status || 'queued' };
+          addJobStatus(job);
+          pollFixStatus(job);
+        }
+      } catch (err) {
+        modalError.textContent = err.message;
+      }
+    });
+
+    document.getElementById('previewPlan').addEventListener('click', async () => {
+      const planError = document.getElementById('planError');
+      planError.textContent = '';
+      const planOutput = document.getElementById('planOutput');
+      try {
+        const payload = gatherPlanPayload();
+        const data = await fetchJSON('/api/mcp/orchestrate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        planOutput.textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        planError.textContent = err.message;
+        planOutput.textContent = 'Impossible de générer le plan.';
+      }
+    });
+
+    document.getElementById('runPlan').addEventListener('click', async () => {
+      const planError = document.getElementById('planError');
+      planError.textContent = '';
+      const runOutput = document.getElementById('runOutput');
+      try {
+        const payload = gatherPlanPayload();
+        const data = await fetchJSON('/api/mcp/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        runOutput.textContent = JSON.stringify(data, null, 2);
+        refreshRuns();
+      } catch (err) {
+        planError.textContent = err.message;
+        runOutput.textContent = 'Erreur pendant l’exécution du plan.';
+      }
+    });
+
+    document.getElementById('refreshRuns').addEventListener('click', refreshRuns);
+
+    document.getElementById('planProvider').addEventListener('change', async () => {
+      await updatePlanCertifications();
+      updatePlanCodeCert();
+      updatePlanEligibility();
+    });
+    document.getElementById('planCert').addEventListener('change', () => {
+      updatePlanCodeCert();
+      updatePlanEligibility();
+    });
+    buildToolSchemas();
+    loadTools();
+    populatePlanProviders().then(updatePlanCertifications).then(updatePlanCodeCert).then(updatePlanEligibility);
+    refreshRuns();
+    renderJobStatus();
+    startJobPolling();
+  </script>
+</body>
+</html>
