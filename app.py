@@ -2591,17 +2591,15 @@ def _call_internal(endpoint: str, method: str, payload: dict | None = None) -> t
         else:
             response = client.post(endpoint, json=payload, follow_redirects=True)
         try:
-            data = response.get_json()
+            data = response.get_json(silent=True)
         except Exception:
+            data = {"raw": response.get_data(as_text=True)}
+        if data is None:
             data = {"raw": response.get_data(as_text=True)}
     return data, response.status_code
 
 
-@app.route("/api/mcp/orchestrate", methods=["POST"])
-def mcp_orchestrate():
-    """Return an orchestration plan for MCP automation."""
-
-    payload = request.get_json(silent=True) or {}
+def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
     cert_id = payload.get("cert_id")
     provider_id = payload.get("provider_id")
     source_module_id = payload.get("source_module_id")
@@ -2610,36 +2608,44 @@ def mcp_orchestrate():
     try:
         cert_id = int(cert_id)
     except (TypeError, ValueError):
-        return jsonify({"status": "error", "message": "cert_id requis"}), 400
+        return {"status": "error", "message": "cert_id requis"}, 400
 
     if provider_id is not None:
         try:
             provider_id = int(provider_id)
         except (TypeError, ValueError):
-            return jsonify({"status": "error", "message": "provider_id invalide"}), 400
+            return {"status": "error", "message": "provider_id invalide"}, 400
 
     if source_module_id is not None:
         try:
             source_module_id = int(source_module_id)
         except (TypeError, ValueError):
-            return jsonify({"status": "error", "message": "source_module_id invalide"}), 400
+            return {"status": "error", "message": "source_module_id invalide"}, 400
 
     reports = db.get_unpublished_certifications_report()
     target = next((row for row in reports if row["cert_id"] == cert_id), None)
     if not target:
-        return jsonify({"status": "error", "message": "Certification introuvable"}), 404
+        return {"status": "error", "message": "Certification introuvable"}, 404
 
     if provider_id is not None and target.get("provider_id") != provider_id:
-        return jsonify({"status": "error", "message": "provider_id incohérent"}), 400
+        return {"status": "error", "message": "provider_id incohérent"}, 400
 
     if not target.get("automation_eligible"):
-        return jsonify(
+        return (
             {
                 "status": "error",
                 "message": "Certification non éligible (pub != 2).",
                 "pub_status": target.get("pub_status"),
-            }
-        ), 409
+            },
+            409,
+        )
+
+    if not source_module_id:
+        source_module_id = target.get("default_module_id")
+        if not source_module_id:
+            modules = db.get_domains_by_certification(cert_id)
+            if modules:
+                source_module_id = modules[0][0]
 
     if not source_module_id:
         source_module_id = target.get("default_module_id")
@@ -2703,13 +2709,23 @@ def mcp_orchestrate():
         },
     ]
 
-    return jsonify(
+    return (
         {
             "status": "ok",
             "certification": target,
             "plan": plan,
-        }
+        },
+        200,
     )
+
+
+@app.route("/api/mcp/orchestrate", methods=["POST"])
+def mcp_orchestrate():
+    """Return an orchestration plan for MCP automation."""
+
+    payload = request.get_json(silent=True) or {}
+    data, status = _build_mcp_plan(payload)
+    return jsonify(data), status
 
 
 @app.route("/api/mcp/tools", methods=["GET"])
@@ -2756,9 +2772,7 @@ def mcp_run():
 
     payload = request.get_json(silent=True) or {}
     stop_on_error = payload.get("stop_on_error", True)
-    plan_data, plan_status = _call_internal("/api/mcp/orchestrate", "POST", payload)
-    if not isinstance(plan_data, dict):
-        return jsonify({"status": "error", "result": plan_data}), 500
+    plan_data, plan_status = _build_mcp_plan(payload)
     if plan_status != 200:
         return jsonify({"status": "error", "result": plan_data}), plan_status
 

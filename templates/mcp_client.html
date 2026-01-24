@@ -866,6 +866,9 @@
       const certs = providerId ? await loadCertifications(providerId) : [];
       fillSelect(certSelect, certs, 'Sélectionner une certification');
       attachFilter(document.getElementById('planCertFilter'), certSelect);
+      if (certs.length) {
+        certSelect.value = certs[0].id;
+      }
     }
 
     function updatePlanCodeCert() {
