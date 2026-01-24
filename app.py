@@ -2060,11 +2060,66 @@ def mcp_monitoring():
     return render_template("mcp.html")
 
 
+@app.route("/mcp/client")
+def mcp_client():
+    return render_template("mcp_client.html")
+
+
 @app.route("/api/mcp/unpublished-certifications")
 def mcp_unpublished_certifications():
     """Return unpublished certifications with default domain metrics for MCP."""
 
     return jsonify(db.get_unpublished_certifications_report())
+
+
+@app.route("/api/mcp/client/providers")
+def mcp_client_providers():
+    """Return providers for MCP client selects."""
+
+    providers = [
+        {"id": provider_id, "name": name}
+        for provider_id, name in db.get_providers()
+    ]
+    return jsonify({"providers": providers})
+
+
+@app.route("/api/mcp/client/certifications/<int:provider_id>")
+def mcp_client_certifications(provider_id: int):
+    """Return certifications with codes for MCP client selects."""
+
+    certifications = [
+        {"id": cert_id, "name": name, "code": code}
+        for cert_id, name, code in db.get_certifications_by_provider_with_code(provider_id)
+    ]
+    return jsonify({"certifications": certifications})
+
+
+@app.route("/api/mcp/client/modules/<int:cert_id>")
+def mcp_client_modules(cert_id: int):
+    """Return modules (domains) for MCP client selects."""
+
+    modules = [
+        {"id": module_id, "name": name}
+        for module_id, name in db.get_domains_by_certification(cert_id)
+    ]
+    return jsonify({"modules": modules})
+
+
+@app.route("/api/mcp/client/certifications/pub", methods=["POST"])
+def mcp_client_update_cert_pub():
+    """Update certification pub status for MCP client."""
+
+    payload = request.get_json(silent=True) or {}
+    cert_id = payload.get("cert_id")
+    pub_status = payload.get("pub")
+    try:
+        cert_id = int(cert_id)
+        pub_status = int(pub_status)
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "cert_id ou pub invalide"}), 400
+
+    db.update_certification_pub(cert_id, pub_status)
+    return jsonify({"status": "ok", "cert_id": cert_id, "pub": pub_status})
 
 
 @app.route("/populate", methods=["GET", "POST"])
