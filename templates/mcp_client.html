@@ -267,18 +267,6 @@
           <select id="planCert"></select>
         </div>
         <div>
-          <label for="planPubState">State (pub)</label>
-          <select id="planPubState">
-            <option value="">Sélectionner un état</option>
-            <option value="0">offline (0)</option>
-            <option value="1">online (1)</option>
-            <option value="2">autorun (2)</option>
-            <option value="3">update (3)</option>
-          </select>
-          <button class="pill-button" id="planPubUpdate" type="button" style="margin-top: 0.6rem;">Mettre à jour</button>
-          <div class="helper" id="planPubStatus"></div>
-        </div>
-        <div>
           <label for="planCodeCert">code_cert</label>
           <input id="planCodeCert" type="text" placeholder="AZ-900">
         </div>
@@ -1019,31 +1007,6 @@
       await updatePlanModules();
     });
     document.getElementById('planCert').addEventListener('change', updatePlanModules);
-    document.getElementById('planPubUpdate').addEventListener('click', async () => {
-      const statusEl = document.getElementById('planPubStatus');
-      statusEl.textContent = '';
-      const certId = document.getElementById('planCert').value;
-      const pubValue = document.getElementById('planPubState').value;
-      if (!certId) {
-        statusEl.textContent = 'Sélectionnez une certification.';
-        return;
-      }
-      if (pubValue === '') {
-        statusEl.textContent = 'Sélectionnez un état.';
-        return;
-      }
-      try {
-        const data = await fetchJSON('/api/mcp/client/certifications/pub', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cert_id: Number(certId), pub: Number(pubValue) }),
-        });
-        statusEl.textContent = `Mise à jour OK (pub=${data.pub}).`;
-      } catch (err) {
-        statusEl.textContent = `Erreur: ${err.message}`;
-      }
-    });
-
     buildToolSchemas();
     loadTools();
     populatePlanProviders().then(updatePlanCertifications).then(updatePlanModules);
