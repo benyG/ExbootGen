@@ -2587,9 +2587,9 @@ def _call_internal(endpoint: str, method: str, payload: dict | None = None) -> t
     payload = payload or {}
     with app.test_client() as client:
         if method.upper() == "GET":
-            response = client.get(endpoint, query_string=payload)
+            response = client.get(endpoint, query_string=payload, follow_redirects=True)
         else:
-            response = client.post(endpoint, json=payload)
+            response = client.post(endpoint, json=payload, follow_redirects=True)
         try:
             data = response.get_json()
         except Exception:
@@ -2641,6 +2641,13 @@ def mcp_orchestrate():
             }
         ), 409
 
+    if not source_module_id:
+        source_module_id = target.get("default_module_id")
+        if not source_module_id:
+            modules = db.get_domains_by_certification(cert_id)
+            if modules:
+                source_module_id = modules[0][0]
+
     plan = [
         {
             "step": 3,
@@ -2658,7 +2665,7 @@ def mcp_orchestrate():
                 "cert_id": cert_id,
                 "code_cert": code_cert or target.get("cert_name"),
                 "file_paths": payload.get("file_paths"),
-                "search_root": payload.get("search_root"),
+                "search_root": payload.get("search_root", "C:\\\\dumps\\\\dumps"),
             },
         },
         {
@@ -2670,7 +2677,7 @@ def mcp_orchestrate():
                 "source_module_id": source_module_id,
                 "destination_cert_id": cert_id,
                 "batch_size": payload.get("batch_size", 10),
-                "workers": payload.get("workers"),
+                "workers": payload.get("workers", 4),
             },
         },
         {

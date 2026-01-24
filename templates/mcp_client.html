@@ -271,29 +271,8 @@
           <input id="planCodeCert" type="text" placeholder="AZ-900">
         </div>
         <div>
-          <label for="planSourceModuleFilter">Recherche module source</label>
-          <input class="filter-input" id="planSourceModuleFilter" type="search" placeholder="Filtrer modules...">
-          <select id="planSourceModule"></select>
-        </div>
-        <div>
-          <label for="planBatchSize">batch_size</label>
-          <input id="planBatchSize" type="number" placeholder="10">
-        </div>
-        <div>
-          <label for="planWorkers">workers</label>
-          <input id="planWorkers" type="number" placeholder="4">
-        </div>
-        <div>
-          <label for="planFixAction">fix_action</label>
-          <input id="planFixAction" type="text" placeholder="assign">
-        </div>
-        <div>
-          <label for="planBlueprintMode">blueprint_mode</label>
-          <input id="planBlueprintMode" type="text" placeholder="missing">
-        </div>
-        <div>
           <label for="planSearchRoot">search_root</label>
-          <input id="planSearchRoot" type="text" placeholder="/data/pdfs">
+          <input id="planSearchRoot" type="text" placeholder="C:\\dumps\\dumps" value="C:\\dumps\\dumps">
         </div>
       </div>
       <div class="grid grid-2" style="margin-top: 1.2rem;">
@@ -301,12 +280,8 @@
           <label for="planFilePaths">file_paths (une ligne par fichier)</label>
           <textarea id="planFilePaths"></textarea>
         </div>
-        <div>
-          <label for="planBlueprintModules">Modules pour blueprints</label>
-          <input class="filter-input" id="planBlueprintModuleFilter" type="search" placeholder="Filtrer modules...">
-          <select id="planBlueprintModules" multiple></select>
-        </div>
       </div>
+      <div class="helper" id="planEligibility"></div>
       <div class="helper" id="planError"></div>
       <div class="output" id="planOutput">Aucun plan généré.</div>
       <div class="output" id="runOutput" style="margin-top: 1rem;">Aucune exécution pour l’instant.</div>
@@ -857,16 +832,12 @@
         cert_id: Number(document.getElementById('planCert').value || 0) || null,
         provider_id: Number(document.getElementById('planProvider').value || 0) || null,
         code_cert: document.getElementById('planCodeCert').value.trim() || null,
-        source_module_id: Number(document.getElementById('planSourceModule').value || 0) || null,
-        batch_size: Number(document.getElementById('planBatchSize').value || 0) || null,
-        workers: Number(document.getElementById('planWorkers').value || 0) || null,
-        fix_action: document.getElementById('planFixAction').value.trim() || null,
-        blueprint_mode: document.getElementById('planBlueprintMode').value.trim() || null,
-        search_root: document.getElementById('planSearchRoot').value.trim() || null,
+        batch_size: 10,
+        workers: 4,
+        fix_action: 'assign',
+        blueprint_mode: 'missing',
+        search_root: document.getElementById('planSearchRoot').value.trim() || 'C:\\\\dumps\\\\dumps',
         file_paths: parseLineList(document.getElementById('planFilePaths').value || ''),
-        blueprint_module_ids: [...document.getElementById('planBlueprintModules').selectedOptions]
-          .map((opt) => Number(opt.value))
-          .filter(Boolean),
       };
 
       Object.keys(payload).forEach((key) => {
@@ -897,19 +868,35 @@
       attachFilter(document.getElementById('planCertFilter'), certSelect);
     }
 
-    async function updatePlanModules() {
+    function updatePlanCodeCert() {
       const certSelect = document.getElementById('planCert');
-      const certId = certSelect.value;
-      const modules = certId ? await loadModules(certId) : [];
-      const sourceSelect = document.getElementById('planSourceModule');
-      const blueprintSelect = document.getElementById('planBlueprintModules');
-      fillSelect(sourceSelect, modules, 'Sélectionner un module');
-      fillSelect(blueprintSelect, modules, 'Modules');
-      attachFilter(document.getElementById('planSourceModuleFilter'), sourceSelect);
-      attachFilter(document.getElementById('planBlueprintModuleFilter'), blueprintSelect);
       const codeCert = certSelect.selectedOptions[0]?.dataset.code;
       if (codeCert) {
         document.getElementById('planCodeCert').value = codeCert;
+      }
+    }
+
+    async function updatePlanEligibility() {
+      const eligibilityEl = document.getElementById('planEligibility');
+      eligibilityEl.textContent = '';
+      const certId = Number(document.getElementById('planCert').value || 0);
+      if (!certId) {
+        return;
+      }
+      try {
+        const data = await fetchJSON('/api/mcp/unpublished-certifications');
+        const target = (data || []).find((row) => Number(row.cert_id) === certId);
+        if (!target) {
+          eligibilityEl.textContent = 'Certification non trouvée dans le rapport MCP.';
+          return;
+        }
+        if (!target.automation_eligible) {
+          eligibilityEl.textContent = `Non éligible (pub=${target.pub_status}).`;
+          return;
+        }
+        eligibilityEl.textContent = `Éligible (pub=2). Domaine default: ${target.default_module_id || 'à créer'} · Questions par défaut: ${target.default_questions}`;
+      } catch (err) {
+        eligibilityEl.textContent = `Erreur d’éligibilité: ${err.message}`;
       }
     }
 
@@ -1004,12 +991,16 @@
 
     document.getElementById('planProvider').addEventListener('change', async () => {
       await updatePlanCertifications();
-      await updatePlanModules();
+      updatePlanCodeCert();
+      updatePlanEligibility();
     });
-    document.getElementById('planCert').addEventListener('change', updatePlanModules);
+    document.getElementById('planCert').addEventListener('change', () => {
+      updatePlanCodeCert();
+      updatePlanEligibility();
+    });
     buildToolSchemas();
     loadTools();
-    populatePlanProviders().then(updatePlanCertifications).then(updatePlanModules);
+    populatePlanProviders().then(updatePlanCertifications).then(updatePlanCodeCert).then(updatePlanEligibility);
     refreshRuns();
     renderJobStatus();
     startJobPolling();
