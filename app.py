@@ -2647,6 +2647,13 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
             if modules:
                 source_module_id = modules[0][0]
 
+    if not source_module_id:
+        source_module_id = target.get("default_module_id")
+        if not source_module_id:
+            modules = db.get_domains_by_certification(cert_id)
+            if modules:
+                source_module_id = modules[0][0]
+
     plan = [
         {
             "step": 3,
