@@ -2757,6 +2757,8 @@ def mcp_run():
     payload = request.get_json(silent=True) or {}
     stop_on_error = payload.get("stop_on_error", True)
     plan_data, plan_status = _call_internal("/api/mcp/orchestrate", "POST", payload)
+    if not isinstance(plan_data, dict):
+        return jsonify({"status": "error", "result": plan_data}), 500
     if plan_status != 200:
         return jsonify({"status": "error", "result": plan_data}), plan_status
 
