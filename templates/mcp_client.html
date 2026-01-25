@@ -278,11 +278,13 @@
           <label for="planProviderFilter">Recherche fournisseur</label>
           <input class="filter-input" id="planProviderFilter" type="search" placeholder="Filtrer fournisseurs...">
           <select id="planProvider"></select>
+          <div class="helper">Optionnel (l’orchestrateur choisira automatiquement si vide).</div>
         </div>
         <div>
           <label for="planCertFilter">Recherche certification</label>
           <input class="filter-input" id="planCertFilter" type="search" placeholder="Filtrer certifications...">
           <select id="planCert"></select>
+          <div class="helper">Optionnel (sélection automatique d’une certification éligible).</div>
         </div>
         <div>
           <label for="planCodeCert">code_cert</label>
@@ -889,9 +891,6 @@
       const certs = providerId ? await loadCertifications(providerId) : [];
       fillSelect(certSelect, certs, 'Sélectionner une certification');
       attachFilter(document.getElementById('planCertFilter'), certSelect);
-      if (certs.length) {
-        certSelect.value = certs[0].id;
-      }
     }
 
     function updatePlanCodeCert() {
@@ -907,13 +906,14 @@
       eligibilityEl.textContent = '';
       const certId = Number(document.getElementById('planCert').value || 0);
       if (!certId) {
+        eligibilityEl.textContent = 'Sélection automatique active : la première certification éligible sera utilisée.';
         return;
       }
       try {
         const data = await fetchJSON('/api/mcp/unpublished-certifications');
         const target = (data || []).find((row) => Number(row.cert_id) === certId);
         if (!target) {
-          eligibilityEl.textContent = 'Certification non trouvée dans le rapport MCP.';
+          eligibilityEl.textContent = 'Certification non trouvée dans la liste éligible.';
           return;
         }
         if (!target.automation_eligible) {
