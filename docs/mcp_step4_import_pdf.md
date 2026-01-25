@@ -13,7 +13,7 @@ Cette étape expose un endpoint MCP pour importer automatiquement des questions 
     - `code_cert` (optionnel) : utilisé pour résoudre le domaine default.
   - Résolution du domaine :
     - si `module_id` est absent, l’endpoint cherche un module avec `modules.code_cert = code_cert`.
-    - si `code_cert` est absent mais `cert_id` fourni, il est dérivé depuis `courses.code`/`courses.name`.
+    - si `code_cert` est absent mais `cert_id` fourni, il est dérivé depuis `courses.descr2` (fallback sur un `modules.code_cert`).
   - Import :
     - extraction PDF → détection des questions → insertion en DB.
   - Retour : métriques globales + métriques par fichier.
@@ -21,7 +21,7 @@ Cette étape expose un endpoint MCP pour importer automatiquement des questions 
 ## Recherche automatique via `code_cert`
 
 - Si `file_paths` n’est pas fourni, l’endpoint cherche des PDF dont le nom commence par
-  `{code_cert}________` (8 underscores) dans `search_root` (ou `PDF_SEARCH_ROOT` par défaut).
+  `{code_cert}_` (un underscore) dans `search_root` (ou `PDF_SEARCH_ROOT` par défaut).
 
 ## Contraintes de sécurité
 
