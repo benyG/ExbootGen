@@ -591,6 +591,7 @@ def get_unpublished_certifications_report():
             p.name AS provider_name,
             c.id AS cert_id,
             c.name AS cert_name,
+            c.descr2 AS code_cert,
             c.pub AS pub_status,
             (
                 SELECT COUNT(q_all.id)
@@ -646,13 +647,14 @@ def get_unpublished_certifications_report():
                 "provider_name": row[1],
                 "cert_id": row[2],
                 "cert_name": row[3],
-                "pub_status": row[4],
-                "total_questions": int(row[5] or 0),
-                "default_questions": int(row[6] or 0),
-                "default_module_id": row[7],
-                "default_cert_id": row[8],
-                "default_provider_id": row[9],
-                "automation_eligible": bool(row[4] == 2),
+                "pub_status": row[5],
+                "code_cert": row[4] or "",
+                "total_questions": int(row[6] or 0),
+                "default_questions": int(row[7] or 0),
+                "default_module_id": row[8],
+                "default_cert_id": row[9],
+                "default_provider_id": row[10],
+                "automation_eligible": bool(row[5] == 2),
             }
         )
     return results

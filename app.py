@@ -2717,7 +2717,7 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
             "method": "POST",
             "payload": {
                 "cert_id": cert_id,
-                "code_cert": code_cert or target.get("cert_name"),
+                "code_cert": code_cert or target.get("code_cert"),
                 "file_paths": payload.get("file_paths"),
                 "search_root": payload.get("search_root", "C:\\\\dumps\\\\dumps"),
             },
