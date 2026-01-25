@@ -2767,6 +2767,149 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
     )
 
 
+def _execute_mcp_plan(
+    context: JobContext,
+    payload: dict,
+    plan_data: dict,
+    *,
+    stop_on_error: bool = True,
+) -> list[dict]:
+    """Run MCP plan steps and return the results list."""
+
+    results: list[dict] = []
+    steps = plan_data.get("plan", []) or []
+    total_steps = len(steps)
+    context.update_counters(
+        total_steps=total_steps,
+        completed_steps=0,
+        progress=0,
+        current_step=None,
+        current_name=None,
+    )
+
+    for idx, step in enumerate(steps, start=1):
+        context.wait_if_paused()
+        endpoint = step.get("endpoint")
+        method = step.get("method", "POST")
+        step_payload = step.get("payload") or {}
+        context.update_counters(
+            current_step=idx,
+            current_name=step.get("name"),
+            current_endpoint=endpoint,
+        )
+        context.log(f"Étape {idx}/{total_steps}: {step.get('name')} → {endpoint}")
+        data, status = _call_internal(endpoint, method, step_payload)
+        entry = {
+            "step": step.get("step"),
+            "name": step.get("name"),
+            "endpoint": endpoint,
+            "status_code": status,
+            "result": data,
+        }
+        results.append(entry)
+        progress = round((idx / total_steps) * 100, 1) if total_steps else 100
+        context.update_counters(
+            completed_steps=idx,
+            progress=progress,
+            last_status=status,
+        )
+        if stop_on_error and status >= 400:
+            raise RuntimeError(f"Étape {step.get('name')} échouée (status {status}).")
+
+    return results
+
+
+def _launch_mcp_run_inline(
+    job_id: str,
+    payload: dict,
+    plan_data: dict,
+    *,
+    stop_on_error: bool = True,
+) -> str:
+    """Run MCP plan in a local background thread."""
+
+    def _run_inline() -> None:
+        context = JobContext(job_store, job_id)
+        set_cached_status(job_id, "running")
+        initialise_job(
+            job_store,
+            job_id=job_id,
+            description="mcp-run",
+            metadata={
+                "cert_id": payload.get("cert_id"),
+                "provider_id": payload.get("provider_id"),
+                "steps": len(plan_data.get("plan", []) or []),
+            },
+        )
+        job_store.set_status(job_id, "running")
+        try:
+            results = _execute_mcp_plan(
+                context,
+                payload,
+                plan_data,
+                stop_on_error=stop_on_error,
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging only
+            app.logger.exception("MCP run échoué")
+            context.set_status("failed", error=str(exc))
+            MCP_RUN_HISTORY.append(
+                {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "status": "error",
+                    "job_id": job_id,
+                    "results": results if "results" in locals() else [],
+                }
+            )
+        else:
+            context.set_status("completed")
+            MCP_RUN_HISTORY.append(
+                {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "status": "ok",
+                    "job_id": job_id,
+                    "results": results,
+                }
+            )
+
+    threading.Thread(
+        target=_run_inline,
+        name=f"mcp-run-{job_id}",
+        daemon=True,
+    ).start()
+    return job_id
+
+
+def _enqueue_mcp_run(
+    payload: dict,
+    stop_on_error: bool,
+    plan_data: dict,
+    *,
+    job_id: str | None = None,
+) -> dict:
+    """Enqueue an MCP run using Celery or fallback to inline."""
+
+    job_id = job_id or uuid.uuid4().hex
+
+    if _is_task_queue_disabled():
+        _launch_mcp_run_inline(job_id, payload, plan_data, stop_on_error=stop_on_error)
+        return {"status": "queued", "job_id": job_id, "mode": "inline"}
+
+    try:
+        async_result = mcp_run_job.apply_async(
+            args=(payload, stop_on_error, plan_data),
+            task_id=job_id,
+        )
+    except QUEUE_EXCEPTIONS as exc:  # pragma: no cover - defensive
+        _disable_task_queue(exc)
+        _launch_mcp_run_inline(job_id, payload, plan_data, stop_on_error=stop_on_error)
+        return {"status": "queued", "job_id": job_id, "mode": "inline"}
+
+    if getattr(celery_app.conf, "task_always_eager", False):
+        return {"status": "queued", "job_id": job_id, "mode": "eager"}
+
+    return {"status": "queued", "job_id": async_result.id, "mode": "celery"}
+
+
 @app.route("/api/mcp/orchestrate", methods=["POST"])
 def mcp_orchestrate():
     """Return an orchestration plan for MCP automation."""
@@ -2816,7 +2959,7 @@ def mcp_call():
 
 @app.route("/api/mcp/run", methods=["POST"])
 def mcp_run():
-    """Execute the MCP plan sequentially."""
+    """Execute the MCP plan sequentially in the background."""
 
     payload = request.get_json(silent=True) or {}
     stop_on_error = payload.get("stop_on_error", True)
@@ -2824,40 +2967,14 @@ def mcp_run():
     if plan_status != 200:
         return jsonify({"status": "error", "result": plan_data}), plan_status
 
-    results = []
-    for step in plan_data.get("plan", []):
-        endpoint = step.get("endpoint")
-        method = step.get("method", "POST")
-        step_payload = step.get("payload") or {}
-        data, status = _call_internal(endpoint, method, step_payload)
-        entry = {
-            "step": step.get("step"),
-            "name": step.get("name"),
-            "endpoint": endpoint,
-            "status_code": status,
-            "result": data,
-        }
-        results.append(entry)
-        if stop_on_error and status >= 400:
-            summary = {"status": "error", "results": results}
-            MCP_RUN_HISTORY.append(
-                {
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "status": "error",
-                    "results": results,
-                }
-            )
-            return jsonify(summary), status
-
-    summary = {"status": "ok", "results": results}
-    MCP_RUN_HISTORY.append(
+    job_info = _enqueue_mcp_run(payload, stop_on_error, plan_data)
+    return jsonify(
         {
-            "timestamp": datetime.utcnow().isoformat(),
-            "status": "ok",
-            "results": results,
+            "status": "queued",
+            "job": job_info,
+            "plan": plan_data.get("plan", []),
         }
     )
-    return jsonify(summary)
 
 
 @app.route("/api/mcp/run/history", methods=["GET"])
@@ -2868,6 +2985,72 @@ def mcp_run_history():
     if limit <= 0:
         limit = 20
     return jsonify({"runs": MCP_RUN_HISTORY[-limit:]})
+
+
+@celery_app.task(bind=True, name="mcp.run")
+def mcp_run_job(self, payload: dict, stop_on_error: bool, plan_data: dict) -> None:
+    """Celery task wrapper for MCP run."""
+
+    job_id = self.request.id
+    context = JobContext(job_store, job_id)
+    set_cached_status(job_id, "running")
+    try:
+        initialise_job(
+            job_store,
+            job_id=job_id,
+            description="mcp-run",
+            metadata={
+                "cert_id": payload.get("cert_id"),
+                "provider_id": payload.get("provider_id"),
+                "steps": len(plan_data.get("plan", []) or []),
+            },
+        )
+        job_store.set_status(job_id, "running")
+    except JobStoreError:
+        app.logger.warning(
+            "MCP run %s: job store indisponible, poursuite en mode cache local.",
+            job_id,
+        )
+
+    try:
+        results = _execute_mcp_plan(
+            context,
+            payload,
+            plan_data,
+            stop_on_error=stop_on_error,
+        )
+    except Exception as exc:  # pragma: no cover - defensive logging only
+        app.logger.exception("MCP run échoué")
+        context.set_status("failed", error=str(exc))
+        MCP_RUN_HISTORY.append(
+            {
+                "timestamp": datetime.utcnow().isoformat(),
+                "status": "error",
+                "job_id": job_id,
+                "results": results if "results" in locals() else [],
+            }
+        )
+        return
+
+    context.set_status("completed")
+    MCP_RUN_HISTORY.append(
+        {
+            "timestamp": datetime.utcnow().isoformat(),
+            "status": "ok",
+            "job_id": job_id,
+            "results": results,
+        }
+    )
+
+
+@app.route("/api/mcp/run/status/<job_id>", methods=["GET"])
+def mcp_run_status(job_id: str):
+    """Return status for an MCP run job."""
+
+    data, error_response, status = _load_job_status(job_id)
+    if error_response is not None:
+        return error_response, status
+    return jsonify(data)
 
 
 def run_population(
