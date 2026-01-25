@@ -1907,9 +1907,16 @@ def require_login():
     if request.endpoint in allowed_endpoints or request.endpoint is None:
         return None
 
-    if "/api/mcp/" in request.path and _mcp_token_valid():
-        return None
     if "/api/mcp/" in request.path:
+        if _mcp_token_valid():
+            return None
+        if _is_authenticated():
+            if _session_expired(session.get("last_activity")):
+                session.clear()
+                return jsonify({"status": "error", "message": "Session expirée"}), 401
+            session.permanent = True
+            session["last_activity"] = time.time()
+            return None
         return jsonify({"status": "error", "message": "Authentification MCP requise"}), 401
 
     if _is_authenticated():
