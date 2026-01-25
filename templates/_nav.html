@@ -92,6 +92,7 @@
       <a href="{{ url_for('dashboard') }}" data-route="{{ url_for('dashboard') }}"{% if active_page|default('') == 'dashboard' %} class="active"{% endif %}>Dashboard</a>
       <a href="{{ url_for('reports') }}" data-route="{{ url_for('reports') }}"{% if active_page|default('') == 'reports' %} class="active"{% endif %}>Reports</a>
       <a href="{{ url_for('mcp_monitoring') }}" data-route="{{ url_for('mcp_monitoring') }}"{% if active_page|default('') == 'mcp' %} class="active"{% endif %}>MCP</a>
+      <a href="{{ url_for('mcp_client') }}" data-route="{{ url_for('mcp_client') }}"{% if active_page|default('') == 'mcp_client' %} class="active"{% endif %}>Client MCP</a>
     </div>
   </div>
 </nav>
