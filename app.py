@@ -208,6 +208,21 @@ def _env_float(name: str) -> float | None:
         raise ValueError(f"{name} doit être un nombre") from exc
 
 
+def _mcp_token_valid() -> bool:
+    """Return True when the request carries the MCP API token."""
+
+    token = os.getenv("MCP_API_TOKEN")
+    if not token:
+        return False
+    header_token = request.headers.get("X-MCP-Token", "")
+    if header_token and header_token == token:
+        return True
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer ") and auth_header[7:] == token:
+        return True
+    return False
+
+
 def _redis_socket_options_from_env() -> Dict[str, object]:
     """Build a mapping of Redis socket options sourced from environment variables."""
 
@@ -1892,6 +1907,9 @@ def require_login():
     if request.endpoint in allowed_endpoints or request.endpoint is None:
         return None
 
+    if request.path.startswith("/api/mcp/") and _mcp_token_valid():
+        return None
+
     if _is_authenticated():
         if _session_expired(session.get("last_activity")):
             session.clear()
@@ -2647,13 +2665,6 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
             if modules:
                 source_module_id = modules[0][0]
 
-    if not source_module_id:
-        source_module_id = target.get("default_module_id")
-        if not source_module_id:
-            modules = db.get_domains_by_certification(cert_id)
-            if modules:
-                source_module_id = modules[0][0]
-
     plan = [
         {
             "step": 3,
@@ -2671,7 +2682,7 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
                 "cert_id": cert_id,
                 "code_cert": code_cert or target.get("cert_name"),
                 "file_paths": payload.get("file_paths"),
-                "search_root": payload.get("search_root", "C:\\\\dumps\\\\dumps"),
+                "search_root": payload.get("search_root", "C:\\dumps\\dumps"),
             },
         },
         {

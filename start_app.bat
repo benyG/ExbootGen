@@ -35,13 +35,25 @@ set "X_API_ACCESS_TOKEN_SECRET=votre-access-token-secret"
 REM === Paramètres Redis / Celery ===
 set "REDIS_HOST=redis-xxxxxxxxxxxx"
 set "REDIS_PASSWORD=xxxxxxxxxxxxxxx"
+set "REDIS_URL=redis://:%REDIS_PASSWORD%@%REDIS_HOST%/0"
 
 set "JOB_STORE_URL=redis://:%REDIS_PASSWORD%@%REDIS_HOST%/0"
 set "CELERY_BROKER_URL=redis://:%REDIS_PASSWORD%@%REDIS_HOST%/0"
 set "CELERY_RESULT_BACKEND=redis://:%REDIS_PASSWORD%@%REDIS_HOST%/0"
+set "CELERY_REDIS_SOCKET_KEEPALIVE=1"
+set "CELERY_REDIS_HEALTH_CHECK_INTERVAL=30"
+set "CELERY_POOL_LIMIT=20"
+set "CELERY_REDIS_MAX_CONNECTIONS=40"
+set "CELERY_MAX_CONNECTIONS=40"
+set "CELERY_RESULT_MAX_CONNECTIONS=40"
 
 REM === Mot de passe de l'interface ===
 set "GUI_PASSWORD=admin"
+set "SECRET_KEY=exboot-secret-key"
+set "SESSION_INACTIVITY_MINUTES=30"
+
+REM === Token MCP (authentification API) ===
+set "MCP_API_TOKEN=change-me"
 
 REM === Google Cloud Storage (upload images depuis l'éditeur) ===
 REM  Point GOOGLE_APPLICATION_CREDENTIALS vers la clé JSON du compte de service
