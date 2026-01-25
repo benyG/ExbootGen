@@ -1909,6 +1909,8 @@ def require_login():
 
     if request.path.startswith("/api/mcp/") and _mcp_token_valid():
         return None
+    if request.path.startswith("/api/mcp/"):
+        return jsonify({"status": "error", "message": "Authentification MCP requise"}), 401
 
     if _is_authenticated():
         if _session_expired(session.get("last_activity")):
@@ -2603,11 +2605,25 @@ MCP_RUN_HISTORY: list[dict] = []
 
 def _call_internal(endpoint: str, method: str, payload: dict | None = None) -> tuple[dict, int]:
     payload = payload or {}
+    headers = {}
+    token = os.getenv("MCP_API_TOKEN")
+    if token:
+        headers["X-MCP-Token"] = token
     with app.test_client() as client:
         if method.upper() == "GET":
-            response = client.get(endpoint, query_string=payload, follow_redirects=True)
+            response = client.get(
+                endpoint,
+                query_string=payload,
+                follow_redirects=True,
+                headers=headers,
+            )
         else:
-            response = client.post(endpoint, json=payload, follow_redirects=True)
+            response = client.post(
+                endpoint,
+                json=payload,
+                follow_redirects=True,
+                headers=headers,
+            )
         try:
             data = response.get_json(silent=True)
         except Exception:
