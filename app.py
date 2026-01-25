@@ -1907,9 +1907,9 @@ def require_login():
     if request.endpoint in allowed_endpoints or request.endpoint is None:
         return None
 
-    if request.path.startswith("/api/mcp/") and _mcp_token_valid():
+    if "/api/mcp/" in request.path and _mcp_token_valid():
         return None
-    if request.path.startswith("/api/mcp/"):
+    if "/api/mcp/" in request.path:
         return jsonify({"status": "error", "message": "Authentification MCP requise"}), 401
 
     if _is_authenticated():
@@ -2698,7 +2698,7 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
                 "cert_id": cert_id,
                 "code_cert": code_cert or target.get("cert_name"),
                 "file_paths": payload.get("file_paths"),
-                "search_root": payload.get("search_root", "C:\\dumps\\dumps"),
+                "search_root": payload.get("search_root", "C:\\\\dumps\\\\dumps"),
             },
         },
         {
