@@ -223,6 +223,24 @@
 
     <section class="glass-card">
       <div class="section-header">
+        <h2>Authentification MCP</h2>
+      </div>
+      <div class="grid grid-2">
+        <div>
+          <label for="mcpToken">MCP API Token</label>
+          <input id="mcpToken" type="password" placeholder="Saisissez votre token MCP">
+          <div class="helper">Le token est stocké localement dans votre navigateur (localStorage).</div>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button class="pill-button" id="saveMcpToken" type="button">Enregistrer</button>
+          <div class="helper" id="mcpTokenStatus"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="glass-card">
+      <div class="section-header">
         <h2>Découverte des tools MCP</h2>
         <button class="pill-button" id="refreshTools">Rafraîchir</button>
       </div>
@@ -340,7 +358,12 @@
     };
 
     async function fetchJSON(url, options) {
-      const resp = await fetch(url, options);
+      const token = localStorage.getItem('mcpApiToken') || '';
+      const headers = { ...(options && options.headers ? options.headers : {}) };
+      if (token) {
+        headers['X-MCP-Token'] = token;
+      }
+      const resp = await fetch(url, { ...(options || {}), headers });
       if (!resp.ok) {
         const text = await resp.text();
         throw new Error(`${resp.status} ${resp.statusText} - ${text}`);
@@ -1007,6 +1030,28 @@
     refreshRuns();
     renderJobStatus();
     startJobPolling();
+
+    const tokenInput = document.getElementById('mcpToken');
+    const tokenStatus = document.getElementById('mcpTokenStatus');
+    const saveTokenBtn = document.getElementById('saveMcpToken');
+    const storedToken = localStorage.getItem('mcpApiToken');
+    if (storedToken) {
+      tokenInput.value = storedToken;
+      tokenStatus.textContent = 'Token chargé depuis le navigateur.';
+    }
+    saveTokenBtn.addEventListener('click', () => {
+      const value = tokenInput.value.trim();
+      if (!value) {
+        localStorage.removeItem('mcpApiToken');
+        tokenStatus.textContent = 'Token supprimé.';
+        return;
+      }
+      localStorage.setItem('mcpApiToken', value);
+      tokenStatus.textContent = 'Token enregistré.';
+      loadTools();
+      populatePlanProviders().then(updatePlanCertifications).then(updatePlanCodeCert).then(updatePlanEligibility);
+      refreshRuns();
+    });
   </script>
 </body>
 </html>
