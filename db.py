@@ -367,6 +367,16 @@ def get_certifications_by_provider_with_code(provider_id):
     return certifications
 
 
+def update_certification_pub(cert_id: int, pub_status: int) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "UPDATE courses SET pub = %s WHERE id = %s"
+    cursor.execute(query, (pub_status, cert_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
 def get_certifications_by_provider_with_code(provider_id):
     conn = get_connection()
     cursor = conn.cursor()
