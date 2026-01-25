@@ -2698,7 +2698,7 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
                 "cert_id": cert_id,
                 "code_cert": code_cert or target.get("cert_name"),
                 "file_paths": payload.get("file_paths"),
-                "search_root": payload.get("search_root", "C:\\\\dumps\\\\dumps"),
+                "search_root": payload.get("search_root", "C:\\dumps\\dumps"),
             },
         },
         {
