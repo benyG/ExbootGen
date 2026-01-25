@@ -582,7 +582,7 @@ def get_domains_missing_answers_by_type():
 
 
 def get_unpublished_certifications_report():
-    """Return unpublished certifications (pub != 1) with automation eligibility."""
+    """Return unpublished certifications eligible for automation (pub = 2)."""
     conn = get_connection()
     cursor = conn.cursor()
     query = """
@@ -631,7 +631,7 @@ def get_unpublished_certifications_report():
             ) AS default_provider_id
         FROM courses c
         JOIN provs p ON p.id = c.prov
-        WHERE c.pub <> 1
+        WHERE c.pub = 2
         ORDER BY p.name, c.name
     """
     cursor.execute(query)

@@ -2639,10 +2639,11 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
     source_module_id = payload.get("source_module_id")
     code_cert = (payload.get("code_cert") or "").strip()
 
-    try:
-        cert_id = int(cert_id)
-    except (TypeError, ValueError):
-        return {"status": "error", "message": "cert_id requis"}, 400
+    if cert_id is not None:
+        try:
+            cert_id = int(cert_id)
+        except (TypeError, ValueError):
+            return {"status": "error", "message": "cert_id invalide"}, 400
 
     if provider_id is not None:
         try:
@@ -2657,22 +2658,42 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
             return {"status": "error", "message": "source_module_id invalide"}, 400
 
     reports = db.get_unpublished_certifications_report()
-    target = next((row for row in reports if row["cert_id"] == cert_id), None)
-    if not target:
-        return {"status": "error", "message": "Certification introuvable"}, 404
+    eligible = [row for row in reports if row.get("automation_eligible")]
+    target = None
 
-    if provider_id is not None and target.get("provider_id") != provider_id:
-        return {"status": "error", "message": "provider_id incohérent"}, 400
+    if cert_id is None:
+        if provider_id is not None:
+            eligible = [
+                row for row in eligible if row.get("provider_id") == provider_id
+            ]
+        if not eligible:
+            return (
+                {
+                    "status": "error",
+                    "message": "Aucune certification éligible disponible.",
+                },
+                404,
+            )
+        target = eligible[0]
+        cert_id = target.get("cert_id")
+    else:
+        target = next((row for row in reports if row["cert_id"] == cert_id), None)
+        if not target:
+            return {"status": "error", "message": "Certification introuvable"}, 404
+        if provider_id is not None and target.get("provider_id") != provider_id:
+            return {"status": "error", "message": "provider_id incohérent"}, 400
+        if not target.get("automation_eligible"):
+            return (
+                {
+                    "status": "error",
+                    "message": "Certification non éligible (pub != 2).",
+                    "pub_status": target.get("pub_status"),
+                },
+                409,
+            )
 
-    if not target.get("automation_eligible"):
-        return (
-            {
-                "status": "error",
-                "message": "Certification non éligible (pub != 2).",
-                "pub_status": target.get("pub_status"),
-            },
-            409,
-        )
+    if provider_id is None:
+        provider_id = target.get("provider_id")
 
     if not source_module_id:
         source_module_id = target.get("default_module_id")

@@ -227,6 +227,7 @@ def api_sync_domains(cert_id):
                         {
                             "module_id": existing_row["id"],
                             "module_name": name,
+                            "module_descr": descr or (existing_row.get("descr") or "").strip(),
                             "status": "updated",
                         }
                     )
@@ -235,6 +236,7 @@ def api_sync_domains(cert_id):
                         {
                             "module_id": existing_row["id"],
                             "module_name": name,
+                            "module_descr": (existing_row.get("descr") or "").strip() or descr,
                             "status": "unchanged",
                         }
                     )
@@ -249,6 +251,7 @@ def api_sync_domains(cert_id):
                 {
                     "module_id": cur.lastrowid,
                     "module_name": name,
+                    "module_descr": descr,
                     "status": "created",
                 }
             )
