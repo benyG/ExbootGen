@@ -195,22 +195,36 @@
     const submitBtn = document.getElementById('submitBtn');
 
     function setStatus(message, isError = false) {
-      statusBox.innerHTML = message;
+      statusBox.textContent = message;
       statusBox.style.color = isError ? '#fda4af' : 'var(--text-muted)';
+    }
+
+    function fillSelect(select, items, placeholder) {
+      select.textContent = '';
+      const defaultOpt = document.createElement('option');
+      defaultOpt.value = '';
+      defaultOpt.textContent = placeholder;
+      select.appendChild(defaultOpt);
+      items.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        opt.textContent = item.name ?? '';
+        select.appendChild(opt);
+      });
     }
 
     async function loadProviders() {
       const res = await fetch('/pdf/api/providers');
       const data = await res.json();
-      providerSelect.innerHTML = '<option value="">Choisir...</option>' + data.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+      fillSelect(providerSelect, data, 'Choisir...');
     }
 
     async function loadCertifications(providerId) {
-      certSelect.innerHTML = '<option value="">Choisir...</option>';
+      fillSelect(certSelect, [], 'Choisir...');
       if (!providerId) return;
       const res = await fetch(`/pdf/api/certifications/${providerId}`);
       const data = await res.json();
-      certSelect.innerHTML = '<option value="">Choisir...</option>' + data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      fillSelect(certSelect, data, 'Choisir...');
     }
 
     providerSelect.addEventListener('change', (e) => {

@@ -1,13 +1,17 @@
-# eraser_api.py
+import json
 
 import requests
+
+from config import ERASER_API_KEY
 
 def render_diagram(provider_name: str, diagram_description: str, diagram_type: str) -> str:
     """
     Génère un diagramme via l'API Eraser.io si diagram_type ∈ {sequence, flowchart, architecture}.
     Sinon, renvoie une chaîne vide.
     """
-    api_key = "Ogs3UAeUmmvHpM9Tp0dI"
+    if not ERASER_API_KEY:
+        raise ValueError("ERASER_API_KEY non configurée.")
+    api_key = ERASER_API_KEY
     endpoint = "https://app.eraser.io/api/render/prompt"
     
     # Sélection du type de diagramme

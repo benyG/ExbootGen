@@ -205,9 +205,17 @@
       return resp.json();
     }
 
+    function setEmptyState(containerId, message) {
+      const container = document.getElementById(containerId);
+      const state = document.createElement('div');
+      state.className = 'empty-state';
+      state.textContent = message;
+      container.replaceChildren(state);
+    }
+
     function renderTools(tools) {
       if (!tools.length) {
-        document.getElementById('toolsTable').innerHTML = '<div class="empty-state">Aucun tool MCP exposé.</div>';
+        setEmptyState('toolsTable', 'Aucun tool MCP exposé.');
         return;
       }
       const rows = tools.map(tool => `
@@ -238,7 +246,7 @@
 
     function renderRuns(runs) {
       if (!runs.length) {
-        document.getElementById('runsTable').innerHTML = '<div class="empty-state">Aucun run MCP enregistré.</div>';
+        setEmptyState('runsTable', 'Aucun run MCP enregistré.');
         return;
       }
       const rows = runs.map(run => `
@@ -267,7 +275,7 @@
         const data = await fetchJSON('/api/mcp/tools');
         renderTools(data.tools || []);
       } catch (err) {
-        document.getElementById('toolsTable').innerHTML = `<div class="empty-state">Erreur de chargement: ${err.message}</div>`;
+        setEmptyState('toolsTable', `Erreur de chargement: ${err.message}`);
       }
     }
 
@@ -276,7 +284,7 @@
         const data = await fetchJSON('/api/mcp/run/history');
         renderRuns(data.runs || []);
       } catch (err) {
-        document.getElementById('runsTable').innerHTML = `<div class="empty-state">Erreur de chargement: ${err.message}</div>`;
+        setEmptyState('runsTable', `Erreur de chargement: ${err.message}`);
       }
     }
 
