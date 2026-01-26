@@ -581,10 +581,19 @@ def get_domains_missing_answers_by_type():
     )
 
 
-def get_unpublished_certifications_report():
-    """Return unpublished certifications eligible for automation (pub = 2)."""
+def get_unpublished_certifications_report(include_all_unpublished: bool = False):
+    """Return unpublished certifications with default domain metrics.
+
+    When ``include_all_unpublished`` is False, only certifications eligible for
+    automation (pub = 2) are returned. When True, every certification that is
+    not online (pub != 1 or NULL) is returned.
+    """
     conn = get_connection()
     cursor = conn.cursor()
+    if include_all_unpublished:
+        where_clause = "WHERE c.pub IS NULL OR c.pub <> 1"
+    else:
+        where_clause = "WHERE c.pub = 2"
     query = """
         SELECT
             p.id AS provider_id,
@@ -632,10 +641,10 @@ def get_unpublished_certifications_report():
             ) AS default_provider_id
         FROM courses c
         JOIN provs p ON p.id = c.prov
-        WHERE c.pub = 2
+        {where_clause}
         ORDER BY p.name, c.name
     """
-    cursor.execute(query)
+    cursor.execute(query.format(where_clause=where_clause))
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
