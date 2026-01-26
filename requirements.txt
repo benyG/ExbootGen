@@ -12,4 +12,4 @@ Pillow==10.4.0
 celery==5.3.6
 redis==5.0.4
 gunicorn==21.2.0
-waitress==2.1.2
+waitress==3.0.1
