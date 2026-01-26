@@ -457,6 +457,28 @@ def x_callback() -> str:
 
 # Définition de l'ordre des niveaux de difficulté
 DIFFICULTY_LEVELS = ["easy", "medium", "hard"]
+MCP_POPULATE_DISTRIBUTION = {
+    "easy": {
+        "qcm": {"no": 5, "scenario": 0, "scenario-illustrated": 0},
+        "truefalse": {"no": 0, "scenario": 0, "scenario-illustrated": 0},
+        "matching": {"no": 0, "scenario": 0, "scenario-illustrated": 0},
+        "drag-n-drop": {"no": 0, "scenario": 0, "scenario-illustrated": 0},
+    },
+    "medium": {
+        "qcm": {"no": 15, "scenario": 5, "scenario-illustrated": 0},
+        "truefalse": {"no": 0, "scenario": 0, "scenario-illustrated": 0},
+        "matching": {"no": 0, "scenario": 0, "scenario-illustrated": 0},
+        "drag-n-drop": {"no": 0, "scenario": 0, "scenario-illustrated": 0},
+    },
+    "hard": {
+        "qcm": {"no": 0, "scenario": 5, "scenario-illustrated": 0},
+        "truefalse": {"no": 0, "scenario": 0, "scenario-illustrated": 0},
+        "matching": {"no": 0, "scenario": 0, "scenario-illustrated": 0},
+        "drag-n-drop": {"no": 0, "scenario": 0, "scenario-illustrated": 0},
+    },
+}
+MCP_POPULATE_MIN_QUESTIONS = 40
+MCP_POPULATE_MAX_QUESTIONS = 440
 
 
 def _is_truthy(value: Optional[object]) -> bool:
@@ -2595,6 +2617,76 @@ def mcp_fix_status(job_id):
     return fix_status(job_id)
 
 
+@app.route("/api/mcp/certifications/<int:cert_id>/populate-questions", methods=["POST"])
+def mcp_populate_questions(cert_id: int):
+    """Trigger the MCP population workflow for low-count domains."""
+
+    payload = request.get_json(silent=True) or {}
+    provider_id = payload.get("provider_id")
+
+    try:
+        provider_id = int(provider_id)
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "provider_id requis"}), 400
+
+    metadata = {
+        "provider_id": provider_id,
+        "cert_id": cert_id,
+        "distribution": MCP_POPULATE_DISTRIBUTION,
+        "apply_addition": True,
+        "domain_min_questions": MCP_POPULATE_MIN_QUESTIONS,
+        "domain_max_questions": MCP_POPULATE_MAX_QUESTIONS,
+    }
+
+    job_id = initialise_job(
+        job_store,
+        job_id=uuid.uuid4().hex,
+        description="mcp-populate-questions",
+        metadata=metadata,
+    )
+
+    if _is_task_queue_disabled():
+        return _start_population_mcp_locally(job_id, provider_id, cert_id)
+
+    try:
+        run_population_mcp_job.apply_async(
+            args=(provider_id, cert_id),
+            task_id=job_id,
+        )
+    except QUEUE_EXCEPTIONS as exc:  # pragma: no cover - defensive, surfaced to client
+        app.logger.exception(
+            "Unable to enqueue MCP population job: provider_id=%s cert_id=%s",
+            provider_id,
+            cert_id,
+        )
+        _disable_task_queue(str(exc))
+        return _start_population_mcp_locally(
+            job_id,
+            provider_id,
+            cert_id,
+            error=exc,
+        )
+    except Exception as exc:
+        if getattr(celery_app.conf, "task_always_eager", False):
+            app.logger.exception(
+                "MCP population job failed during eager execution: provider_id=%s cert_id=%s",
+                provider_id,
+                cert_id,
+            )
+            try:
+                status = job_store.get_status(job_id) or {}
+            except JobStoreError:
+                status = {}
+            response_payload = {"status": status.get("status", "failed"), "job_id": job_id}
+            error = status.get("error") or str(exc)
+            if error:
+                response_payload["error"] = error
+            return jsonify(response_payload)
+        raise
+
+    return jsonify({"status": "queued", "job_id": job_id})
+
+
 MCP_TOOLS = {
     "unpublished_certifications": {"method": "GET", "endpoint": "/api/mcp/unpublished-certifications"},
     "sync_domains": {"method": "POST", "endpoint": "/modules/api/mcp/certifications/{cert_id}/sync-domains"},
@@ -2608,6 +2700,10 @@ MCP_TOOLS = {
     "publish_course_art": {
         "method": "POST",
         "endpoint": "/articles/api/mcp/certifications/{cert_id}/course-art",
+    },
+    "populate_questions": {
+        "method": "POST",
+        "endpoint": "/api/mcp/certifications/{cert_id}/populate-questions",
     },
 }
 
@@ -2791,6 +2887,16 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
                     "cert_id": cert_id,
                     "finalize_pub": True,
                 },
+                {
+                    "step": 9,
+                    "name": f"populate_questions ({cert_name})" if cert_name else "populate_questions",
+                    "endpoint": f"/api/mcp/certifications/{cert_id}/populate-questions",
+                    "method": "POST",
+                    "payload": {
+                        "provider_id": target_provider_id,
+                    },
+                    "cert_id": cert_id,
+                },
             ]
         )
 
@@ -2814,7 +2920,7 @@ def _execute_mcp_plan(
     steps = plan_data.get("plan", []) or []
     total_steps = len(steps)
     failed_steps: list[int] = []
-    skipped_certifications: set[int] = set()
+    skipped_certifications: dict[int, str] = {}
     context.update_counters(
         total_steps=total_steps,
         completed_steps=0,
@@ -2837,7 +2943,7 @@ def _execute_mcp_plan(
                 "status_code": 204,
                 "result": {
                     "status": "skipped",
-                    "message": "Étape ignorée après l'échec d'import PDF.",
+                    "message": skipped_certifications.get(cert_id, "Étape ignorée après erreur."),
                 },
             }
             results.append(entry)
@@ -2864,28 +2970,23 @@ def _execute_mcp_plan(
             "result": data,
         }
         results.append(entry)
-        if (
-            endpoint == "/pdf/api/mcp/import-local"
-            and status == 404
-            and isinstance(data, dict)
-        ):
-            message = str(data.get("message") or "")
-            if "Aucun PDF trouvé" in message or "Fichier introuvable" in message:
-                failed_steps.append(idx)
-                if cert_id:
-                    skipped_certifications.add(cert_id)
-                context.log(
-                    "Import PDF local: aucun fichier trouvé, "
-                    "les étapes suivantes pour cette certification sont ignorées."
-                )
-                progress = round((idx / total_steps) * 100, 1) if total_steps else 100
-                context.update_counters(
-                    completed_steps=idx,
-                    progress=progress,
-                    last_status=status,
-                    failed_steps=failed_steps,
-                )
-                continue
+        if status >= 400:
+            failed_steps.append(idx)
+            skip_reason = "Étape ignorée après l'échec d'une étape précédente."
+            if (
+                endpoint == "/pdf/api/mcp/import-local"
+                and status == 404
+                and isinstance(data, dict)
+            ):
+                message = str(data.get("message") or "")
+                if "Aucun PDF trouvé" in message or "Fichier introuvable" in message:
+                    skip_reason = (
+                        "Import PDF local: aucun fichier trouvé, "
+                        "les étapes suivantes pour cette certification sont ignorées."
+                    )
+            if cert_id:
+                skipped_certifications[cert_id] = skip_reason
+                context.log(f"Certification {cert_id}: {skip_reason}")
         if step.get("finalize_pub") and step.get("cert_id") and status < 400:
             cert_id = step.get("cert_id")
             try:
@@ -2904,7 +3005,7 @@ def _execute_mcp_plan(
             last_status=status,
             failed_steps=failed_steps,
         )
-        if stop_on_error and status >= 400:
+        if stop_on_error and status >= 400 and not cert_id:
             raise RuntimeError(f"Étape {step.get('name')} échouée (status {status}).")
 
     return results
@@ -3393,6 +3494,184 @@ def run_population(
     )
 
 
+def _is_mcp_domain_eligible(total_questions: int) -> tuple[bool, str]:
+    if total_questions >= MCP_POPULATE_MAX_QUESTIONS:
+        return (
+            False,
+            f"Total questions ({total_questions}) >= {MCP_POPULATE_MAX_QUESTIONS}",
+        )
+    if total_questions >= MCP_POPULATE_MIN_QUESTIONS:
+        return (
+            False,
+            f"Total questions ({total_questions}) >= {MCP_POPULATE_MIN_QUESTIONS}",
+        )
+    return True, ""
+
+
+def run_population_mcp_questions(
+    context: JobContext,
+    provider_id: int,
+    cert_id: int,
+) -> None:
+    """Generate questions via MCP using the fixed distribution for low-count domains."""
+
+    providers = {pid: name for pid, name in db.get_providers()}
+    provider_name = providers.get(provider_id)
+    if not provider_name:
+        message = f"Provider with id {provider_id} not found."
+        context.log(message)
+        raise ValueError(message)
+
+    certifications = {cid: name for cid, name in db.get_certifications_by_provider(provider_id)}
+    cert_name = certifications.get(cert_id)
+    if not cert_name:
+        message = f"Certification with id {cert_id} not found."
+        context.log(message)
+        raise ValueError(message)
+
+    context.update_counters(
+        analysis="",
+        domainsProcessed=0,
+        totalDomains=0,
+        totalQuestions=0,
+    )
+
+    try:
+        analysis_result = analyze_certif(provider_name, cert_name)
+        analysis = {k: str(v).strip('"') for d in analysis_result for k, v in d.items()}
+        log_analysis = f"Certification analysis: {analysis}"
+    except Exception as exc:
+        analysis = {}
+        log_analysis = f"Certification analysis unavailable: {exc}"
+
+    distribution_map = MCP_POPULATE_DISTRIBUTION
+    distribution_total = _distribution_total(distribution_map)
+
+    context.log(log_analysis)
+    context.update_counters(analysis=log_analysis)
+    context.log(
+        "MCP population distribution loaded: "
+        f"{distribution_total} question(s) per eligible domain."
+    )
+
+    domains = db.get_domains_by_certification(cert_id)
+    all_domain_names = [name for (_, name) in domains]
+
+    progress_map = {domain_id: DomainProgress(domain_id) for domain_id, _ in domains}
+    domain_descriptions = {
+        item["id"]: item["descr"]
+        for item in db.get_domains_description_by_certif(cert_id)
+    }
+
+    eligible_domains = []
+    for domain_id, domain_name in domains:
+        total_questions = progress_map[domain_id].total_questions()
+        eligible, reason = _is_mcp_domain_eligible(total_questions)
+        if eligible:
+            eligible_domains.append((domain_id, domain_name))
+        else:
+            context.log(f"[{domain_name}] Domain skipped: {reason}.")
+
+    total_domains = len(eligible_domains)
+    total_questions_count = sum(
+        progress_map[domain_id].total_questions()
+        for domain_id, _ in eligible_domains
+    )
+    context.update_counters(totalDomains=total_domains, totalQuestions=total_questions_count)
+
+    if not eligible_domains:
+        context.log("MCP population skipped: no eligible domains.")
+        return
+
+    counters_lock = Lock()
+    counters = {
+        "domains_processed": 0,
+        "total_questions": total_questions_count,
+    }
+
+    def _add_questions(amount: int) -> Tuple[int, int]:
+        if amount <= 0:
+            with counters_lock:
+                return counters["domains_processed"], counters["total_questions"]
+        with counters_lock:
+            counters["total_questions"] += amount
+            current_domains = counters["domains_processed"]
+            current_total_questions = counters["total_questions"]
+        context.update_counters(
+            domainsProcessed=current_domains,
+            totalQuestions=current_total_questions,
+        )
+        return current_domains, current_total_questions
+
+    def _mark_domain_completed() -> Tuple[int, int]:
+        with counters_lock:
+            counters["domains_processed"] += 1
+            current_domains = counters["domains_processed"]
+            current_total_questions = counters["total_questions"]
+        context.update_counters(
+            domainsProcessed=current_domains,
+            totalQuestions=current_total_questions,
+        )
+        return current_domains, current_total_questions
+
+    max_workers = _env_int(
+        "POPULATION_MAX_WORKERS",
+        _default_parallelism(maximum=4),
+        minimum=1,
+        maximum=32,
+    )
+    if max_workers > 1:
+        context.log(f"Traitement des domaines en parallèle avec {max_workers} worker(s).")
+
+    def _process_domain(domain: Tuple[int, str]) -> None:
+        domain_id, domain_name = domain
+        context.wait_if_paused()
+        context.log(f"[{domain_name}] MCP domain processing started.")
+        progress = progress_map[domain_id]
+        current_total = progress.total_questions()
+        context.log(
+            f"[{domain_name}] Current question count: {current_total}. "
+            f"Adding {distribution_total} question(s)."
+        )
+
+        for difficulty in DIFFICULTY_LEVELS:
+            distribution = distribution_map.get(difficulty, {})
+            if not distribution:
+                continue
+            inserted = process_domain_by_difficulty(
+                context,
+                domain_id,
+                domain_name,
+                difficulty,
+                distribution,
+                provider_name,
+                cert_name,
+                analysis,
+                all_domain_names,
+                domain_descriptions,
+                progress=progress,
+                addition_mode=True,
+            )
+            if inserted:
+                _add_questions(inserted)
+
+        final_total = progress.total_questions()
+        current_domains, _ = _mark_domain_completed()
+        context.log(
+            f"[{domain_name}] MCP domain completed: final total = {final_total} "
+            f"({current_domains}/{total_domains})."
+        )
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(_process_domain, domain) for domain in eligible_domains]
+        for future in as_completed(futures):
+            future.result()
+
+    context.log(
+        f"MCP population finished: {counters['domains_processed']} domains processed out of {total_domains}."
+    )
+
+
 @celery_app.task(bind=True, name="population.run")
 def run_population_job(
     self,
@@ -3421,6 +3700,36 @@ def run_population_job(
             distribution=distribution,
             apply_addition=apply_addition,
         )
+    except Exception as exc:  # pragma: no cover - propagated to Celery
+        context.set_status("failed", error=str(exc))
+        raise
+    else:
+        context.set_status("completed")
+
+
+@celery_app.task(bind=True, name="mcp.populate.run")
+def run_population_mcp_job(
+    self,
+    provider_id: int,
+    cert_id: int,
+) -> None:
+    """Celery task wrapper for MCP population."""
+
+    job_id = self.request.id
+    metadata = {
+        "provider_id": provider_id,
+        "cert_id": cert_id,
+        "distribution": MCP_POPULATE_DISTRIBUTION,
+        "apply_addition": True,
+        "domain_min_questions": MCP_POPULATE_MIN_QUESTIONS,
+        "domain_max_questions": MCP_POPULATE_MAX_QUESTIONS,
+    }
+    context = JobContext(job_store, job_id)
+
+    _ensure_job_marked_running(job_id, metadata)
+
+    try:
+        run_population_mcp_questions(context, provider_id, cert_id)
     except Exception as exc:  # pragma: no cover - propagated to Celery
         context.set_status("failed", error=str(exc))
         raise
@@ -3476,6 +3785,43 @@ def _run_population_thread(
     return thread
 
 
+def _run_population_mcp_thread(
+    job_id: str,
+    provider_id: int,
+    cert_id: int,
+) -> threading.Thread:
+    """Run the MCP population workflow in a local background thread."""
+
+    metadata = {
+        "provider_id": provider_id,
+        "cert_id": cert_id,
+        "distribution": MCP_POPULATE_DISTRIBUTION,
+        "apply_addition": True,
+        "domain_min_questions": MCP_POPULATE_MIN_QUESTIONS,
+        "domain_max_questions": MCP_POPULATE_MAX_QUESTIONS,
+    }
+
+    def _target() -> None:
+        context = JobContext(job_store, job_id)
+        _ensure_job_marked_running(job_id, metadata)
+
+        try:
+            run_population_mcp_questions(context, provider_id, cert_id)
+        except Exception as exc:  # pragma: no cover - logged for diagnostics
+            app.logger.exception(
+                "MCP population job failed during local execution: job_id=%s", job_id
+            )
+            context.set_status("failed", error=str(exc))
+        else:
+            context.set_status("completed")
+
+    thread = threading.Thread(
+        target=_target, name=f"mcp-populate-{job_id}", daemon=True
+    )
+    thread.start()
+    return thread
+
+
 def _start_population_locally(
     job_id: str,
     provider_id: int,
@@ -3522,6 +3868,44 @@ def _start_population_locally(
     payload = {"status": "queued", "job_id": job_id, "mode": "local"}
     return jsonify(payload)
 
+
+def _start_population_mcp_locally(
+    job_id: str,
+    provider_id: int,
+    cert_id: int,
+    *,
+    error: Exception | None = None,
+):
+    """Execute the MCP population workflow locally and return an HTTP response."""
+
+    try:
+        _run_population_mcp_thread(job_id, provider_id, cert_id)
+    except Exception:  # pragma: no cover - fallback may still fail
+        failure_message = (
+            "Impossible de démarrer le traitement MCP : la file d'attente des tâches est indisponible."
+        )
+        if error is not None:
+            failure_message += f" ({error})"
+        set_cached_status(job_id, "failed", error=str(error) if error else failure_message)
+        job_store.set_status(job_id, "failed", error=str(error) if error else failure_message)
+        return (
+            jsonify({"error": failure_message}),
+            500,
+        )
+
+    if error is None:
+        app.logger.info(
+            "MCP population job %s running in local thread because the task queue is disabled.",
+            job_id,
+        )
+    else:
+        app.logger.warning(
+            "MCP population job %s running in local thread because the task queue is unavailable.",
+            job_id,
+        )
+
+    payload = {"status": "queued", "job_id": job_id, "mode": "local"}
+    return jsonify(payload)
 
 def _ensure_job_marked_running(job_id: str, metadata: Dict[str, int]) -> None:
     set_cached_status(job_id, "running")
