@@ -2000,7 +2000,7 @@ def reports():
         "missing_answers": db.execute_async(db.get_domains_missing_answers_by_type),
         "missing_domains": db.execute_async(db.get_certifications_without_domains),
         "question_activity": db.execute_async(db.get_question_activity_by_day, 30),
-        "unpublished_report": db.execute_async(db.get_unpublished_certifications_report),
+        "unpublished_report": db.execute_async(db.get_unpublished_certifications_report, True),
     }
 
     domain_counts = futures["domain_counts"].result()
@@ -2813,6 +2813,8 @@ def _execute_mcp_plan(
     results: list[dict] = []
     steps = plan_data.get("plan", []) or []
     total_steps = len(steps)
+    failed_steps: list[int] = []
+    skipped_certifications: set[int] = set()
     context.update_counters(
         total_steps=total_steps,
         completed_steps=0,
@@ -2826,6 +2828,27 @@ def _execute_mcp_plan(
         endpoint = step.get("endpoint")
         method = step.get("method", "POST")
         step_payload = step.get("payload") or {}
+        cert_id = step.get("cert_id")
+        if cert_id and cert_id in skipped_certifications:
+            entry = {
+                "step": step.get("step"),
+                "name": step.get("name"),
+                "endpoint": endpoint,
+                "status_code": 204,
+                "result": {
+                    "status": "skipped",
+                    "message": "Étape ignorée après l'échec d'import PDF.",
+                },
+            }
+            results.append(entry)
+            progress = round((idx / total_steps) * 100, 1) if total_steps else 100
+            context.update_counters(
+                completed_steps=idx,
+                progress=progress,
+                last_status=204,
+                failed_steps=failed_steps,
+            )
+            continue
         context.update_counters(
             current_step=idx,
             current_name=step.get("name"),
@@ -2841,6 +2864,28 @@ def _execute_mcp_plan(
             "result": data,
         }
         results.append(entry)
+        if (
+            endpoint == "/pdf/api/mcp/import-local"
+            and status == 404
+            and isinstance(data, dict)
+        ):
+            message = str(data.get("message") or "")
+            if "Aucun PDF trouvé" in message or "Fichier introuvable" in message:
+                failed_steps.append(idx)
+                if cert_id:
+                    skipped_certifications.add(cert_id)
+                context.log(
+                    "Import PDF local: aucun fichier trouvé, "
+                    "les étapes suivantes pour cette certification sont ignorées."
+                )
+                progress = round((idx / total_steps) * 100, 1) if total_steps else 100
+                context.update_counters(
+                    completed_steps=idx,
+                    progress=progress,
+                    last_status=status,
+                    failed_steps=failed_steps,
+                )
+                continue
         if step.get("finalize_pub") and step.get("cert_id") and status < 400:
             cert_id = step.get("cert_id")
             try:
@@ -2857,6 +2902,7 @@ def _execute_mcp_plan(
             completed_steps=idx,
             progress=progress,
             last_status=status,
+            failed_steps=failed_steps,
         )
         if stop_on_error and status >= 400:
             raise RuntimeError(f"Étape {step.get('name')} échouée (status {status}).")

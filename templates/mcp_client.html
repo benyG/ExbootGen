@@ -225,6 +225,7 @@
     .step-item { display: flex; justify-content: space-between; gap: 0.75rem; }
     .step-item.is-current { color: #7dd3fc; }
     .step-item.is-done { color: #a7f3d0; }
+    .step-item.is-error { color: #fca5a5; }
 
     @media (max-width: 960px) {
       .nav-toggle { display: inline-flex; }
@@ -896,7 +897,7 @@
       }
     }
 
-    function renderPlanSteps(completedStep, currentStep) {
+    function renderPlanSteps(completedStep, currentStep, failedSteps = []) {
       clearElement(progressStepsEl);
       const steps = state.planSteps || [];
       if (!steps.length) {
@@ -912,6 +913,9 @@
         } else if (stepNumber === currentStep) {
           item.classList.add('is-current');
         }
+        if (failedSteps.includes(stepNumber)) {
+          item.classList.add('is-error');
+        }
         item.innerHTML = `
           <span>Étape ${step.step ?? stepNumber} · ${step.name || 'action'}</span>
           <span>${step.endpoint || ''}</span>
@@ -926,6 +930,7 @@
       const completedSteps = Number(counters.completed_steps || 0);
       const currentStep = Number(counters.current_step || 0);
       const progress = Number(counters.progress || (totalSteps ? (completedSteps / totalSteps) * 100 : 0));
+      const failedSteps = Array.isArray(counters.failed_steps) ? counters.failed_steps : [];
       const statusLabel = snapshot?.status || 'queued';
       const currentName = counters.current_name || '';
       const statusLine = totalSteps
@@ -934,7 +939,7 @@
       const currentLine = currentName ? `Étape en cours: ${currentName}` : '';
       progressMetaEl.textContent = [statusLabel, statusLine, currentLine].filter(Boolean).join(' · ');
       progressFillEl.style.width = `${Math.min(100, Math.max(0, progress))}%`;
-      renderPlanSteps(completedSteps, currentStep);
+      renderPlanSteps(completedSteps, currentStep, failedSteps);
     }
 
     function setRunJobId(jobId) {
