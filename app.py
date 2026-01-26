@@ -2000,7 +2000,7 @@ def reports():
         "missing_answers": db.execute_async(db.get_domains_missing_answers_by_type),
         "missing_domains": db.execute_async(db.get_certifications_without_domains),
         "question_activity": db.execute_async(db.get_question_activity_by_day, 30),
-        "unpublished_report": db.execute_async(db.get_unpublished_certifications_report),
+        "unpublished_report": db.execute_async(db.get_unpublished_certifications_report, True),
     }
 
     domain_counts = futures["domain_counts"].result()
