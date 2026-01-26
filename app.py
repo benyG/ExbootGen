@@ -208,6 +208,21 @@ def _env_float(name: str) -> float | None:
         raise ValueError(f"{name} doit être un nombre") from exc
 
 
+def _mcp_token_valid() -> bool:
+    """Return True when the request carries the MCP API token."""
+
+    token = os.getenv("MCP_API_TOKEN")
+    if not token:
+        return False
+    header_token = request.headers.get("X-MCP-Token", "")
+    if header_token and header_token == token:
+        return True
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer ") and auth_header[7:] == token:
+        return True
+    return False
+
+
 def _redis_socket_options_from_env() -> Dict[str, object]:
     """Build a mapping of Redis socket options sourced from environment variables."""
 
@@ -1892,6 +1907,18 @@ def require_login():
     if request.endpoint in allowed_endpoints or request.endpoint is None:
         return None
 
+    if "/api/mcp/" in request.path:
+        if _mcp_token_valid():
+            return None
+        if _is_authenticated():
+            if _session_expired(session.get("last_activity")):
+                session.clear()
+                return jsonify({"status": "error", "message": "Session expirée"}), 401
+            session.permanent = True
+            session["last_activity"] = time.time()
+            return None
+        return jsonify({"status": "error", "message": "Authentification MCP requise"}), 401
+
     if _is_authenticated():
         if _session_expired(session.get("last_activity")):
             session.clear()
@@ -2060,11 +2087,66 @@ def mcp_monitoring():
     return render_template("mcp.html")
 
 
+@app.route("/mcp/client")
+def mcp_client():
+    return render_template("mcp_client.html")
+
+
 @app.route("/api/mcp/unpublished-certifications")
 def mcp_unpublished_certifications():
     """Return unpublished certifications with default domain metrics for MCP."""
 
     return jsonify(db.get_unpublished_certifications_report())
+
+
+@app.route("/api/mcp/client/providers")
+def mcp_client_providers():
+    """Return providers for MCP client selects."""
+
+    providers = [
+        {"id": provider_id, "name": name}
+        for provider_id, name in db.get_providers()
+    ]
+    return jsonify({"providers": providers})
+
+
+@app.route("/api/mcp/client/certifications/<int:provider_id>")
+def mcp_client_certifications(provider_id: int):
+    """Return certifications with codes for MCP client selects."""
+
+    certifications = [
+        {"id": cert_id, "name": name, "code": code}
+        for cert_id, name, code in db.get_certifications_by_provider_with_code(provider_id)
+    ]
+    return jsonify({"certifications": certifications})
+
+
+@app.route("/api/mcp/client/modules/<int:cert_id>")
+def mcp_client_modules(cert_id: int):
+    """Return modules (domains) for MCP client selects."""
+
+    modules = [
+        {"id": module_id, "name": name}
+        for module_id, name in db.get_domains_by_certification(cert_id)
+    ]
+    return jsonify({"modules": modules})
+
+
+@app.route("/api/mcp/client/certifications/pub", methods=["POST"])
+def mcp_client_update_cert_pub():
+    """Update certification pub status for MCP client."""
+
+    payload = request.get_json(silent=True) or {}
+    cert_id = payload.get("cert_id")
+    pub_status = payload.get("pub")
+    try:
+        cert_id = int(cert_id)
+        pub_status = int(pub_status)
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "cert_id ou pub invalide"}), 400
+
+    db.update_certification_pub(cert_id, pub_status)
+    return jsonify({"status": "ok", "cert_id": cert_id, "pub": pub_status})
 
 
 @app.route("/populate", methods=["GET", "POST"])
@@ -2523,6 +2605,10 @@ MCP_TOOLS = {
         "method": "POST",
         "endpoint": "/blueprints/api/mcp/certifications/{cert_id}/generate-blueprints",
     },
+    "publish_course_art": {
+        "method": "POST",
+        "endpoint": "/articles/api/mcp/certifications/{cert_id}/course-art",
+    },
 }
 
 MCP_RUN_HISTORY: list[dict] = []
@@ -2530,16 +2616,343 @@ MCP_RUN_HISTORY: list[dict] = []
 
 def _call_internal(endpoint: str, method: str, payload: dict | None = None) -> tuple[dict, int]:
     payload = payload or {}
+    headers = {}
+    token = os.getenv("MCP_API_TOKEN")
+    if token:
+        headers["X-MCP-Token"] = token
     with app.test_client() as client:
         if method.upper() == "GET":
-            response = client.get(endpoint, query_string=payload)
+            response = client.get(
+                endpoint,
+                query_string=payload,
+                follow_redirects=True,
+                headers=headers,
+            )
         else:
-            response = client.post(endpoint, json=payload)
+            response = client.post(
+                endpoint,
+                json=payload,
+                follow_redirects=True,
+                headers=headers,
+            )
         try:
-            data = response.get_json()
+            data = response.get_json(silent=True)
         except Exception:
             data = {"raw": response.get_data(as_text=True)}
+        if data is None:
+            data = {"raw": response.get_data(as_text=True)}
     return data, response.status_code
+
+
+def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
+    cert_id = payload.get("cert_id")
+    provider_id = payload.get("provider_id")
+    source_module_id = payload.get("source_module_id")
+    code_cert = (payload.get("code_cert") or "").strip()
+
+    if cert_id is not None:
+        try:
+            cert_id = int(cert_id)
+        except (TypeError, ValueError):
+            return {"status": "error", "message": "cert_id invalide"}, 400
+
+    if provider_id is not None:
+        try:
+            provider_id = int(provider_id)
+        except (TypeError, ValueError):
+            return {"status": "error", "message": "provider_id invalide"}, 400
+
+    if source_module_id is not None:
+        try:
+            source_module_id = int(source_module_id)
+        except (TypeError, ValueError):
+            return {"status": "error", "message": "source_module_id invalide"}, 400
+
+    reports = db.get_unpublished_certifications_report()
+    eligible = [row for row in reports if row.get("automation_eligible")]
+    targets: list[dict] = []
+
+    if cert_id is None:
+        if provider_id is not None:
+            eligible = [
+                row for row in eligible if row.get("provider_id") == provider_id
+            ]
+        if not eligible:
+            return (
+                {
+                    "status": "error",
+                    "message": "Aucune certification éligible disponible.",
+                },
+                404,
+            )
+        targets = eligible
+    else:
+        target = next((row for row in reports if row["cert_id"] == cert_id), None)
+        if not target:
+            return {"status": "error", "message": "Certification introuvable"}, 404
+        if provider_id is not None and target.get("provider_id") != provider_id:
+            return {"status": "error", "message": "provider_id incohérent"}, 400
+        if not target.get("automation_eligible"):
+            return (
+                {
+                    "status": "error",
+                    "message": "Certification non éligible (pub != 2).",
+                    "pub_status": target.get("pub_status"),
+                },
+                409,
+            )
+        targets = [target]
+
+    plan: list[dict] = []
+
+    for target in targets:
+        cert_id = target.get("cert_id")
+        cert_name = target.get("cert_name")
+        target_provider_id = target.get("provider_id")
+        cert_domains = db.get_domains_by_certification(cert_id)
+        has_domains = bool(cert_domains)
+        cert_source_module_id = source_module_id
+        if not cert_source_module_id:
+            cert_source_module_id = target.get("default_module_id")
+            if not cert_source_module_id and cert_domains:
+                cert_source_module_id = cert_domains[0][0]
+
+        if not has_domains:
+            plan.append(
+                {
+                    "step": 3,
+                    "name": f"sync_domains ({cert_name})" if cert_name else "sync_domains",
+                    "endpoint": f"/modules/api/mcp/certifications/{cert_id}/sync-domains",
+                    "method": "POST",
+                    "payload": {},
+                    "cert_id": cert_id,
+                }
+            )
+
+        plan.extend(
+            [
+                {
+                    "step": 4,
+                    "name": f"import_pdf_local ({cert_name})" if cert_name else "import_pdf_local",
+                    "endpoint": "/pdf/api/mcp/import-local",
+                    "method": "POST",
+                    "payload": {
+                        "cert_id": cert_id,
+                        "code_cert": code_cert or target.get("code_cert"),
+                        "file_paths": payload.get("file_paths"),
+                        "search_root": payload.get("search_root", "C:\\\\dumps\\\\dumps"),
+                    },
+                    "cert_id": cert_id,
+                },
+                {
+                    "step": 5,
+                    "name": f"relocate_questions ({cert_name})" if cert_name else "relocate_questions",
+                    "endpoint": "/reloc/api/mcp/relocate",
+                    "method": "POST",
+                    "payload": {
+                        "source_module_id": cert_source_module_id,
+                        "destination_cert_id": cert_id,
+                        "batch_size": payload.get("batch_size", 10),
+                        "workers": payload.get("workers", 4),
+                    },
+                    "cert_id": cert_id,
+                },
+                {
+                    "step": 6,
+                    "name": f"fix_questions ({cert_name})" if cert_name else "fix_questions",
+                    "endpoint": "/api/mcp/fix",
+                    "method": "POST",
+                    "payload": {
+                        "provider_id": target_provider_id,
+                        "cert_id": cert_id,
+                        "action": payload.get("fix_action", "assign"),
+                    },
+                    "cert_id": cert_id,
+                },
+                {
+                    "step": 7,
+                    "name": f"generate_blueprints ({cert_name})" if cert_name else "generate_blueprints",
+                    "endpoint": f"/blueprints/api/mcp/certifications/{cert_id}/generate-blueprints",
+                    "method": "POST",
+                    "payload": {
+                        "mode": payload.get("blueprint_mode", "missing"),
+                        "module_ids": payload.get("blueprint_module_ids"),
+                    },
+                    "cert_id": cert_id,
+                },
+                {
+                    "step": 8,
+                    "name": f"publish_course_art ({cert_name})" if cert_name else "publish_course_art",
+                    "endpoint": f"/articles/api/mcp/certifications/{cert_id}/course-art",
+                    "method": "POST",
+                    "payload": {
+                        "provider_id": target_provider_id,
+                    },
+                    "cert_id": cert_id,
+                    "finalize_pub": True,
+                },
+            ]
+        )
+
+    response_payload = {"status": "ok", "certifications": targets, "plan": plan}
+    if len(targets) == 1:
+        response_payload["certification"] = targets[0]
+
+    return response_payload, 200
+
+
+def _execute_mcp_plan(
+    context: JobContext,
+    payload: dict,
+    plan_data: dict,
+    *,
+    stop_on_error: bool = True,
+) -> list[dict]:
+    """Run MCP plan steps and return the results list."""
+
+    results: list[dict] = []
+    steps = plan_data.get("plan", []) or []
+    total_steps = len(steps)
+    context.update_counters(
+        total_steps=total_steps,
+        completed_steps=0,
+        progress=0,
+        current_step=None,
+        current_name=None,
+    )
+
+    for idx, step in enumerate(steps, start=1):
+        context.wait_if_paused()
+        endpoint = step.get("endpoint")
+        method = step.get("method", "POST")
+        step_payload = step.get("payload") or {}
+        context.update_counters(
+            current_step=idx,
+            current_name=step.get("name"),
+            current_endpoint=endpoint,
+        )
+        context.log(f"Étape {idx}/{total_steps}: {step.get('name')} → {endpoint}")
+        data, status = _call_internal(endpoint, method, step_payload)
+        entry = {
+            "step": step.get("step"),
+            "name": step.get("name"),
+            "endpoint": endpoint,
+            "status_code": status,
+            "result": data,
+        }
+        results.append(entry)
+        if step.get("finalize_pub") and step.get("cert_id") and status < 400:
+            cert_id = step.get("cert_id")
+            try:
+                db.update_certification_pub(cert_id, 0)
+                context.log(
+                    f"Certification {cert_id}: pub mis à jour à 0 après orchestration."
+                )
+            except Exception as exc:  # pragma: no cover - defensive logging only
+                context.log(
+                    f"Certification {cert_id}: échec mise à jour pub → {exc}"
+                )
+        progress = round((idx / total_steps) * 100, 1) if total_steps else 100
+        context.update_counters(
+            completed_steps=idx,
+            progress=progress,
+            last_status=status,
+        )
+        if stop_on_error and status >= 400:
+            raise RuntimeError(f"Étape {step.get('name')} échouée (status {status}).")
+
+    return results
+
+
+def _launch_mcp_run_inline(
+    job_id: str,
+    payload: dict,
+    plan_data: dict,
+    *,
+    stop_on_error: bool = True,
+) -> str:
+    """Run MCP plan in a local background thread."""
+
+    def _run_inline() -> None:
+        context = JobContext(job_store, job_id)
+        set_cached_status(job_id, "running")
+        initialise_job(
+            job_store,
+            job_id=job_id,
+            description="mcp-run",
+            metadata={
+                "cert_id": payload.get("cert_id"),
+                "provider_id": payload.get("provider_id"),
+                "steps": len(plan_data.get("plan", []) or []),
+            },
+        )
+        job_store.set_status(job_id, "running")
+        try:
+            results = _execute_mcp_plan(
+                context,
+                payload,
+                plan_data,
+                stop_on_error=stop_on_error,
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging only
+            app.logger.exception("MCP run échoué")
+            context.set_status("failed", error=str(exc))
+            MCP_RUN_HISTORY.append(
+                {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "status": "error",
+                    "job_id": job_id,
+                    "results": results if "results" in locals() else [],
+                }
+            )
+        else:
+            context.set_status("completed")
+            MCP_RUN_HISTORY.append(
+                {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "status": "ok",
+                    "job_id": job_id,
+                    "results": results,
+                }
+            )
+
+    threading.Thread(
+        target=_run_inline,
+        name=f"mcp-run-{job_id}",
+        daemon=True,
+    ).start()
+    return job_id
+
+
+def _enqueue_mcp_run(
+    payload: dict,
+    stop_on_error: bool,
+    plan_data: dict,
+    *,
+    job_id: str | None = None,
+) -> dict:
+    """Enqueue an MCP run using Celery or fallback to inline."""
+
+    job_id = job_id or uuid.uuid4().hex
+
+    if _is_task_queue_disabled():
+        _launch_mcp_run_inline(job_id, payload, plan_data, stop_on_error=stop_on_error)
+        return {"status": "queued", "job_id": job_id, "mode": "inline"}
+
+    try:
+        async_result = mcp_run_job.apply_async(
+            args=(payload, stop_on_error, plan_data),
+            task_id=job_id,
+        )
+    except QUEUE_EXCEPTIONS as exc:  # pragma: no cover - defensive
+        _disable_task_queue(exc)
+        _launch_mcp_run_inline(job_id, payload, plan_data, stop_on_error=stop_on_error)
+        return {"status": "queued", "job_id": job_id, "mode": "inline"}
+
+    if getattr(celery_app.conf, "task_always_eager", False):
+        return {"status": "queued", "job_id": job_id, "mode": "eager"}
+
+    return {"status": "queued", "job_id": async_result.id, "mode": "celery"}
 
 
 @app.route("/api/mcp/orchestrate", methods=["POST"])
@@ -2547,107 +2960,8 @@ def mcp_orchestrate():
     """Return an orchestration plan for MCP automation."""
 
     payload = request.get_json(silent=True) or {}
-    cert_id = payload.get("cert_id")
-    provider_id = payload.get("provider_id")
-    source_module_id = payload.get("source_module_id")
-    code_cert = (payload.get("code_cert") or "").strip()
-
-    try:
-        cert_id = int(cert_id)
-    except (TypeError, ValueError):
-        return jsonify({"status": "error", "message": "cert_id requis"}), 400
-
-    if provider_id is not None:
-        try:
-            provider_id = int(provider_id)
-        except (TypeError, ValueError):
-            return jsonify({"status": "error", "message": "provider_id invalide"}), 400
-
-    if source_module_id is not None:
-        try:
-            source_module_id = int(source_module_id)
-        except (TypeError, ValueError):
-            return jsonify({"status": "error", "message": "source_module_id invalide"}), 400
-
-    reports = db.get_unpublished_certifications_report()
-    target = next((row for row in reports if row["cert_id"] == cert_id), None)
-    if not target:
-        return jsonify({"status": "error", "message": "Certification introuvable"}), 404
-
-    if provider_id is not None and target.get("provider_id") != provider_id:
-        return jsonify({"status": "error", "message": "provider_id incohérent"}), 400
-
-    if not target.get("automation_eligible"):
-        return jsonify(
-            {
-                "status": "error",
-                "message": "Certification non éligible (pub != 2).",
-                "pub_status": target.get("pub_status"),
-            }
-        ), 409
-
-    plan = [
-        {
-            "step": 3,
-            "name": "sync_domains",
-            "endpoint": f"/modules/api/mcp/certifications/{cert_id}/sync-domains",
-            "method": "POST",
-            "payload": {},
-        },
-        {
-            "step": 4,
-            "name": "import_pdf_local",
-            "endpoint": "/pdf/api/mcp/import-local",
-            "method": "POST",
-            "payload": {
-                "cert_id": cert_id,
-                "code_cert": code_cert or target.get("cert_name"),
-                "file_paths": payload.get("file_paths"),
-                "search_root": payload.get("search_root"),
-            },
-        },
-        {
-            "step": 5,
-            "name": "relocate_questions",
-            "endpoint": "/reloc/api/mcp/relocate",
-            "method": "POST",
-            "payload": {
-                "source_module_id": source_module_id,
-                "destination_cert_id": cert_id,
-                "batch_size": payload.get("batch_size", 10),
-                "workers": payload.get("workers"),
-            },
-        },
-        {
-            "step": 6,
-            "name": "fix_questions",
-            "endpoint": "/api/mcp/fix",
-            "method": "POST",
-            "payload": {
-                "provider_id": target.get("provider_id"),
-                "cert_id": cert_id,
-                "action": payload.get("fix_action", "assign"),
-            },
-        },
-        {
-            "step": 7,
-            "name": "generate_blueprints",
-            "endpoint": f"/blueprints/api/mcp/certifications/{cert_id}/generate-blueprints",
-            "method": "POST",
-            "payload": {
-                "mode": payload.get("blueprint_mode", "missing"),
-                "module_ids": payload.get("blueprint_module_ids"),
-            },
-        },
-    ]
-
-    return jsonify(
-        {
-            "status": "ok",
-            "certification": target,
-            "plan": plan,
-        }
-    )
+    data, status = _build_mcp_plan(payload)
+    return jsonify(data), status
 
 
 @app.route("/api/mcp/tools", methods=["GET"])
@@ -2690,48 +3004,22 @@ def mcp_call():
 
 @app.route("/api/mcp/run", methods=["POST"])
 def mcp_run():
-    """Execute the MCP plan sequentially."""
+    """Execute the MCP plan sequentially in the background."""
 
     payload = request.get_json(silent=True) or {}
     stop_on_error = payload.get("stop_on_error", True)
-    plan_data, plan_status = _call_internal("/api/mcp/orchestrate", "POST", payload)
+    plan_data, plan_status = _build_mcp_plan(payload)
     if plan_status != 200:
         return jsonify({"status": "error", "result": plan_data}), plan_status
 
-    results = []
-    for step in plan_data.get("plan", []):
-        endpoint = step.get("endpoint")
-        method = step.get("method", "POST")
-        step_payload = step.get("payload") or {}
-        data, status = _call_internal(endpoint, method, step_payload)
-        entry = {
-            "step": step.get("step"),
-            "name": step.get("name"),
-            "endpoint": endpoint,
-            "status_code": status,
-            "result": data,
-        }
-        results.append(entry)
-        if stop_on_error and status >= 400:
-            summary = {"status": "error", "results": results}
-            MCP_RUN_HISTORY.append(
-                {
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "status": "error",
-                    "results": results,
-                }
-            )
-            return jsonify(summary), status
-
-    summary = {"status": "ok", "results": results}
-    MCP_RUN_HISTORY.append(
+    job_info = _enqueue_mcp_run(payload, stop_on_error, plan_data)
+    return jsonify(
         {
-            "timestamp": datetime.utcnow().isoformat(),
-            "status": "ok",
-            "results": results,
+            "status": "queued",
+            "job": job_info,
+            "plan": plan_data.get("plan", []),
         }
     )
-    return jsonify(summary)
 
 
 @app.route("/api/mcp/run/history", methods=["GET"])
@@ -2742,6 +3030,72 @@ def mcp_run_history():
     if limit <= 0:
         limit = 20
     return jsonify({"runs": MCP_RUN_HISTORY[-limit:]})
+
+
+@celery_app.task(bind=True, name="mcp.run")
+def mcp_run_job(self, payload: dict, stop_on_error: bool, plan_data: dict) -> None:
+    """Celery task wrapper for MCP run."""
+
+    job_id = self.request.id
+    context = JobContext(job_store, job_id)
+    set_cached_status(job_id, "running")
+    try:
+        initialise_job(
+            job_store,
+            job_id=job_id,
+            description="mcp-run",
+            metadata={
+                "cert_id": payload.get("cert_id"),
+                "provider_id": payload.get("provider_id"),
+                "steps": len(plan_data.get("plan", []) or []),
+            },
+        )
+        job_store.set_status(job_id, "running")
+    except JobStoreError:
+        app.logger.warning(
+            "MCP run %s: job store indisponible, poursuite en mode cache local.",
+            job_id,
+        )
+
+    try:
+        results = _execute_mcp_plan(
+            context,
+            payload,
+            plan_data,
+            stop_on_error=stop_on_error,
+        )
+    except Exception as exc:  # pragma: no cover - defensive logging only
+        app.logger.exception("MCP run échoué")
+        context.set_status("failed", error=str(exc))
+        MCP_RUN_HISTORY.append(
+            {
+                "timestamp": datetime.utcnow().isoformat(),
+                "status": "error",
+                "job_id": job_id,
+                "results": results if "results" in locals() else [],
+            }
+        )
+        return
+
+    context.set_status("completed")
+    MCP_RUN_HISTORY.append(
+        {
+            "timestamp": datetime.utcnow().isoformat(),
+            "status": "ok",
+            "job_id": job_id,
+            "results": results,
+        }
+    )
+
+
+@app.route("/api/mcp/run/status/<job_id>", methods=["GET"])
+def mcp_run_status(job_id: str):
+    """Return status for an MCP run job."""
+
+    data, error_response, status = _load_job_status(job_id)
+    if error_response is not None:
+        return error_response, status
+    return jsonify(data)
 
 
 def run_population(

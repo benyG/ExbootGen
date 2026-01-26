@@ -86,14 +86,20 @@ def to_nature_code(raw):
 
 
 def _fetch_certification(conn, cert_id: int) -> dict | None:
-    """Return certification info with a fallback for missing code column."""
+    """Return certification info with a fallback for missing code/code_cert columns."""
 
     cur = conn.cursor(dictionary=True)
     try:
         try:
-            cur.execute("SELECT id, name, code FROM courses WHERE id=%s", (cert_id,))
+            cur.execute(
+                "SELECT id, name, code, descr2 AS code_cert FROM courses WHERE id=%s",
+                (cert_id,),
+            )
         except Exception:
-            cur.execute("SELECT id, name FROM courses WHERE id=%s", (cert_id,))
+            cur.execute(
+                "SELECT id, name, descr2 AS code_cert FROM courses WHERE id=%s",
+                (cert_id,),
+            )
         row = cur.fetchone()
         if not row:
             return None
@@ -105,6 +111,8 @@ def _fetch_certification(conn, cert_id: int) -> dict | None:
             )
             code_row = cur.fetchone()
             row["code"] = (code_row or {}).get("code_cert") or row.get("name")
+        if "code_cert" not in row or not row.get("code_cert"):
+            row["code_cert"] = row.get("code") or row.get("name")
         return row
     finally:
         cur.close()
@@ -529,7 +537,7 @@ def api_mcp_import_local():
                     return jsonify(
                         {"status": "error", "message": "Certification introuvable"}
                     ), 404
-                code_cert = str(cert.get("code") or "").strip()
+                code_cert = str(cert.get("code_cert") or "").strip()
             module_id = _fetch_default_module_id(conn, code_cert)
 
         if module_id is None:
@@ -576,7 +584,7 @@ def api_mcp_import_local():
                 raise ValueError("code_cert requis pour la recherche automatique")
 
             root_path = resolve_search_root()
-            pattern = f"{code_cert.lower()}________"
+            pattern = f"{code_cert.lower()}_"
             matches: list[Path] = []
             for dirpath, _, files in os.walk(root_path):
                 for name in files:
@@ -615,6 +623,7 @@ def api_mcp_import_local():
                 skip_first_page=True,
                 header_ratio=0.10,
                 footer_ratio=0.10,
+                detect_visuals=True,
             )
             data = detect_questions(text, module_id)
             filename = resolved.name
@@ -699,6 +708,7 @@ def generate_questions_from_pdf():
         skip_first_page=True,
         header_ratio=0.10,
         footer_ratio=0.10,
+        detect_visuals=True,
     )
 
     if not text.strip():
@@ -955,7 +965,8 @@ def upload_pdf():
             use_ocr=False,
             skip_first_page=True,
             header_ratio=0.10,
-            footer_ratio=0.10
+            footer_ratio=0.10,
+            detect_visuals=True,
         )
         data = detect_questions(text, module_id)
         filename = os.path.basename(path)

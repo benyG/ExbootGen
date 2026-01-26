@@ -504,6 +504,20 @@
           <span>Provider & certification sélectionnés</span>
           <span id="selectionLabel">—</span>
         </div>
+        <div>
+          <label for="pubState">State (pub)</label>
+          <select id="pubState">
+            <option value="">Sélectionner un état</option>
+            <option value="0">offline (0)</option>
+            <option value="1">online (1)</option>
+            <option value="2">autorun (2)</option>
+            <option value="3">update (3)</option>
+          </select>
+        </div>
+        <div class="button-stack" style="margin-top: 0.6rem;">
+          <button type="button" class="secondary-button" id="pubUpdate">Mettre à jour</button>
+          <span id="pubStatus" class="status-note"></span>
+        </div>
         <a id="jumpToDefault" class="jump-link disabled" href="#" aria-disabled="true">Jump to Default</a>
         <div class="module-inventory">
           <h3>Domaines existants</h3>
@@ -576,6 +590,9 @@
     const modulesList = document.getElementById('modulesList');
     const modulesEmpty = document.getElementById('modulesEmpty');
     const jumpLink = document.getElementById('jumpToDefault');
+    const pubState = document.getElementById('pubState');
+    const pubUpdate = document.getElementById('pubUpdate');
+    const pubStatus = document.getElementById('pubStatus');
     const generateBtn = document.getElementById('generate-json-btn');
     const generationStatus = document.getElementById('generationStatus');
 
@@ -625,7 +642,7 @@
           (items || []).map(item => ({
             value: item.id,
             label: item.name,
-            dataset: { codeCert: item.code_cert || '' }
+            dataset: { codeCert: item.code_cert || '', pub: item.pub ?? '' }
           })),
           { keepSearch: false }
         );
@@ -637,6 +654,9 @@
           option.textContent = item.name;
           if (item.code_cert) {
             option.dataset.codeCert = item.code_cert;
+          }
+          if (item.pub !== undefined && item.pub !== null) {
+            option.dataset.pub = item.pub;
           }
           select.appendChild(option);
         });
@@ -651,6 +671,17 @@
         generationStatus.style.color = 'var(--accent)';
       } else {
         generationStatus.style.color = 'var(--text-muted)';
+      }
+    }
+
+    function setPubStatus(message, tone = 'muted') {
+      pubStatus.textContent = message;
+      if (tone === 'error') {
+        pubStatus.style.color = '#f87171';
+      } else if (tone === 'success') {
+        pubStatus.style.color = 'var(--accent)';
+      } else {
+        pubStatus.style.color = 'var(--text-muted)';
       }
     }
 
@@ -709,6 +740,15 @@
       }
     }
 
+    function syncPubState(certSel) {
+      if (!pubState || !certSel) {
+        return;
+      }
+      const selected = certSel.options[certSel.selectedIndex];
+      const pubValue = selected?.dataset?.pub;
+      pubState.value = pubValue !== undefined ? String(pubValue) : '';
+    }
+
     async function refreshModules(certId) {
       if (!certId) {
         modulesList.innerHTML = '';
@@ -716,22 +756,30 @@
         modulesEmpty.style.display = 'block';
         currentModules = [];
         updateJumpLink();
+        setPubStatus('');
+        if (pubState) {
+          pubState.value = '';
+        }
         return;
       }
 
       modulesList.innerHTML = '';
       modulesEmpty.textContent = 'Chargement des domaines…';
       modulesEmpty.style.display = 'block';
+      setPubStatus('');
       try {
         const modules = await loadJSON(`${base}api/certifications/${certId}/modules`);
         renderModules(modules);
         updateJumpLink();
+        syncPubState(document.getElementById('cert'));
       } catch (err) {
         modulesList.innerHTML = '';
         modulesEmpty.textContent = err.message || 'Impossible de récupérer les domaines actuels.';
         modulesEmpty.style.display = 'block';
         currentModules = [];
         updateJumpLink();
+        setPubStatus(err.message || 'Impossible de charger les domaines.', 'error');
+        syncPubState(document.getElementById('cert'));
       }
     }
 
@@ -746,6 +794,28 @@
         selectionLabel.textContent = `${provSel.options[provSel.selectedIndex]?.text || ''} → ${certSel.options[certSel.selectedIndex]?.text || '—'}`;
       }
 
+      async function updatePubState() {
+        setPubStatus('');
+        if (!certSel.value) {
+          setPubStatus('Sélectionnez une certification.', 'error');
+          return;
+        }
+        if (!pubState.value) {
+          setPubStatus('Sélectionnez un état.', 'error');
+          return;
+        }
+        try {
+          const data = await loadJSON('/api/mcp/client/certifications/pub', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cert_id: Number(certSel.value), pub: Number(pubState.value) }),
+          });
+          setPubStatus(`Mise à jour OK (pub=${data.pub}).`, 'success');
+        } catch (err) {
+          setPubStatus(err.message || 'Erreur lors de la mise à jour.', 'error');
+        }
+      }
+
       async function refreshProviderCertifications() {
         try {
           const certs = await loadJSON(`${base}api/certifications/${provSel.value}`);
@@ -757,6 +827,7 @@
             pendingCertId = null;
             updateSelectionLabel();
             refreshModules(certSel.value);
+            syncPubState(certSel);
           } else {
             updateSelectionLabel();
             refreshModules(null);
@@ -799,7 +870,12 @@
         updateSelectionLabel();
         refreshModules(certSel.value);
         updateJumpLink();
+        syncPubState(certSel);
       });
+
+      if (pubUpdate) {
+        pubUpdate.addEventListener('click', updatePubState);
+      }
     });
 
     if (generateBtn) {

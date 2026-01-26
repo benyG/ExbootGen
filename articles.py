@@ -1983,6 +1983,44 @@ def generate_course_art():
     return jsonify({"course_art": course_art})
 
 
+@articles_bp.route("/api/mcp/certifications/<int:cert_id>/course-art", methods=["POST"])
+def mcp_publish_course_art(cert_id: int):
+    """Generate and persist the certification presentation sheet for MCP."""
+
+    data = request.get_json() or {}
+    provider_id = data.get("provider_id")
+    if not provider_id:
+        return jsonify({"error": "provider_id requis."}), 400
+
+    try:
+        provider_id = int(provider_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "provider_id invalide."}), 400
+
+    try:
+        selection = _fetch_selection(provider_id, cert_id)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+
+    try:
+        course_art = generate_certification_course_art(
+            selection.certification_name,
+            selection.provider_name,
+        )
+        _save_course_art_json(cert_id, course_art)
+    except Exception as exc:  # pragma: no cover - external dependencies
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify(
+        {
+            "course_art": course_art,
+            "provider_name": selection.provider_name,
+            "certification_name": selection.certification_name,
+            "topic_type": COURSE_ART_TOPIC,
+        }
+    )
+
+
 @articles_bp.route("/publish-tweet", methods=["POST"])
 def publish_tweet():
     """Generate and publish the announcement tweet."""

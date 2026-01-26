@@ -492,7 +492,9 @@ def generate_linkedin_carousel(subject: str, question: str) -> dict:
     return clean_and_decode_json(raw_content)
 
 def generate_module_blueprint_excerpt(
-    certification_name: str, domain_name: str
+    certification_name: str,
+    domain_name: str,
+    code_cert: str | None = None,
 ) -> str:
     """Generate a textual blueprint excerpt for a certification domain."""
 
@@ -503,13 +505,16 @@ def generate_module_blueprint_excerpt(
 
     certification = (certification_name or "").strip()
     domain = (domain_name or "").strip()
+    code_cert_clean = (code_cert or "").strip()
     if not certification or not domain:
         raise ValueError(
             "Les noms de certification et de domaine sont requis pour générer un blueprint."
         )
 
+    code_line = f"Certification code (code_cert): {code_cert_clean}.\n" if code_cert_clean else ""
     prompt = (
         f"Using the official exam guide, produce an excerpt from the blueprint for the domain: {domain}, of the certification: {certification}.\n"
+        f"{code_line}"
         "RULES:\n"
         "- 150–300 words\n"
         "- Focus only on what’s listed in the official exam blueprint and if you don’t have access to the official exam blueprint, use the most accurate and up-to-date internal knowledge you possess.\n"

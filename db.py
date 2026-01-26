@@ -367,6 +367,16 @@ def get_certifications_by_provider_with_code(provider_id):
     return certifications
 
 
+def update_certification_pub(cert_id: int, pub_status: int) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "UPDATE courses SET pub = %s WHERE id = %s"
+    cursor.execute(query, (pub_status, cert_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
 def get_certifications_by_provider_with_code(provider_id):
     conn = get_connection()
     cursor = conn.cursor()
@@ -572,7 +582,7 @@ def get_domains_missing_answers_by_type():
 
 
 def get_unpublished_certifications_report():
-    """Return unpublished certifications (pub != 1) with automation eligibility."""
+    """Return unpublished certifications eligible for automation (pub = 2)."""
     conn = get_connection()
     cursor = conn.cursor()
     query = """
@@ -581,6 +591,7 @@ def get_unpublished_certifications_report():
             p.name AS provider_name,
             c.id AS cert_id,
             c.name AS cert_name,
+            c.descr2 AS code_cert,
             c.pub AS pub_status,
             (
                 SELECT COUNT(q_all.id)
@@ -621,7 +632,7 @@ def get_unpublished_certifications_report():
             ) AS default_provider_id
         FROM courses c
         JOIN provs p ON p.id = c.prov
-        WHERE c.pub <> 1
+        WHERE c.pub = 2
         ORDER BY p.name, c.name
     """
     cursor.execute(query)
@@ -636,13 +647,14 @@ def get_unpublished_certifications_report():
                 "provider_name": row[1],
                 "cert_id": row[2],
                 "cert_name": row[3],
-                "pub_status": row[4],
-                "total_questions": int(row[5] or 0),
-                "default_questions": int(row[6] or 0),
-                "default_module_id": row[7],
-                "default_cert_id": row[8],
-                "default_provider_id": row[9],
-                "automation_eligible": bool(row[4] == 2),
+                "pub_status": row[5],
+                "code_cert": row[4] or "",
+                "total_questions": int(row[6] or 0),
+                "default_questions": int(row[7] or 0),
+                "default_module_id": row[8],
+                "default_cert_id": row[9],
+                "default_provider_id": row[10],
+                "automation_eligible": bool(row[5] == 2),
             }
         )
     return results

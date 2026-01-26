@@ -263,12 +263,16 @@ def api_generate_blueprints(cert_id: int):
     try:
         cur = conn.cursor(dictionary=True)
         try:
-            cur.execute("SELECT name FROM courses WHERE id = %s", (cert_id,))
+            cur.execute(
+                "SELECT name, descr2 AS code_cert FROM courses WHERE id = %s",
+                (cert_id,),
+            )
             cert_row = cur.fetchone()
             if not cert_row:
                 return jsonify({"error": "Certification introuvable."}), 404
 
             cert_name = cert_row["name"]
+            cert_code = (cert_row.get("code_cert") or "").strip()
 
             cur.execute(
                 "SELECT id, name, blueprint FROM modules WHERE course = %s ORDER BY name",
@@ -325,6 +329,7 @@ def api_generate_blueprints(cert_id: int):
                 generate_module_blueprint_excerpt,
                 cert_name,
                 module["name"],
+                cert_code,
             ): module
             for module in targets
         }
