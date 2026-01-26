@@ -80,10 +80,14 @@ def api_providers():
 @dom_bp.route('/api/certifications/<int:prov_id>')
 def api_certs(prov_id):
     conn = mysql.connector.connect(**DB_CONFIG)
-    cur  = conn.cursor(dictionary=True)
-    cur.execute("SELECT id, name, descr2 AS code_cert FROM courses WHERE prov = %s", (prov_id,))
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        "SELECT id, name, descr2 AS code_cert, pub FROM courses WHERE prov = %s",
+        (prov_id,),
+    )
     rows = cur.fetchall()
-    cur.close(); conn.close()
+    cur.close()
+    conn.close()
     return jsonify(rows)
 
 

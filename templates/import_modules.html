@@ -642,7 +642,7 @@
           (items || []).map(item => ({
             value: item.id,
             label: item.name,
-            dataset: { codeCert: item.code_cert || '' }
+            dataset: { codeCert: item.code_cert || '', pub: item.pub ?? '' }
           })),
           { keepSearch: false }
         );
@@ -654,6 +654,9 @@
           option.textContent = item.name;
           if (item.code_cert) {
             option.dataset.codeCert = item.code_cert;
+          }
+          if (item.pub !== undefined && item.pub !== null) {
+            option.dataset.pub = item.pub;
           }
           select.appendChild(option);
         });
@@ -737,6 +740,15 @@
       }
     }
 
+    function syncPubState(certSel) {
+      if (!pubState || !certSel) {
+        return;
+      }
+      const selected = certSel.options[certSel.selectedIndex];
+      const pubValue = selected?.dataset?.pub;
+      pubState.value = pubValue !== undefined ? String(pubValue) : '';
+    }
+
     async function refreshModules(certId) {
       if (!certId) {
         modulesList.innerHTML = '';
@@ -745,6 +757,9 @@
         currentModules = [];
         updateJumpLink();
         setPubStatus('');
+        if (pubState) {
+          pubState.value = '';
+        }
         return;
       }
 
@@ -756,6 +771,7 @@
         const modules = await loadJSON(`${base}api/certifications/${certId}/modules`);
         renderModules(modules);
         updateJumpLink();
+        syncPubState(document.getElementById('cert'));
       } catch (err) {
         modulesList.innerHTML = '';
         modulesEmpty.textContent = err.message || 'Impossible de récupérer les domaines actuels.';
@@ -763,6 +779,7 @@
         currentModules = [];
         updateJumpLink();
         setPubStatus(err.message || 'Impossible de charger les domaines.', 'error');
+        syncPubState(document.getElementById('cert'));
       }
     }
 
@@ -810,6 +827,7 @@
             pendingCertId = null;
             updateSelectionLabel();
             refreshModules(certSel.value);
+            syncPubState(certSel);
           } else {
             updateSelectionLabel();
             refreshModules(null);
@@ -852,6 +870,7 @@
         updateSelectionLabel();
         refreshModules(certSel.value);
         updateJumpLink();
+        syncPubState(certSel);
       });
 
       if (pubUpdate) {
