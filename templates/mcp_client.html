@@ -337,6 +337,16 @@
           <input id="planSearchRoot" type="text" placeholder="C:\dumps\dumps" value="C:\dumps\dumps">
         </div>
       </div>
+      <div class="progress-panel" id="planProgress" style="margin-top: 1.2rem;">
+        <div class="progress-header">
+          <div class="progress-title">Avancement de l’orchestration</div>
+          <div class="progress-meta" id="planProgressMeta">En attente d’exécution.</div>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="planProgressFill"></div>
+        </div>
+        <div class="progress-steps" id="planProgressSteps"></div>
+      </div>
       <div class="grid grid-2" style="margin-top: 1.2rem;">
         <div>
           <label for="planFilePaths">file_paths (une ligne par fichier)</label>
@@ -347,16 +357,6 @@
       <div class="helper" id="planError"></div>
       <div class="output" id="planOutput">Aucun plan généré.</div>
       <div class="output" id="runOutput" style="margin-top: 1rem;">Aucune exécution pour l’instant.</div>
-      <div class="progress-panel" id="planProgress">
-        <div class="progress-header">
-          <div class="progress-title">Avancement de l’orchestration</div>
-          <div class="progress-meta" id="planProgressMeta">En attente d’exécution.</div>
-        </div>
-        <div class="progress-bar">
-          <div class="progress-fill" id="planProgressFill"></div>
-        </div>
-        <div class="progress-steps" id="planProgressSteps"></div>
-      </div>
     </section>
 
     <section class="glass-card">
@@ -614,6 +614,13 @@
               { value: 'all', label: 'all' },
             ] },
             { id: 'module_ids', label: 'Modules concernés', type: 'module-multi' },
+          ],
+        },
+        publish_course_art: {
+          label: 'Publier fiche certification',
+          fields: [
+            { id: 'provider_id', label: 'Fournisseur', type: 'provider', required: true },
+            { id: 'cert_id', label: 'Certification', type: 'cert', required: true, providerField: 'provider_id' },
           ],
         },
       };
@@ -1067,7 +1074,7 @@
       eligibilityEl.textContent = '';
       const certId = Number(document.getElementById('planCert').value || 0);
       if (!certId) {
-        eligibilityEl.textContent = 'Sélection automatique active : la première certification éligible sera utilisée.';
+        eligibilityEl.textContent = 'Sélection automatique active : toutes les certifications éligibles seront orchestrées.';
         return;
       }
       try {

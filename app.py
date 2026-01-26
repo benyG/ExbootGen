@@ -2605,6 +2605,10 @@ MCP_TOOLS = {
         "method": "POST",
         "endpoint": "/blueprints/api/mcp/certifications/{cert_id}/generate-blueprints",
     },
+    "publish_course_art": {
+        "method": "POST",
+        "endpoint": "/articles/api/mcp/certifications/{cert_id}/course-art",
+    },
 }
 
 MCP_RUN_HISTORY: list[dict] = []
@@ -2666,7 +2670,7 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
 
     reports = db.get_unpublished_certifications_report()
     eligible = [row for row in reports if row.get("automation_eligible")]
-    target = None
+    targets: list[dict] = []
 
     if cert_id is None:
         if provider_id is not None:
@@ -2681,8 +2685,7 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
                 },
                 404,
             )
-        target = eligible[0]
-        cert_id = target.get("cert_id")
+        targets = eligible
     else:
         target = next((row for row in reports if row["cert_id"] == cert_id), None)
         if not target:
@@ -2698,80 +2701,104 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
                 },
                 409,
             )
+        targets = [target]
 
-    if provider_id is None:
-        provider_id = target.get("provider_id")
+    plan: list[dict] = []
 
-    if not source_module_id:
-        source_module_id = target.get("default_module_id")
-        if not source_module_id:
-            modules = db.get_domains_by_certification(cert_id)
-            if modules:
-                source_module_id = modules[0][0]
+    for target in targets:
+        cert_id = target.get("cert_id")
+        cert_name = target.get("cert_name")
+        target_provider_id = target.get("provider_id")
+        cert_domains = db.get_domains_by_certification(cert_id)
+        has_domains = bool(cert_domains)
+        cert_source_module_id = source_module_id
+        if not cert_source_module_id:
+            cert_source_module_id = target.get("default_module_id")
+            if not cert_source_module_id and cert_domains:
+                cert_source_module_id = cert_domains[0][0]
 
-    plan = [
-        {
-            "step": 3,
-            "name": "sync_domains",
-            "endpoint": f"/modules/api/mcp/certifications/{cert_id}/sync-domains",
-            "method": "POST",
-            "payload": {},
-        },
-        {
-            "step": 4,
-            "name": "import_pdf_local",
-            "endpoint": "/pdf/api/mcp/import-local",
-            "method": "POST",
-            "payload": {
-                "cert_id": cert_id,
-                "code_cert": code_cert or target.get("code_cert"),
-                "file_paths": payload.get("file_paths"),
-                "search_root": payload.get("search_root", "C:\\\\dumps\\\\dumps"),
-            },
-        },
-        {
-            "step": 5,
-            "name": "relocate_questions",
-            "endpoint": "/reloc/api/mcp/relocate",
-            "method": "POST",
-            "payload": {
-                "source_module_id": source_module_id,
-                "destination_cert_id": cert_id,
-                "batch_size": payload.get("batch_size", 10),
-                "workers": payload.get("workers", 4),
-            },
-        },
-        {
-            "step": 6,
-            "name": "fix_questions",
-            "endpoint": "/api/mcp/fix",
-            "method": "POST",
-            "payload": {
-                "provider_id": target.get("provider_id"),
-                "cert_id": cert_id,
-                "action": payload.get("fix_action", "assign"),
-            },
-        },
-        {
-            "step": 7,
-            "name": "generate_blueprints",
-            "endpoint": f"/blueprints/api/mcp/certifications/{cert_id}/generate-blueprints",
-            "method": "POST",
-            "payload": {
-                "mode": payload.get("blueprint_mode", "missing"),
-                "module_ids": payload.get("blueprint_module_ids"),
-            },
-        },
-    ]
+        if not has_domains:
+            plan.append(
+                {
+                    "step": 3,
+                    "name": f"sync_domains ({cert_name})" if cert_name else "sync_domains",
+                    "endpoint": f"/modules/api/mcp/certifications/{cert_id}/sync-domains",
+                    "method": "POST",
+                    "payload": {},
+                    "cert_id": cert_id,
+                }
+            )
 
-    return (
-        {
-            "status": "ok",
-            "certification": target,
-            "plan": plan,
-        },
-        200,
-    )
+        plan.extend(
+            [
+                {
+                    "step": 4,
+                    "name": f"import_pdf_local ({cert_name})" if cert_name else "import_pdf_local",
+                    "endpoint": "/pdf/api/mcp/import-local",
+                    "method": "POST",
+                    "payload": {
+                        "cert_id": cert_id,
+                        "code_cert": code_cert or target.get("code_cert"),
+                        "file_paths": payload.get("file_paths"),
+                        "search_root": payload.get("search_root", "C:\\\\dumps\\\\dumps"),
+                    },
+                    "cert_id": cert_id,
+                },
+                {
+                    "step": 5,
+                    "name": f"relocate_questions ({cert_name})" if cert_name else "relocate_questions",
+                    "endpoint": "/reloc/api/mcp/relocate",
+                    "method": "POST",
+                    "payload": {
+                        "source_module_id": cert_source_module_id,
+                        "destination_cert_id": cert_id,
+                        "batch_size": payload.get("batch_size", 10),
+                        "workers": payload.get("workers", 4),
+                    },
+                    "cert_id": cert_id,
+                },
+                {
+                    "step": 6,
+                    "name": f"fix_questions ({cert_name})" if cert_name else "fix_questions",
+                    "endpoint": "/api/mcp/fix",
+                    "method": "POST",
+                    "payload": {
+                        "provider_id": target_provider_id,
+                        "cert_id": cert_id,
+                        "action": payload.get("fix_action", "assign"),
+                    },
+                    "cert_id": cert_id,
+                },
+                {
+                    "step": 7,
+                    "name": f"generate_blueprints ({cert_name})" if cert_name else "generate_blueprints",
+                    "endpoint": f"/blueprints/api/mcp/certifications/{cert_id}/generate-blueprints",
+                    "method": "POST",
+                    "payload": {
+                        "mode": payload.get("blueprint_mode", "missing"),
+                        "module_ids": payload.get("blueprint_module_ids"),
+                    },
+                    "cert_id": cert_id,
+                },
+                {
+                    "step": 8,
+                    "name": f"publish_course_art ({cert_name})" if cert_name else "publish_course_art",
+                    "endpoint": f"/articles/api/mcp/certifications/{cert_id}/course-art",
+                    "method": "POST",
+                    "payload": {
+                        "provider_id": target_provider_id,
+                    },
+                    "cert_id": cert_id,
+                    "finalize_pub": True,
+                },
+            ]
+        )
+
+    response_payload = {"status": "ok", "certifications": targets, "plan": plan}
+    if len(targets) == 1:
+        response_payload["certification"] = targets[0]
+
+    return response_payload, 200
 
 
 def _execute_mcp_plan(
@@ -2814,6 +2841,17 @@ def _execute_mcp_plan(
             "result": data,
         }
         results.append(entry)
+        if step.get("finalize_pub") and step.get("cert_id") and status < 400:
+            cert_id = step.get("cert_id")
+            try:
+                db.update_certification_pub(cert_id, 0)
+                context.log(
+                    f"Certification {cert_id}: pub mis à jour à 0 après orchestration."
+                )
+            except Exception as exc:  # pragma: no cover - defensive logging only
+                context.log(
+                    f"Certification {cert_id}: échec mise à jour pub → {exc}"
+                )
         progress = round((idx / total_steps) * 100, 1) if total_steps else 100
         context.update_counters(
             completed_steps=idx,
