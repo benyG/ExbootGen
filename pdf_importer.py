@@ -48,6 +48,14 @@ NATURE_MAP = {
     "drag drop": 5        # alias sûr
 }
 
+
+def _is_within_base(path: Path, base: Path) -> bool:
+    try:
+        path.relative_to(base)
+        return True
+    except ValueError:
+        return False
+
 def to_level_code(raw):
     """Accepte 'easy'/'medium'/'hard' ou entier; renvoie 0/1/2 (défaut 1)."""
     if isinstance(raw, str):
@@ -394,13 +402,6 @@ def api_search_pdfs():
     server filesystem through arbitrary directory traversal.
     """
 
-    def is_within_base(path: Path, base: Path) -> bool:
-        try:
-            path.relative_to(base)
-            return True
-        except ValueError:
-            return False
-
     raw_root = (request.args.get("root") or "").strip()
     query = (request.args.get("q") or "").lower()
     if not raw_root or not query:
@@ -408,10 +409,6 @@ def api_search_pdfs():
 
     candidate = Path(raw_root)
     if candidate.is_absolute():
-        # On permet désormais les chemins absolus explicitement saisis :
-        # s'ils existent et pointent vers un dossier, on les parcourt
-        # sans restreindre à PDF_SEARCH_ROOT (l'utilisateur fournit déjà
-        # la cible exacte).
         root_path = candidate.resolve()
     else:
         root_path = (PDF_SEARCH_ROOT / candidate).resolve()
@@ -419,9 +416,9 @@ def api_search_pdfs():
     if not root_path.exists() or not root_path.is_dir():
         return jsonify([])
 
-    # Pour les chemins relatifs, on continue de vérifier qu'ils restent
-    # confinés au répertoire autorisé.
-    if not candidate.is_absolute() and not is_within_base(root_path, PDF_SEARCH_ROOT):
+    # Garder la recherche confinée au répertoire autorisé pour éviter les
+    # traversées de chemin.
+    if not _is_within_base(root_path, PDF_SEARCH_ROOT):
         return jsonify([])
 
     matches = []
@@ -557,10 +554,10 @@ def api_mcp_import_local():
         def resolve_search_root() -> Path:
             if not search_root:
                 return PDF_SEARCH_ROOT
-            resolved_root, is_absolute = normalize_path(search_root)
+            resolved_root, _ = normalize_path(search_root)
             if not resolved_root.exists() or not resolved_root.is_dir():
                 raise FileNotFoundError(f"Répertoire introuvable: {search_root}")
-            if not is_absolute and not str(resolved_root).startswith(str(PDF_SEARCH_ROOT)):
+            if not _is_within_base(resolved_root, PDF_SEARCH_ROOT):
                 raise ValueError(f"Chemin non autorisé: {search_root}")
             return resolved_root
 
@@ -570,10 +567,10 @@ def api_mcp_import_local():
                 for raw_path in file_paths:
                     if not isinstance(raw_path, str) or not raw_path.strip():
                         continue
-                    resolved, is_absolute = normalize_path(raw_path.strip())
+                    resolved, _ = normalize_path(raw_path.strip())
                     if not resolved.exists() or not resolved.is_file():
                         raise FileNotFoundError(f"Fichier introuvable: {raw_path}")
-                    if not is_absolute and not str(resolved).startswith(str(PDF_SEARCH_ROOT)):
+                    if not _is_within_base(resolved, PDF_SEARCH_ROOT):
                         raise ValueError(f"Chemin non autorisé: {raw_path}")
                     if resolved.suffix.lower() != ".pdf":
                         raise ValueError(f"Extension invalide (PDF requis): {raw_path}")

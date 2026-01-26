@@ -361,12 +361,6 @@
       }
     });
 
-    const escapeHtml = (text) => {
-      const div = document.createElement('div');
-      div.textContent = text ?? '';
-      return div.innerHTML;
-    };
-
     function setSelectOptions(selectEl, placeholder, items) {
       selectEl.innerHTML = '';
       const defaultOpt = document.createElement('option');
@@ -418,7 +412,7 @@
         return;
       }
       searchStatus.textContent = 'Recherche en cours…';
-      resultsContainer.innerHTML = '';
+      resultsContainer.textContent = '';
       const params = new URLSearchParams({ q });
       if (providerSelect.value) params.append('provider_id', providerSelect.value);
       if (certificationSelect.value) params.append('certification_id', certificationSelect.value);
@@ -428,14 +422,32 @@
       resultsCount.textContent = `${results.length} résultat(s)`;
       searchStatus.textContent = results.length ? 'Cliquez sur une carte pour charger la question.' : 'Aucun résultat pour cette recherche.';
 
-      resultsContainer.innerHTML = results.map(r => `
-        <article class="result-card" data-id="${r.id}">
-          <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
-          <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
-          <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
-          <small class="src">${r.src_file ? `src_file : ${escapeHtml(r.src_file)}` : 'src_file non renseigné'}</small>
-        </article>
-      `).join('');
+      resultsContainer.textContent = '';
+      results.forEach((result) => {
+        const card = document.createElement('article');
+        card.className = 'result-card';
+        card.dataset.id = result.id;
+
+        const title = document.createElement('strong');
+        title.textContent = `#${result.id} · ${result.module_name || 'Module ?'}`;
+        card.appendChild(title);
+
+        const preview = document.createElement('div');
+        preview.style.marginTop = '0.3rem';
+        preview.textContent = result.text_preview || '—';
+        card.appendChild(preview);
+
+        const meta = document.createElement('small');
+        meta.textContent = `${result.provider || 'Provider ?'} · ${result.certification || 'Certification ?'}`;
+        card.appendChild(meta);
+
+        const src = document.createElement('small');
+        src.className = 'src';
+        src.textContent = result.src_file ? `src_file : ${result.src_file}` : 'src_file non renseigné';
+        card.appendChild(src);
+
+        resultsContainer.appendChild(card);
+      });
     }
 
     async function loadQuestion(questionId) {
@@ -449,7 +461,7 @@
       }
       const q = await res.json();
       currentQuestionId = q.id;
-      questionEditor.innerHTML = q.text || '';
+      questionEditor.textContent = q.text || '';
       srcFileInput.value = q.src_file || '';
       descrInput.value = q.descr || '';
       natureSelect.value = String(q.nature ?? 1);
@@ -461,7 +473,7 @@
     }
 
     function renderAnswers(items) {
-      answersContainer.innerHTML = '';
+      answersContainer.textContent = '';
       if (!items.length) {
         addAnswerField();
         return;
@@ -473,25 +485,59 @@
       const wrapper = document.createElement('div');
       wrapper.className = 'answer-item';
       wrapper.dataset.meta = JSON.stringify(meta || {});
-      wrapper.innerHTML = `
-        <div class="answer-fields">
-          <label>
-            Valeur
-            <input type="text" class="answer-value" placeholder="value" value="${escapeHtml(value)}">
-          </label>
-          <label>
-            Cible (target, optionnel)
-            <input type="text" class="answer-target" placeholder="target" value="${escapeHtml(meta?.target || '')}">
-          </label>
-        </div>
-        <div style="display:flex; flex-direction: column; align-items: flex-end; gap: 0.45rem;">
-          <label style="display:flex; align-items:center; gap:0.35rem; color: var(--muted); font-size:0.95rem;">
-            <input type="checkbox" ${isok ? 'checked' : ''}> Correcte
-          </label>
-          <button type="button" class="secondary remove-answer">Supprimer</button>
-        </div>
-      `;
-      wrapper.querySelector('.remove-answer').addEventListener('click', () => wrapper.remove());
+      const fields = document.createElement('div');
+      fields.className = 'answer-fields';
+
+      const valueLabel = document.createElement('label');
+      valueLabel.textContent = 'Valeur';
+      const valueInput = document.createElement('input');
+      valueInput.type = 'text';
+      valueInput.className = 'answer-value';
+      valueInput.placeholder = 'value';
+      valueInput.value = value ?? '';
+      valueLabel.appendChild(valueInput);
+
+      const targetLabel = document.createElement('label');
+      targetLabel.textContent = 'Cible (target, optionnel)';
+      const targetInput = document.createElement('input');
+      targetInput.type = 'text';
+      targetInput.className = 'answer-target';
+      targetInput.placeholder = 'target';
+      targetInput.value = meta?.target || '';
+      targetLabel.appendChild(targetInput);
+
+      fields.appendChild(valueLabel);
+      fields.appendChild(targetLabel);
+
+      const actions = document.createElement('div');
+      actions.style.display = 'flex';
+      actions.style.flexDirection = 'column';
+      actions.style.alignItems = 'flex-end';
+      actions.style.gap = '0.45rem';
+
+      const correctLabel = document.createElement('label');
+      correctLabel.style.display = 'flex';
+      correctLabel.style.alignItems = 'center';
+      correctLabel.style.gap = '0.35rem';
+      correctLabel.style.color = 'var(--muted)';
+      correctLabel.style.fontSize = '0.95rem';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = Boolean(isok);
+      correctLabel.appendChild(checkbox);
+      correctLabel.appendChild(document.createTextNode(' Correcte'));
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'secondary remove-answer';
+      removeBtn.textContent = 'Supprimer';
+      removeBtn.addEventListener('click', () => wrapper.remove());
+
+      actions.appendChild(correctLabel);
+      actions.appendChild(removeBtn);
+
+      wrapper.appendChild(fields);
+      wrapper.appendChild(actions);
       answersContainer.appendChild(wrapper);
     }
 
@@ -508,7 +554,7 @@
       resultsCount.classList.toggle('hidden', enabled);
       if (enabled) {
         currentQuestionId = null;
-        questionEditor.innerHTML = '';
+        questionEditor.textContent = '';
         srcFileInput.value = '';
         descrInput.value = '';
         natureSelect.value = '1';
@@ -692,7 +738,7 @@
         };
       });
       const payload = {
-        text: questionEditor.innerHTML.trim(),
+      text: questionEditor.innerHTML.trim(),
         src_file: srcFileInput.value.trim(),
         descr: descrInput.value.trim(),
         nature: Number.parseInt(natureSelect.value || '1', 10),
@@ -723,7 +769,7 @@
       if (res.ok) {
         saveStatus.textContent = 'Question supprimée.';
         currentQuestionId = null;
-        questionEditor.innerHTML = '';
+        questionEditor.textContent = '';
         srcFileInput.value = '';
         descrInput.value = '';
         natureSelect.value = '1';
@@ -788,7 +834,7 @@
       });
       if (res.ok) {
         saveStatus.textContent = 'Question ajoutée avec succès.';
-        questionEditor.innerHTML = '';
+        questionEditor.textContent = '';
         srcFileInput.value = '';
         descrInput.value = '';
         renderAnswers([]);

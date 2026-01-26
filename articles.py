@@ -21,6 +21,7 @@ import fitz
 import mysql.connector
 import requests
 from flask import Blueprint, jsonify, render_template, request, send_file, url_for
+from werkzeug.utils import secure_filename
 
 from config import (
     DB_CONFIG,
@@ -110,6 +111,29 @@ CAROUSEL_TEXT_PADDING = 32
 CAROUSEL_HEADLINE_RATIO = 0.28
 CAROUSEL_SUBTEXT_RATIO = 0.34
 CAROUSEL_KEY_MESSAGE_RATIO = 0.38
+
+
+def _resolve_upload_path(filename: str) -> Optional[Path]:
+    """Return a safe upload path within the upload directory."""
+
+    if not filename:
+        return None
+
+    candidate = Path(filename)
+    if candidate.name != filename:
+        return None
+
+    safe_name = secure_filename(candidate.name)
+    if not safe_name:
+        return None
+
+    resolved = (UPLOAD_DIR / safe_name).resolve()
+    try:
+        resolved.relative_to(UPLOAD_DIR.resolve())
+    except ValueError:
+        return None
+
+    return resolved
 
 
 class SocialImageError(RuntimeError):
@@ -1938,8 +1962,8 @@ def generate_carousel():
 def download_carousel(filename: str):
     """Download the generated carousel PDF."""
 
-    file_path = UPLOAD_DIR / filename
-    if not file_path.exists() or not file_path.is_file():
+    file_path = _resolve_upload_path(filename)
+    if not file_path or not file_path.exists() or not file_path.is_file():
         return jsonify({"error": "Fichier introuvable."}), 404
 
     return send_file(
