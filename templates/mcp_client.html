@@ -428,14 +428,6 @@
       return resp.json();
     }
 
-    function setEmptyState(containerId, message) {
-      const container = document.getElementById(containerId);
-      const state = document.createElement('div');
-      state.className = 'empty-state';
-      state.textContent = message;
-      container.replaceChildren(state);
-    }
-
     function parseLineList(text) {
       return text
         .split('\n')
@@ -1029,7 +1021,7 @@
         renderTools(tools);
         fillToolSelect(tools);
       } catch (err) {
-        setEmptyState('toolsTable', `Erreur de chargement: ${err.message}`);
+        document.getElementById('toolsTable').innerHTML = `<div class="empty-state">Erreur de chargement: ${err.message}</div>`;
       }
     }
 

@@ -82,11 +82,6 @@ LINKEDIN_ASSET_REGISTER_URL = os.environ.get(
 )
 
 # ---------------------------------------------------------------------------
-# Eraser.io integration
-# ---------------------------------------------------------------------------
-ERASER_API_KEY = os.environ.get("ERASER_API_KEY", "")
-
-# ---------------------------------------------------------------------------
 # GUI authentication
 # ---------------------------------------------------------------------------
 # Password required by the local GUI before the web service can be started.
