@@ -14,7 +14,7 @@ redis==5.0.4
 gunicorn==22.0.0
 waitress==3.0.1
 eventlet==0.40.0
-urllib3==2.6.0 # not directly required, pinned by Snyk to avoid a vulnerability
+urllib3==2.6.3 # not directly required, pinned by Snyk to avoid a vulnerability
 aiohttp==3.9.0 # not directly required, pinned by Snyk to avoid a vulnerability
 protobuf==4.25.8 # not directly required, pinned by Snyk to avoid a vulnerability
 zipp==3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
