@@ -4,6 +4,7 @@ import json
 import time
 import threading
 import uuid
+from urllib.parse import urlparse
 from textwrap import dedent
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -1921,6 +1922,28 @@ def _session_expired(last_activity: float | None) -> bool:
     return time.time() - last_activity > inactivity_seconds
 
 
+def _safe_next_url(target: str | None) -> str | None:
+    """Return a safe redirect target or None if it is unsafe."""
+
+    if not target:
+        return None
+    parsed = urlparse(target)
+    if parsed.scheme or parsed.netloc:
+        return None
+    if target.startswith("//"):
+        return None
+    return target
+
+
+def _current_relative_url() -> str:
+    """Return the current request URL as a relative path with query string."""
+
+    full_path = request.full_path or request.path
+    if full_path.endswith("?"):
+        return full_path[:-1]
+    return full_path
+
+
 @app.before_request
 def require_login():
     """Protect the application with a simple session-based login check."""
@@ -1944,13 +1967,13 @@ def require_login():
     if _is_authenticated():
         if _session_expired(session.get("last_activity")):
             session.clear()
-            login_url = url_for("login", next=request.url)
+            login_url = url_for("login", next=_current_relative_url())
             return redirect(login_url)
         session.permanent = True
         session["last_activity"] = time.time()
         return None
 
-    login_url = url_for("login", next=request.url)
+    login_url = url_for("login", next=_current_relative_url())
     return redirect(login_url)
 
 
@@ -1964,7 +1987,7 @@ def login():
             session["user"] = "exboot"
             session["last_activity"] = time.time()
             session.permanent = True
-            target = request.args.get("next") or url_for("home")
+            target = _safe_next_url(request.args.get("next")) or url_for("home")
             return redirect(target)
         error = "Nom d'utilisateur ou mot de passe incorrect."
     return render_template("login.html", error=error)

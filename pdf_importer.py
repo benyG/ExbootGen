@@ -29,6 +29,36 @@ os.makedirs(PDF_SEARCH_ROOT, exist_ok=True)
 # Répertoire par défaut pour le champ "Dossier PDF" côté UI
 DEFAULT_PDF_DIRECTORY = os.environ.get("DEFAULT_PDF_DIR", r"C:\\dumps\\dumps")
 
+
+def _allowed_pdf_roots() -> list[Path]:
+    roots = [PDF_SEARCH_ROOT]
+    default_dir = Path(DEFAULT_PDF_DIRECTORY)
+    if default_dir.is_absolute():
+        roots.append(default_dir.resolve())
+    extra = os.environ.get("PDF_SEARCH_ROOTS", "")
+    for raw in extra.split(","):
+        candidate = raw.strip()
+        if not candidate:
+            continue
+        path = Path(candidate)
+        if path.is_absolute():
+            roots.append(path.resolve())
+    unique: list[Path] = []
+    for root in roots:
+        if root.exists() and root.is_dir() and root not in unique:
+            unique.append(root)
+    return unique
+
+
+def _is_within_allowed_roots(path: Path, roots: list[Path]) -> bool:
+    for root in roots:
+        try:
+            path.relative_to(root)
+            return True
+        except ValueError:
+            continue
+    return False
+
 # Mémoire légère (session d’analyse)
 # Chaque session stocke l'identifiant du module/domaine sous la clé
 # ``domain_id`` (nouveau flux) ou ``module_id`` (ancien flux /upload-pdf).
@@ -394,12 +424,7 @@ def api_search_pdfs():
     server filesystem through arbitrary directory traversal.
     """
 
-    def is_within_base(path: Path, base: Path) -> bool:
-        try:
-            path.relative_to(base)
-            return True
-        except ValueError:
-            return False
+    allowed_roots = _allowed_pdf_roots()
 
     raw_root = (request.args.get("root") or "").strip()
     query = (request.args.get("q") or "").lower()
@@ -408,10 +433,6 @@ def api_search_pdfs():
 
     candidate = Path(raw_root)
     if candidate.is_absolute():
-        # On permet désormais les chemins absolus explicitement saisis :
-        # s'ils existent et pointent vers un dossier, on les parcourt
-        # sans restreindre à PDF_SEARCH_ROOT (l'utilisateur fournit déjà
-        # la cible exacte).
         root_path = candidate.resolve()
     else:
         root_path = (PDF_SEARCH_ROOT / candidate).resolve()
@@ -419,9 +440,7 @@ def api_search_pdfs():
     if not root_path.exists() or not root_path.is_dir():
         return jsonify([])
 
-    # Pour les chemins relatifs, on continue de vérifier qu'ils restent
-    # confinés au répertoire autorisé.
-    if not candidate.is_absolute() and not is_within_base(root_path, PDF_SEARCH_ROOT):
+    if not _is_within_allowed_roots(root_path, allowed_roots):
         return jsonify([])
 
     matches = []
@@ -505,6 +524,7 @@ def api_mcp_import_local():
     module_id = payload.get("module_id")
     cert_id = payload.get("cert_id")
     code_cert = (payload.get("code_cert") or "").strip()
+    allowed_roots = _allowed_pdf_roots()
 
     try:
         module_id = int(module_id) if module_id is not None else None
@@ -560,7 +580,7 @@ def api_mcp_import_local():
             resolved_root, is_absolute = normalize_path(search_root)
             if not resolved_root.exists() or not resolved_root.is_dir():
                 raise FileNotFoundError(f"Répertoire introuvable: {search_root}")
-            if not is_absolute and not str(resolved_root).startswith(str(PDF_SEARCH_ROOT)):
+            if not _is_within_allowed_roots(resolved_root, allowed_roots):
                 raise ValueError(f"Chemin non autorisé: {search_root}")
             return resolved_root
 
@@ -587,7 +607,7 @@ def api_mcp_import_local():
                     if not resolved.exists() or not resolved.is_file():
                         raise FileNotFoundError(f"Fichier introuvable: {raw_path}")
 
-                    if not is_absolute and not str(resolved).startswith(str(PDF_SEARCH_ROOT)):
+                    if not _is_within_allowed_roots(resolved, allowed_roots):
                         raise ValueError(f"Chemin non autorisé: {raw_path}")
                     if resolved.suffix.lower() != ".pdf":
                         raise ValueError(f"Extension invalide (PDF requis): {raw_path}")
@@ -598,15 +618,21 @@ def api_mcp_import_local():
                 raise ValueError("code_cert requis pour la recherche automatique")
 
             root_path = resolve_search_root()
-            pattern = f"{code_cert.lower()}_"
+            code_cert_lower = code_cert.lower()
+            code_cert_compact = re.sub(r"[^a-z0-9]+", "", code_cert_lower)
             matches: list[Path] = []
             for dirpath, _, files in os.walk(root_path):
                 for name in files:
                     if not name.lower().endswith(".pdf"):
                         continue
                     lower_name = name.lower()
-                    if lower_name.startswith(pattern):
+                    if code_cert_lower in lower_name:
                         matches.append(Path(dirpath) / name)
+                        continue
+                    if code_cert_compact:
+                        compact_name = re.sub(r"[^a-z0-9]+", "", lower_name)
+                        if code_cert_compact in compact_name:
+                            matches.append(Path(dirpath) / name)
                 if len(matches) >= 200:
                     break
             if not matches:

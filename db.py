@@ -20,6 +20,7 @@ reverse_ty_mapping = {value: key for key, value in ty_mapping.items()}
 
 executor = ThreadPoolExecutor(max_workers=8)
 _SCHEDULE_COLUMNS: set[str] | None = None
+_ALLOWED_SCORE_COLUMNS = ("score", "result", "note")
 
 
 def _safe_json_loads(raw, default=None):
@@ -169,6 +170,14 @@ def _load_schedule_columns() -> set[str]:
     conn.close()
     _SCHEDULE_COLUMNS = {row[0] for row in rows}
     return _SCHEDULE_COLUMNS
+
+
+def _resolve_score_column(columns: set[str]) -> str | None:
+    """Pick a safe, known score column if it exists in the table."""
+    for col in _ALLOWED_SCORE_COLUMNS:
+        if col in columns:
+            return col
+    return None
 
 
 def get_schedule_entries():
@@ -1337,9 +1346,7 @@ def get_user_dashboard_snapshot(user_id, start_dt, end_dt, cert_id=None):
     active_subscription = (cursor.fetchone()[0] or 0) > 0
 
     exam_user_columns = _get_table_columns("exam_users")
-    score_column = next(
-        (col for col in ("score", "result", "note") if col in exam_user_columns), None
-    )
+    score_column = _resolve_score_column(exam_user_columns)
 
     score_select = f", AVG(eu.{score_column}) AS avg_score" if score_column else ""
     cursor.execute(
