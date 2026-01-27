@@ -14,7 +14,7 @@ Cette étape expose un endpoint API dédié à MCP pour récupérer les certific
 
 - `courses.pub` est utilisé pour filtrer les certifications non publiées (`pub != 1`).
 - La valeur `pub = 2` indique l’éligibilité au traitement automatique.
-- `modules.code_cert` et `courses.descr2` servent à calculer le domaine default.
+- `modules.code_cert` et `courses.code_cert_key` servent à calculer le domaine default.
 
 ## Références code
 
