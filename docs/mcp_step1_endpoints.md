@@ -15,7 +15,7 @@ Ce document liste les endpoints UI/API et les tables/colonnes qui supportent le 
 
 ### A. Domains / Modules (page domains)
 - `GET /modules/api/providers` — liste des providers.【F:dom.py†L10-L17】
-- `GET /modules/api/certifications/<prov_id>` — certifications d’un provider (avec `descr2`/`code_cert`).【F:dom.py†L19-L25】
+- `GET /modules/api/certifications/<prov_id>` — certifications d’un provider (avec `code_cert_key`/`code_cert`).【F:dom.py†L19-L25】
 - `GET /modules/api/certifications/<cert_id>/modules` — domaines d’une certification.【F:dom.py†L28-L36】
 - `GET /modules/api/default-module?code_cert=...` — domaine default associé à un `code_cert`.【F:dom.py†L39-L61】
 - `POST /modules/api/modules` — création d’un domaine (module).【F:dom.py†L64-L91】
@@ -30,7 +30,7 @@ Ce document liste les endpoints UI/API et les tables/colonnes qui supportent le 
 
 ### C. Relocalisation (page relocate)
 - `GET /reloc/api/providers` — liste des providers.【F:reloc.py†L22-L30】
-- `GET /reloc/api/certifications/<prov_id>` — certifications d’un provider (avec `descr2`/`code_cert`).【F:reloc.py†L32-L39】
+- `GET /reloc/api/certifications/<prov_id>` — certifications d’un provider (avec `code_cert_key`/`code_cert`).【F:reloc.py†L32-L39】
 - `GET /reloc/api/modules/<cert_id>` — domaines d’une certification.【F:reloc.py†L41-L49】
 - `GET /reloc/api/question_count/<module_id>` — nombre de questions dans un module source.【F:reloc.py†L52-L59】
 - `GET /reloc/api/stream_relocate` — streaming SSE de relocalisation (assignation IA).【F:reloc.py†L62-L167】
@@ -53,7 +53,7 @@ Ce document liste les endpoints UI/API et les tables/colonnes qui supportent le 
 
 ### E. Blueprints (page blueprints)
 - `GET /blueprints/api/providers` — liste des providers.【F:module_blueprints.py†L58-L61】
-- `GET /blueprints/api/certifications/<prov_id>` — certifications d’un provider (avec `descr2`/`code_cert`).【F:module_blueprints.py†L63-L69】
+- `GET /blueprints/api/certifications/<prov_id>` — certifications d’un provider (avec `code_cert_key`/`code_cert`).【F:module_blueprints.py†L63-L69】
 - `GET /blueprints/api/certifications/<cert_id>/modules` — domaines + blueprint existant.【F:module_blueprints.py†L72-L78】
 - `PATCH /blueprints/api/modules/<module_id>` — mise à jour d’un blueprint (module).【F:module_blueprints.py†L95-L118】
 - `PATCH /blueprints/api/certifications/<cert_id>/modules` — mise à jour en masse des blueprints.【F:module_blueprints.py†L128-L184】
@@ -64,7 +64,7 @@ Ce document liste les endpoints UI/API et les tables/colonnes qui supportent le 
 
 ### Tables principales
 - `provs` — fournisseurs (providers).【F:dom.py†L10-L17】
-- `courses` — certifications (champs clés : `id`, `name`, `prov`, `descr2` (code_cert), `pub`).【F:dom.py†L19-L25】【F:db.py†L560-L610】
+- `courses` — certifications (champs clés : `id`, `name`, `prov`, `code_cert_key` (code_cert), `pub`).【F:dom.py†L19-L25】【F:db.py†L560-L610】
 - `modules` — domaines (champs clés : `id`, `name`, `descr`, `course`, `code_cert`, `blueprint`).【F:dom.py†L28-L36】【F:module_blueprints.py†L72-L78】
 - `questions` — questions (champs clés : `id`, `text`, `level`, `nature`, `ty`, `module`, `src_file`).【F:db.py†L742-L812】
 - `answers` — réponses (texte de réponse).【F:db.py†L951-L978】
@@ -72,7 +72,7 @@ Ce document liste les endpoints UI/API et les tables/colonnes qui supportent le 
 
 ### Tables utilisées par les rapports (qualité & publication)
 - `courses.pub` — utilisé pour détecter les certifications non publiées (`pub != 1`), avec `pub = 2` pour l’éligibilité automatique MCP.【F:db.py†L560-L611】
-- `modules.code_cert` / `courses.descr2` — association “domain default” pour l’import initial (reports + import).【F:db.py†L560-L610】
+- `modules.code_cert` / `courses.code_cert_key` — association “domain default” pour l’import initial (reports + import).【F:db.py†L560-L610】
 - agrégations `questions` + `quest_ans` — détection des questions sans bonne réponse (fix).【F:db.py†L457-L519】
 
 ## 4) Endpoints/queries candidats pour MCP (à exposer)
