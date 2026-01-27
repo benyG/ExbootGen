@@ -92,12 +92,12 @@ def _fetch_certification(conn, cert_id: int) -> dict | None:
     try:
         try:
             cur.execute(
-                "SELECT id, name, code, descr2 AS code_cert FROM courses WHERE id=%s",
+                "SELECT id, name, code, code_cert_key AS code_cert FROM courses WHERE id=%s",
                 (cert_id,),
             )
         except Exception:
             cur.execute(
-                "SELECT id, name, descr2 AS code_cert FROM courses WHERE id=%s",
+                "SELECT id, name, code_cert_key AS code_cert FROM courses WHERE id=%s",
                 (cert_id,),
             )
         row = cur.fetchone()
@@ -299,7 +299,7 @@ def api_certifications(provider_id):
         cur = conn.cursor(dictionary=True)
         cur.execute(
             """
-            SELECT c.id, c.name, c.descr2 AS code_cert
+            SELECT c.id, c.name, c.code_cert_key AS code_cert
             FROM courses c
             WHERE c.prov = %s
             ORDER BY c.name
@@ -345,7 +345,7 @@ def api_update_code_cert():
     try:
         cur = conn.cursor()
         try:
-            cur.execute("UPDATE courses SET descr2 = %s WHERE id = %s", (code_cert, cert_id))
+            cur.execute("UPDATE courses SET code_cert_key = %s WHERE id = %s", (code_cert, cert_id))
             cur.execute("UPDATE modules SET code_cert = %s WHERE id = %s", (code_cert, module_id))
             conn.commit()
         except Exception as exc:
@@ -369,7 +369,7 @@ def api_resolve_cert_by_code():
     try:
         cur = conn.cursor(dictionary=True)
         cur.execute(
-            "SELECT id AS cert_id, prov AS provider_id FROM courses WHERE descr2 = %s LIMIT 1",
+            "SELECT id AS cert_id, prov AS provider_id FROM courses WHERE code_cert_key = %s LIMIT 1",
             (code_cert,),
         )
         row = cur.fetchone()
@@ -455,7 +455,7 @@ def api_sync_code_cert():
               LEFT(CONCAT(c.name, '-default'), 255) AS name,
               CONCAT('Généré depuis la certification "', c.name, '"') AS descr,
               23 AS course,
-              c.descr2 AS code_cert
+              c.code_cert_key AS code_cert
             FROM courses c
             LEFT JOIN modules m
               ON m.course = 23
@@ -472,7 +472,7 @@ def api_sync_code_cert():
             JOIN courses c
               ON m.course = 23
              AND m.name   = LEFT(CONCAT(c.name, '-default'), 255)
-            SET m.code_cert = c.descr2
+            SET m.code_cert = c.code_cert_key
             WHERE c.id <> 23
             """
         )
@@ -571,8 +571,22 @@ def api_mcp_import_local():
                     if not isinstance(raw_path, str) or not raw_path.strip():
                         continue
                     resolved, is_absolute = normalize_path(raw_path.strip())
+
+# Si le chemin exact n'existe pas (cas Linux: FS sensible à la casse),
+# tenter une résolution insensible à la casse sur le nom de fichier
+# dans le dossier parent.
+                    if not resolved.exists():
+                        parent = resolved.parent
+                        target = resolved.name.casefold()
+                        if parent.exists() and parent.is_dir():
+                            for candidate in parent.iterdir():
+                                if candidate.is_file() and candidate.name.casefold() == target:
+                                    resolved = candidate
+                                    break
+
                     if not resolved.exists() or not resolved.is_file():
                         raise FileNotFoundError(f"Fichier introuvable: {raw_path}")
+
                     if not is_absolute and not str(resolved).startswith(str(PDF_SEARCH_ROOT)):
                         raise ValueError(f"Chemin non autorisé: {raw_path}")
                     if resolved.suffix.lower() != ".pdf":
@@ -584,15 +598,21 @@ def api_mcp_import_local():
                 raise ValueError("code_cert requis pour la recherche automatique")
 
             root_path = resolve_search_root()
-            pattern = f"{code_cert.lower()}_"
+            code_cert_lower = code_cert.lower()
+            code_cert_compact = re.sub(r"[^a-z0-9]+", "", code_cert_lower)
             matches: list[Path] = []
             for dirpath, _, files in os.walk(root_path):
                 for name in files:
                     if not name.lower().endswith(".pdf"):
                         continue
                     lower_name = name.lower()
-                    if lower_name.startswith(pattern):
+                    if code_cert_lower in lower_name:
                         matches.append(Path(dirpath) / name)
+                        continue
+                    if code_cert_compact:
+                        compact_name = re.sub(r"[^a-z0-9]+", "", lower_name)
+                        if code_cert_compact in compact_name:
+                            matches.append(Path(dirpath) / name)
                 if len(matches) >= 200:
                     break
             if not matches:

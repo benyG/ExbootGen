@@ -359,7 +359,7 @@ def get_certifications_by_provider(provider_id):
 def get_certifications_by_provider_with_code(provider_id):
     conn = get_connection()
     cursor = conn.cursor()
-    query = "SELECT id, name, descr2 FROM courses WHERE prov = %s"
+    query = "SELECT id, name, code_cert_key FROM courses WHERE prov = %s"
     cursor.execute(query, (provider_id,))
     certifications = cursor.fetchall()
     cursor.close()
@@ -380,7 +380,7 @@ def update_certification_pub(cert_id: int, pub_status: int) -> None:
 def get_certifications_by_provider_with_code(provider_id):
     conn = get_connection()
     cursor = conn.cursor()
-    query = "SELECT id, name, descr2 FROM courses WHERE prov = %s"
+    query = "SELECT id, name, code_cert_key FROM courses WHERE prov = %s"
     cursor.execute(query, (provider_id,))
     certifications = cursor.fetchall()
     cursor.close()
@@ -391,7 +391,7 @@ def get_certifications_by_provider_with_code(provider_id):
 def get_certifications_by_provider_with_code(provider_id):
     conn = get_connection()
     cursor = conn.cursor()
-    query = "SELECT id, name, descr2 FROM courses WHERE prov = %s"
+    query = "SELECT id, name, code_cert_key FROM courses WHERE prov = %s"
     cursor.execute(query, (provider_id,))
     certifications = cursor.fetchall()
     cursor.close()
@@ -402,7 +402,7 @@ def get_certifications_by_provider_with_code(provider_id):
 def get_certifications_by_provider_with_code(provider_id):
     conn = get_connection()
     cursor = conn.cursor()
-    query = "SELECT id, name, descr2 FROM courses WHERE prov = %s"
+    query = "SELECT id, name, code_cert_key FROM courses WHERE prov = %s"
     cursor.execute(query, (provider_id,))
     certifications = cursor.fetchall()
     cursor.close()
@@ -600,7 +600,7 @@ def get_unpublished_certifications_report(include_all_unpublished: bool = False)
             p.name AS provider_name,
             c.id AS cert_id,
             c.name AS cert_name,
-            c.descr2 AS code_cert,
+            c.code_cert_key AS code_cert,
             c.pub AS pub_status,
             (
                 SELECT COUNT(q_all.id)
@@ -612,12 +612,12 @@ def get_unpublished_certifications_report(include_all_unpublished: bool = False)
                 SELECT COUNT(q_def.id)
                 FROM questions q_def
                 JOIN modules m_def ON m_def.id = q_def.module
-                WHERE m_def.code_cert = c.descr2
+                WHERE m_def.code_cert = c.code_cert_key
             ) AS default_questions,
             (
                 SELECT m_def.id
                 FROM modules m_def
-                WHERE m_def.code_cert = c.descr2
+                WHERE m_def.code_cert = c.code_cert_key
                 ORDER BY m_def.id DESC
                 LIMIT 1
             ) AS default_module_id
@@ -626,7 +626,7 @@ def get_unpublished_certifications_report(include_all_unpublished: bool = False)
                 SELECT c_def.id
                 FROM modules m_def
                 JOIN courses c_def ON c_def.id = m_def.course
-                WHERE m_def.code_cert = c.descr2
+                WHERE m_def.code_cert = c.code_cert_key
                 ORDER BY m_def.id DESC
                 LIMIT 1
             ) AS default_cert_id
@@ -635,7 +635,7 @@ def get_unpublished_certifications_report(include_all_unpublished: bool = False)
                 SELECT c_def.prov
                 FROM modules m_def
                 JOIN courses c_def ON c_def.id = m_def.course
-                WHERE m_def.code_cert = c.descr2
+                WHERE m_def.code_cert = c.code_cert_key
                 ORDER BY m_def.id DESC
                 LIMIT 1
             ) AS default_provider_id

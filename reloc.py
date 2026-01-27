@@ -154,7 +154,7 @@ def api_providers():
 def api_certs(prov_id):
     conn = mysql.connector.connect(**DB_CONFIG)
     cur  = conn.cursor(dictionary=True)
-    cur.execute("SELECT id, name, descr2 AS code_cert FROM courses WHERE prov = %s", (prov_id,))
+    cur.execute("SELECT id, name, code_cert_key AS code_cert FROM courses WHERE prov = %s", (prov_id,))
     rows = cur.fetchall()
     cur.close(); conn.close()
     return json.dumps(rows, ensure_ascii=False), 200, {'Content-Type':'application/json'}

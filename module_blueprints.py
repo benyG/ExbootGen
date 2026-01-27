@@ -64,7 +64,7 @@ def api_providers():
 @module_blueprints_bp.route("/api/certifications/<int:prov_id>")
 def api_certifications(prov_id: int):
     rows = _fetchall(
-        "SELECT id, name, descr2 AS code_cert FROM courses WHERE prov = %s ORDER BY name",
+        "SELECT id, name, code_cert_key AS code_cert FROM courses WHERE prov = %s ORDER BY name",
         (prov_id,),
     )
     return jsonify(rows)
@@ -264,7 +264,7 @@ def api_generate_blueprints(cert_id: int):
         cur = conn.cursor(dictionary=True)
         try:
             cur.execute(
-                "SELECT name, descr2 AS code_cert FROM courses WHERE id = %s",
+                "SELECT name, code_cert_key AS code_cert FROM courses WHERE id = %s",
                 (cert_id,),
             )
             cert_row = cur.fetchone()
