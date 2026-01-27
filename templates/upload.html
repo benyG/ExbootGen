@@ -354,8 +354,7 @@
 
     function syncCodeCertInput() {
         const moduleCode = getSelectedModuleCode();
-        const certCode = getSelectedCertCode();
-        codeCertInput.value = moduleCode || certCode || '';
+        codeCertInput.value = moduleCode || '';
     }
 
     async function resolveDestinationByCode(codeCert) {
