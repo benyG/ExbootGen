@@ -1,13 +1,22 @@
 # eraser_api.py
 
+import json
+import logging
+import os
+
 import requests
+
+logger = logging.getLogger(__name__)
 
 def render_diagram(provider_name: str, diagram_description: str, diagram_type: str) -> str:
     """
     Génère un diagramme via l'API Eraser.io si diagram_type ∈ {sequence, flowchart, architecture}.
     Sinon, renvoie une chaîne vide.
     """
-    api_key = "Ogs3UAeUmmvHpM9Tp0dI"
+    api_key = os.environ.get("ERASER_API_KEY", "").strip()
+    if not api_key:
+        logger.warning("ERASER_API_KEY absent; génération de diagramme ignorée.")
+        return ""
     endpoint = "https://app.eraser.io/api/render/prompt"
     
     # Sélection du type de diagramme

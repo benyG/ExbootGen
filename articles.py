@@ -1938,7 +1938,15 @@ def generate_carousel():
 def download_carousel(filename: str):
     """Download the generated carousel PDF."""
 
-    file_path = UPLOAD_DIR / filename
+    try:
+        resolved_path = (UPLOAD_DIR / filename).resolve()
+        resolved_path.relative_to(UPLOAD_DIR.resolve())
+    except (ValueError, RuntimeError):
+        return jsonify({"error": "Chemin de fichier invalide."}), 400
+
+    file_path = resolved_path
+    if file_path.suffix.lower() != ".pdf":
+        return jsonify({"error": "Format de fichier invalide."}), 400
     if not file_path.exists() or not file_path.is_file():
         return jsonify({"error": "Fichier introuvable."}), 404
 
