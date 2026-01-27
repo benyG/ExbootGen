@@ -373,9 +373,37 @@ def api_update_code_cert():
 
     conn = db_conn()
     try:
-        cur = conn.cursor()
+        cur = conn.cursor(dictionary=True)
         try:
-            cur.execute("UPDATE courses SET code_cert_key = %s WHERE id = %s", (code_cert, cert_id))
+            cur.execute("SELECT id, name, course FROM modules WHERE id = %s", (module_id,))
+            module_row = cur.fetchone()
+            if not module_row:
+                return jsonify({"status": "error", "message": "Module introuvable."}), 404
+            if module_row.get("course") == 23:
+                return jsonify({"status": "error", "message": "Impossible de modifier le code d'un module default."}), 400
+            module_name = (module_row.get("name") or "").strip()
+            course_name = module_name[:-8] if module_name.endswith("-default") else module_name
+            if not course_name:
+                return jsonify({"status": "error", "message": "Nom de module invalide."}), 400
+
+            cur.execute("SELECT code_cert_key FROM courses WHERE id = 23")
+            default_course = cur.fetchone()
+            default_code = (default_course or {}).get("code_cert_key") or ""
+            if default_code and code_cert == default_code:
+                return jsonify({"status": "error", "message": "Code certification invalide pour un module."}), 400
+
+            cur.execute(
+                "SELECT id FROM courses WHERE name = %s AND id <> 23 LIMIT 1",
+                (course_name,),
+            )
+            course_row = cur.fetchone()
+            if not course_row:
+                return jsonify({"status": "error", "message": "Certification introuvable."}), 404
+
+            cur.execute(
+                "UPDATE courses SET code_cert_key = %s WHERE id = %s",
+                (code_cert, course_row["id"]),
+            )
             cur.execute("UPDATE modules SET code_cert = %s WHERE id = %s", (code_cert, module_id))
             conn.commit()
         except Exception as exc:
