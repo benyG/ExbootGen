@@ -598,15 +598,21 @@ def api_mcp_import_local():
                 raise ValueError("code_cert requis pour la recherche automatique")
 
             root_path = resolve_search_root()
-            pattern = f"{code_cert.lower()}_"
+            code_cert_lower = code_cert.lower()
+            code_cert_compact = re.sub(r"[^a-z0-9]+", "", code_cert_lower)
             matches: list[Path] = []
             for dirpath, _, files in os.walk(root_path):
                 for name in files:
                     if not name.lower().endswith(".pdf"):
                         continue
                     lower_name = name.lower()
-                    if lower_name.startswith(pattern):
+                    if code_cert_lower in lower_name:
                         matches.append(Path(dirpath) / name)
+                        continue
+                    if code_cert_compact:
+                        compact_name = re.sub(r"[^a-z0-9]+", "", lower_name)
+                        if code_cert_compact in compact_name:
+                            matches.append(Path(dirpath) / name)
                 if len(matches) >= 200:
                     break
             if not matches:
