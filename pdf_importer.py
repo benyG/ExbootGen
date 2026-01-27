@@ -571,8 +571,22 @@ def api_mcp_import_local():
                     if not isinstance(raw_path, str) or not raw_path.strip():
                         continue
                     resolved, is_absolute = normalize_path(raw_path.strip())
+
+# Si le chemin exact n'existe pas (cas Linux: FS sensible à la casse),
+# tenter une résolution insensible à la casse sur le nom de fichier
+# dans le dossier parent.
+                    if not resolved.exists():
+                        parent = resolved.parent
+                        target = resolved.name.casefold()
+                        if parent.exists() and parent.is_dir():
+                            for candidate in parent.iterdir():
+                                if candidate.is_file() and candidate.name.casefold() == target:
+                                    resolved = candidate
+                                    break
+
                     if not resolved.exists() or not resolved.is_file():
                         raise FileNotFoundError(f"Fichier introuvable: {raw_path}")
+
                     if not is_absolute and not str(resolved).startswith(str(PDF_SEARCH_ROOT)):
                         raise ValueError(f"Chemin non autorisé: {raw_path}")
                     if resolved.suffix.lower() != ".pdf":
