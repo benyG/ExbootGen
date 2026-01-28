@@ -386,6 +386,42 @@ def update_certification_pub(cert_id: int, pub_status: int) -> None:
     conn.close()
 
 
+def update_certification_code_cert_key(
+    cert_id: int,
+    new_code: str,
+    *,
+    old_code: str | None = None,
+) -> None:
+    """Update certification code_cert_key and sync default module code_cert."""
+
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        conn.start_transaction()
+        cursor.execute(
+            "UPDATE courses SET code_cert_key = %s, descr2 = %s WHERE id = %s",
+            (new_code, new_code, cert_id),
+        )
+        if old_code:
+            cursor.execute(
+                "UPDATE modules SET code_cert = %s WHERE course = 23 AND code_cert = %s",
+                (new_code, old_code),
+            )
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        conn.close()
+
+
 def get_certifications_by_provider_with_code(provider_id):
     conn = get_connection()
     cursor = conn.cursor()
