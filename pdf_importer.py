@@ -368,14 +368,25 @@ def api_update_code_cert():
     module_id = data.get("module_id")
     code_cert = (data.get("code_cert") or "").strip()
 
-    if not cert_id or not module_id or not code_cert:
-        return jsonify({"status": "error", "message": "cert_id, module_id et code_cert requis."}), 400
+    if not module_id or not code_cert:
+        return jsonify({"status": "error", "message": "module_id et code_cert requis."}), 400
 
     conn = db_conn()
     try:
         cur = conn.cursor()
         try:
-            cur.execute("UPDATE courses SET code_cert_key = %s WHERE id = %s", (code_cert, cert_id))
+            cur.execute("SELECT course FROM modules WHERE id = %s", (module_id,))
+            row = cur.fetchone()
+            if not row:
+                return jsonify({"status": "error", "message": "Module introuvable."}), 404
+            module_course_id = row[0]
+            target_cert_id = module_course_id or cert_id
+            if not target_cert_id:
+                return jsonify({"status": "error", "message": "Certification introuvable pour ce module."}), 404
+            cur.execute(
+                "UPDATE courses SET code_cert_key = %s WHERE id = %s",
+                (code_cert, target_cert_id),
+            )
             cur.execute("UPDATE modules SET code_cert = %s WHERE id = %s", (code_cert, module_id))
             conn.commit()
         except Exception as exc:
