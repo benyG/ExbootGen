@@ -622,13 +622,19 @@ def get_unpublished_certifications_report(include_all_unpublished: bool = False)
                 FROM questions q_def
                 JOIN modules m_def ON m_def.id = q_def.module
                 WHERE m_def.course = 23
-                  AND m_def.code_cert = c.code_cert_key
+                  AND (
+                    TRIM(m_def.code_cert) = TRIM(c.code_cert_key)
+                    OR m_def.name = LEFT(CONCAT(c.name, '-default'), 255)
+                  )
             ) AS default_questions,
             (
                 SELECT m_def.id
                 FROM modules m_def
                 WHERE m_def.course = 23
-                  AND m_def.code_cert = c.code_cert_key
+                  AND (
+                    TRIM(m_def.code_cert) = TRIM(c.code_cert_key)
+                    OR m_def.name = LEFT(CONCAT(c.name, '-default'), 255)
+                  )
                 ORDER BY m_def.id DESC
                 LIMIT 1
             ) AS default_module_id,
@@ -637,7 +643,10 @@ def get_unpublished_certifications_report(include_all_unpublished: bool = False)
                 FROM modules m_def
                 JOIN courses c_def ON c_def.id = m_def.course
                 WHERE m_def.course = 23
-                  AND m_def.code_cert = c.code_cert_key
+                  AND (
+                    TRIM(m_def.code_cert) = TRIM(c.code_cert_key)
+                    OR m_def.name = LEFT(CONCAT(c.name, '-default'), 255)
+                  )
                 ORDER BY m_def.id DESC
                 LIMIT 1
             ) AS default_cert_id,
@@ -646,7 +655,10 @@ def get_unpublished_certifications_report(include_all_unpublished: bool = False)
                 FROM modules m_def
                 JOIN courses c_def ON c_def.id = m_def.course
                 WHERE m_def.course = 23
-                  AND m_def.code_cert = c.code_cert_key
+                  AND (
+                    TRIM(m_def.code_cert) = TRIM(c.code_cert_key)
+                    OR m_def.name = LEFT(CONCAT(c.name, '-default'), 255)
+                  )
                 ORDER BY m_def.id DESC
                 LIMIT 1
             ) AS default_provider_id
