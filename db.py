@@ -621,14 +621,12 @@ def get_unpublished_certifications_report(include_all_unpublished: bool = False)
                 SELECT COUNT(q_def.id)
                 FROM questions q_def
                 JOIN modules m_def ON m_def.id = q_def.module
-                WHERE m_def.course = 23
-                  AND m_def.code_cert = c.code_cert_key
+                WHERE m_def.code_cert = c.code_cert_key
             ) AS default_questions,
             (
                 SELECT m_def.id
                 FROM modules m_def
-                WHERE m_def.course = 23
-                  AND m_def.code_cert = c.code_cert_key
+                WHERE m_def.code_cert = c.code_cert_key
                 ORDER BY m_def.id DESC
                 LIMIT 1
             ) AS default_module_id,
@@ -636,8 +634,7 @@ def get_unpublished_certifications_report(include_all_unpublished: bool = False)
                 SELECT c_def.id
                 FROM modules m_def
                 JOIN courses c_def ON c_def.id = m_def.course
-                WHERE m_def.course = 23
-                  AND m_def.code_cert = c.code_cert_key
+                WHERE m_def.code_cert = c.code_cert_key
                 ORDER BY m_def.id DESC
                 LIMIT 1
             ) AS default_cert_id,
@@ -645,8 +642,7 @@ def get_unpublished_certifications_report(include_all_unpublished: bool = False)
                 SELECT c_def.prov
                 FROM modules m_def
                 JOIN courses c_def ON c_def.id = m_def.course
-                WHERE m_def.course = 23
-                  AND m_def.code_cert = c.code_cert_key
+                WHERE m_def.code_cert = c.code_cert_key
                 ORDER BY m_def.id DESC
                 LIMIT 1
             ) AS default_provider_id
