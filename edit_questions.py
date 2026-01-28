@@ -120,6 +120,57 @@ def api_search():
     return jsonify({'results': results})
 
 
+@edit_question_bp.route('/api/correction')
+def api_correction_list():
+    certification_id = request.args.get('certification_id')
+    if not certification_id:
+        return jsonify({'error': 'La certification est requise'}), 400
+
+    db = get_db()
+    cur = db.cursor(dictionary=True)
+    cur.execute(
+        """
+        SELECT q.id,
+               q.text,
+               q.src_file,
+               m.name AS module_name,
+               c.name AS certification_name,
+               p.name AS provider_name,
+               COUNT(qa.answer) AS answer_count,
+               COALESCE(SUM(CASE WHEN qa.isok = 1 THEN 1 ELSE 0 END), 0) AS correct_count
+          FROM questions q
+          JOIN modules m ON q.module = m.id
+          JOIN courses c ON m.course = c.id
+          JOIN provs p ON c.prov = p.id
+          LEFT JOIN quest_ans qa ON qa.question = q.id
+         WHERE c.id = %s
+         GROUP BY q.id, q.text, q.src_file, m.name, c.name, p.name
+        HAVING COUNT(qa.answer) = 0
+            OR COALESCE(SUM(CASE WHEN qa.isok = 1 THEN 1 ELSE 0 END), 0) = 0
+         ORDER BY q.id DESC
+        """,
+        (certification_id,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+
+    results = []
+    for row in rows:
+        text_preview = (row.get('text') or '')[:220]
+        results.append({
+            'id': row['id'],
+            'text_preview': text_preview,
+            'src_file': row.get('src_file'),
+            'module_name': row.get('module_name'),
+            'provider': row.get('provider_name'),
+            'certification': row.get('certification_name'),
+            'answer_count': row.get('answer_count', 0),
+            'correct_count': row.get('correct_count', 0),
+        })
+
+    return jsonify({'results': results, 'total': len(results)})
+
+
 @edit_question_bp.route('/api/questions', methods=['POST'])
 def api_create_question():
     payload = request.get_json() or {}

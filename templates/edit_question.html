@@ -221,6 +221,10 @@
           <input type="checkbox" id="addModeToggle">
           Mode ajout
         </label>
+        <label style="display:flex; align-items:center; gap:0.4rem; color: var(--muted); font-size: 0.95rem;">
+          <input type="checkbox" id="correctionModeToggle">
+          Mode correction
+        </label>
         <span class="status" id="searchStatus">Saisissez au moins un mot-clé.</span>
       </div>
     </section>
@@ -238,6 +242,12 @@
         <div>
           <h2 style="margin: 0;">Éditeur</h2>
           <p class="status" id="editorStatus">Sélectionnez une question pour l'éditer.</p>
+        </div>
+        <div id="correctionNav" class="hidden" style="display:flex; align-items:center; gap:0.6rem; flex-wrap: wrap;">
+          <button type="button" class="secondary" id="prevCorrection">PREVIOUS</button>
+          <button type="button" class="secondary" id="nextCorrection">NEXT</button>
+          <span class="status" id="correctionRemaining"></span>
+          <span class="status" id="correctionPosition"></span>
         </div>
         <div class="status" id="contextInfo"></div>
       </div>
@@ -331,6 +341,12 @@
     const moduleSelect = document.getElementById('moduleSelect');
     const moduleSelectWrap = document.getElementById('moduleSelectWrap');
     const addModeToggle = document.getElementById('addModeToggle');
+    const correctionModeToggle = document.getElementById('correctionModeToggle');
+    const correctionNav = document.getElementById('correctionNav');
+    const prevCorrection = document.getElementById('prevCorrection');
+    const nextCorrection = document.getElementById('nextCorrection');
+    const correctionRemaining = document.getElementById('correctionRemaining');
+    const correctionPosition = document.getElementById('correctionPosition');
     const addBtn = document.getElementById('addBtn');
     const resultsContainer = document.getElementById('results');
     const resultsCount = document.getElementById('resultsCount');
@@ -351,6 +367,9 @@
 
     let currentQuestionId = null;
     let isAddMode = false;
+    let isCorrectionMode = false;
+    let correctionQuestions = [];
+    let correctionIndex = -1;
 
     const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
     nav?.querySelectorAll('a[data-route]').forEach(link => {
@@ -412,6 +431,10 @@
         searchStatus.textContent = 'Mode ajout activé : la recherche est désactivée.';
         return;
       }
+      if (isCorrectionMode) {
+        searchStatus.textContent = 'Mode correction activé : utilisez NEXT / PREVIOUS pour naviguer.';
+        return;
+      }
       const q = searchText.value.trim();
       if (!q) {
         searchStatus.textContent = 'Veuillez saisir un mot-clé.';
@@ -438,6 +461,71 @@
       `).join('');
     }
 
+    async function loadCorrectionList(keepCurrent = false) {
+      const certId = certificationSelect.value;
+      if (!certId) {
+        resultsContainer.innerHTML = '';
+        resultsCount.textContent = 'Sélectionnez une certification.';
+        searchStatus.textContent = 'Mode correction : sélectionnez une certification.';
+        correctionQuestions = [];
+        correctionIndex = -1;
+        updateCorrectionStatus();
+        return;
+      }
+      searchStatus.textContent = 'Recherche des questions à corriger…';
+      resultsContainer.innerHTML = '';
+      const res = await fetch(`/edit-question/api/correction?certification_id=${certId}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        resultsCount.textContent = err.error || 'Erreur pendant la recherche.';
+        searchStatus.textContent = 'Impossible de charger les questions à corriger.';
+        correctionQuestions = [];
+        correctionIndex = -1;
+        updateCorrectionStatus();
+        return;
+      }
+      const data = await res.json();
+      correctionQuestions = data.results || [];
+      resultsCount.textContent = `${correctionQuestions.length} question(s) à corriger`;
+      searchStatus.textContent = correctionQuestions.length
+        ? 'Utilisez NEXT / PREVIOUS pour corriger les questions.'
+        : 'Aucune question à corriger pour cette certification.';
+      resultsContainer.innerHTML = correctionQuestions.map(r => {
+        const issue = r.answer_count === 0
+          ? 'Sans réponse'
+          : 'Aucune bonne réponse';
+        return `
+        <article class="result-card" data-id="${r.id}">
+          <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
+          <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
+          <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
+          <small class="src">${issue}</small>
+        </article>
+      `;
+      }).join('');
+      if (correctionQuestions.length) {
+        if (keepCurrent && currentQuestionId) {
+          const currentIndex = correctionQuestions.findIndex(item => String(item.id) === String(currentQuestionId));
+          correctionIndex = currentIndex >= 0 ? currentIndex : 0;
+        } else {
+          correctionIndex = 0;
+        }
+        await loadQuestion(correctionQuestions[correctionIndex].id);
+      } else {
+        correctionIndex = -1;
+        currentQuestionId = null;
+        questionEditor.innerHTML = '';
+        srcFileInput.value = '';
+        descrInput.value = '';
+        renderAnswers([]);
+        editorStatus.textContent = 'Aucune question à corriger.';
+        contextInfo.textContent = '';
+        saveBtn.disabled = true;
+        deleteBtn.disabled = true;
+      }
+      updateCorrectionStatus();
+    }
+
     async function loadQuestion(questionId) {
       if (isAddMode) {
         setAddMode(false);
@@ -449,6 +537,13 @@
       }
       const q = await res.json();
       currentQuestionId = q.id;
+      if (isCorrectionMode) {
+        const index = correctionQuestions.findIndex(item => String(item.id) === String(q.id));
+        if (index >= 0) {
+          correctionIndex = index;
+        }
+        updateCorrectionStatus();
+      }
       questionEditor.innerHTML = q.text || '';
       srcFileInput.value = q.src_file || '';
       descrInput.value = q.descr || '';
@@ -496,6 +591,9 @@
     }
 
     function setAddMode(enabled) {
+      if (enabled && isCorrectionMode) {
+        setCorrectionMode(false);
+      }
       isAddMode = enabled;
       addModeToggle.checked = enabled;
       moduleSelectWrap.classList.toggle('hidden', !enabled);
@@ -524,6 +622,44 @@
         searchStatus.textContent = 'Saisissez au moins un mot-clé.';
         addBtn.disabled = false;
         deleteBtn.disabled = !currentQuestionId;
+      }
+    }
+
+    function updateCorrectionStatus() {
+      if (!isCorrectionMode) return;
+      const total = correctionQuestions.length;
+      if (total === 0) {
+        correctionRemaining.textContent = 'Aucune question à corriger.';
+        correctionPosition.textContent = '';
+        prevCorrection.disabled = true;
+        nextCorrection.disabled = true;
+        return;
+      }
+      const position = correctionIndex >= 0 ? correctionIndex + 1 : 1;
+      correctionRemaining.textContent = `Questions à corriger restantes: ${total}`;
+      correctionPosition.textContent = `(${position}/${total})`;
+      prevCorrection.disabled = position <= 1;
+      nextCorrection.disabled = position >= total;
+    }
+
+    function setCorrectionMode(enabled) {
+      isCorrectionMode = enabled;
+      correctionModeToggle.checked = enabled;
+      correctionNav.classList.toggle('hidden', !enabled);
+      addModeToggle.disabled = enabled;
+      searchBtn.disabled = enabled || isAddMode;
+      searchText.disabled = enabled || isAddMode;
+      if (enabled) {
+        searchText.value = '';
+        setUploadStatus('');
+        loadCorrectionList();
+      } else {
+        correctionQuestions = [];
+        correctionIndex = -1;
+        correctionRemaining.textContent = '';
+        correctionPosition.textContent = '';
+        resultsCount.textContent = 'Aucun résultat pour le moment.';
+        searchStatus.textContent = 'Saisissez au moins un mot-clé.';
       }
     }
 
@@ -651,16 +787,31 @@
     resultsContainer.addEventListener('click', (e) => {
       const card = e.target.closest('.result-card');
       if (card?.dataset.id) {
+        if (isCorrectionMode) {
+          const index = correctionQuestions.findIndex(item => String(item.id) === String(card.dataset.id));
+          if (index >= 0) {
+            correctionIndex = index;
+          }
+        }
         loadQuestion(card.dataset.id);
       }
     });
 
     document.getElementById('searchBtn').addEventListener('click', searchQuestions);
     searchText.addEventListener('keyup', (e) => { if (e.key === 'Enter') searchQuestions(); });
-    providerSelect.addEventListener('change', () => { loadCertifications(); if (!isAddMode) searchQuestions(); });
+    providerSelect.addEventListener('change', () => {
+      loadCertifications();
+      if (!isAddMode && !isCorrectionMode) {
+        searchQuestions();
+      }
+    });
     certificationSelect.addEventListener('change', () => {
       if (isAddMode) {
         loadModules();
+        return;
+      }
+      if (isCorrectionMode) {
+        loadCorrectionList();
         return;
       }
       searchQuestions();
@@ -668,8 +819,28 @@
     addModeToggle.addEventListener('change', (event) => {
       setAddMode(event.target.checked);
     });
+    correctionModeToggle.addEventListener('change', (event) => {
+      if (event.target.checked) {
+        setAddMode(false);
+      }
+      setCorrectionMode(event.target.checked);
+    });
     moduleSelect?.addEventListener('change', () => {
       saveStatus.textContent = '';
+    });
+
+    prevCorrection.addEventListener('click', () => {
+      if (!isCorrectionMode || correctionIndex <= 0) return;
+      correctionIndex -= 1;
+      loadQuestion(correctionQuestions[correctionIndex].id);
+      updateCorrectionStatus();
+    });
+
+    nextCorrection.addEventListener('click', () => {
+      if (!isCorrectionMode || correctionIndex >= correctionQuestions.length - 1) return;
+      correctionIndex += 1;
+      loadQuestion(correctionQuestions[correctionIndex].id);
+      updateCorrectionStatus();
     });
 
     saveBtn.addEventListener('click', async () => {
@@ -705,6 +876,9 @@
       });
       if (res.ok) {
         saveStatus.textContent = 'Question mise à jour avec succès.';
+        if (isCorrectionMode) {
+          loadCorrectionList(true);
+        }
       } else {
         const err = await res.json().catch(() => ({}));
         saveStatus.textContent = err.error || 'Erreur pendant la sauvegarde.';
@@ -732,6 +906,9 @@
         contextInfo.textContent = '';
         saveBtn.disabled = true;
         deleteBtn.disabled = true;
+        if (isCorrectionMode) {
+          loadCorrectionList();
+        }
       } else {
         const err = await res.json().catch(() => ({}));
         saveStatus.textContent = err.error || 'Erreur pendant la suppression.';
