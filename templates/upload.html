@@ -556,15 +556,20 @@
         pdfResults.appendChild(list);
     };
 
+    const getSearchToken = (value) => {
+        return (value || '').trim().split(/\s+/)[0] || '';
+    };
+
     const refreshPdfList = () => {
         const root = dirInput.value.trim();
         const query = fileSearch.value.trim() || fileInput.value.trim();
-        if (!root || query.length === 0) {
+        const searchQuery = getSearchToken(query);
+        if (!root || searchQuery.length === 0) {
             pdfList.innerHTML = "";
-            renderPdfResults([], query);
+            renderPdfResults([], searchQuery);
             return;
         }
-        fetch(`${apiBase}api/search-pdfs?root=${encodeURIComponent(root)}&q=${encodeURIComponent(query)}`)
+        fetch(`${apiBase}api/search-pdfs?root=${encodeURIComponent(root)}&q=${encodeURIComponent(searchQuery)}`)
             .then(r => r.json())
             .then(data => {
                 pdfList.innerHTML = "";
@@ -573,7 +578,7 @@
                     opt.value = p;
                     pdfList.appendChild(opt);
                 });
-                renderPdfResults(data, query);
+                renderPdfResults(data, searchQuery);
             });
     };
 
