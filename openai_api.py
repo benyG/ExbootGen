@@ -26,7 +26,7 @@ CODE_CERT_PROMPT_TEMPLATE = (
     "- If the official identifier is not available on the official site, return an empty string.\n"
     "- Return STRICT JSON only, in a single line, with no extra commentary.\n"
     "Required JSON format:\n"
-    "{\"items\":[{\"cert_id\":123,\"code_cert_key\":\"EXAM-123\",\"source_url\":\"https://official.example\"}]}\n"
+    "{{\"items\":[{{\"cert_id\":123,\"code_cert_key\":\"EXAM-123\",\"source_url\":\"https://official.example\"}}]}}\n"
     "Provide one object per input certification and preserve the cert_id.\n"
     "Input certifications (JSON array): {certifications}\n"
 )
