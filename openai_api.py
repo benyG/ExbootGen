@@ -17,6 +17,20 @@ from config import (
 
 OPENAI_SEARCH_MODEL = "gpt-5-search-api"
 
+CODE_CERT_PROMPT_TEMPLATE = (
+    "You are a certification researcher.\n"
+    "Task: For the provider \"{provider}\", find the official exam identifier "
+    "(code_cert_key) for each certification listed below.\n"
+    "Rules:\n"
+    "- Use ONLY the official website of the provider. Do not use third-party sites.\n"
+    "- If the official identifier is not available on the official site, return an empty string.\n"
+    "- Return STRICT JSON only, in a single line, with no extra commentary.\n"
+    "Required JSON format:\n"
+    "{{\"items\":[{{\"cert_id\":123,\"code_cert_key\":\"EXAM-123\",\"source_url\":\"https://official.example\"}}]}}\n"
+    "Provide one object per input certification and preserve the cert_id.\n"
+    "Input certifications (JSON array): {certifications}\n"
+)
+
 DOMAIN_PROMPT_TEMPLATE = (
     "Retrieve the official domains of the exam outline course for the certification "
     "{{NAME_OF_CERTIFICATION}} along with their descriptions.\n"
@@ -687,6 +701,43 @@ def generate_domains_outline(certification: str) -> dict:
 
     content = message["content"]
     return clean_and_decode_json(content)
+
+
+def generate_code_cert_keys(provider_name: str, certifications: list[dict]) -> list[dict]:
+    """Retrieve official code_cert_key identifiers for a provider's certifications."""
+
+    if not OPENAI_API_KEY:
+        raise Exception(
+            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer des codes."
+        )
+
+    provider = (provider_name or "").strip()
+    if not provider:
+        raise ValueError("Le nom du provider est requis.")
+    if not certifications:
+        raise ValueError("Aucune certification fournie pour la recherche.")
+
+    payload_list = [
+        {"cert_id": item.get("cert_id"), "cert_name": item.get("cert_name")}
+        for item in certifications
+    ]
+    prompt = CODE_CERT_PROMPT_TEMPLATE.format(
+        provider=provider,
+        certifications=json.dumps(payload_list, ensure_ascii=False),
+    )
+    raw_content = _run_completion(
+        prompt,
+        model=OPENAI_SEARCH_MODEL,
+        web_search_options={},
+    )
+    decoded = clean_and_decode_json(raw_content)
+    if isinstance(decoded, dict):
+        items = decoded.get("items", [])
+    else:
+        items = decoded
+    if not isinstance(items, list):
+        raise ValueError("Réponse inattendue lors de la recherche des codes.")
+    return items
 
 def generate_questions(
     provider_name: str,
