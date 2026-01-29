@@ -98,7 +98,12 @@ from jobs import (
     mark_job_resumed,
     set_cached_status,
 )
-from openai_api import analyze_certif, correct_questions, generate_questions
+from openai_api import (
+    analyze_certif,
+    correct_questions,
+    generate_code_cert_keys,
+    generate_questions,
+)
 
 from dom import dom_bp
 from module_blueprints import module_blueprints_bp
@@ -2289,6 +2294,270 @@ def fix_get_progress():
     action = request.form.get("action", type=str) or "assign"
     progress = _compute_fix_progress(cert_id, action)
     return jsonify(progress)
+
+
+@app.route("/edit-code-cert", methods=["GET"])
+def edit_code_cert_index():
+    providers = db.get_providers()
+    return render_template(
+        "edit_code_cert.html",
+        providers=providers,
+    )
+
+
+def _normalize_code_cert_results(
+    results: list[dict],
+    cert_name_map: dict[str, int],
+) -> dict[int, dict]:
+    mapped: dict[int, dict] = {}
+    for item in results or []:
+        if not isinstance(item, dict):
+            continue
+        cert_id = item.get("cert_id")
+        cert_name = (item.get("cert_name") or "").strip()
+        if cert_id is None and cert_name:
+            cert_id = cert_name_map.get(cert_name.lower())
+        try:
+            cert_id = int(cert_id)
+        except (TypeError, ValueError):
+            continue
+        mapped[cert_id] = {
+            "code_cert_key": (item.get("code_cert_key") or "").strip(),
+            "source_url": (item.get("source_url") or "").strip(),
+        }
+    return mapped
+
+
+def run_edit_code_cert(context: JobContext, provider_id: int) -> None:
+    """Update code_cert_key values for all certifications in a provider."""
+
+    providers = {pid: name for pid, name in db.get_providers()}
+    provider_name = providers.get(provider_id)
+    if not provider_name:
+        message = f"Provider with id {provider_id} not found."
+        context.log(message)
+        raise ValueError(message)
+
+    certifications = db.get_certifications_by_provider_with_code(provider_id)
+    total = len(certifications)
+    context.update_counters(
+        total=total,
+        processed=0,
+        updated=0,
+        skipped=0,
+        failed=0,
+        progress=0,
+    )
+
+    if total == 0:
+        context.log("Aucune certification trouvée pour ce provider.")
+        return
+
+    context.log(
+        f"Démarrage de la mise à jour des codes pour {total} certification(s) ({provider_name})."
+    )
+
+    batch_size = 20
+    processed = 0
+    updated = 0
+    skipped = 0
+    failed = 0
+
+    cert_name_map = {
+        (str(cert[1]).strip().lower()): int(cert[0]) for cert in certifications if cert[1]
+    }
+
+    for batch_index in range(0, total, batch_size):
+        context.wait_if_paused()
+        batch = certifications[batch_index : batch_index + batch_size]
+        payload = [
+            {"cert_id": cert_id, "cert_name": cert_name}
+            for cert_id, cert_name, _code in batch
+        ]
+        context.log(
+            f"Recherche des codes pour le lot {batch_index // batch_size + 1}"
+            f"/{(total + batch_size - 1) // batch_size} ({len(payload)} certification(s))."
+        )
+        try:
+            results = generate_code_cert_keys(provider_name, payload)
+            mapped_results = _normalize_code_cert_results(results, cert_name_map)
+        except Exception as exc:
+            context.log(f"Erreur OpenAI pour le lot: {exc}")
+            failed += len(batch)
+            processed += len(batch)
+            progress = round((processed / total) * 100, 1) if total else 100
+            context.update_counters(
+                processed=processed,
+                failed=failed,
+                progress=progress,
+            )
+            time.sleep(API_REQUEST_DELAY)
+            continue
+
+        for cert_id, cert_name, old_code in batch:
+            context.wait_if_paused()
+            result = mapped_results.get(cert_id, {})
+            new_code = (result.get("code_cert_key") or "").strip()
+            source_url = (result.get("source_url") or "").strip()
+
+            if not new_code:
+                skipped += 1
+                processed += 1
+                context.log(
+                    f"[{cert_id}] {cert_name}: aucun code trouvé (source officielle introuvable)."
+                )
+            else:
+                try:
+                    db.update_certification_code_cert_key(
+                        cert_id,
+                        new_code,
+                        old_code=old_code,
+                    )
+                    updated += 1
+                    processed += 1
+                    source_suffix = f" | Source: {source_url}" if source_url else ""
+                    context.log(
+                        f"[{cert_id}] {cert_name}: code_cert_key mis à jour → {new_code}{source_suffix}"
+                    )
+                except Exception as exc:  # pragma: no cover - DB errors surfaced in logs
+                    failed += 1
+                    processed += 1
+                    context.log(
+                        f"[{cert_id}] {cert_name}: échec mise à jour base → {exc}"
+                    )
+
+            progress = round((processed / total) * 100, 1) if total else 100
+            context.update_counters(
+                processed=processed,
+                updated=updated,
+                skipped=skipped,
+                failed=failed,
+                progress=progress,
+            )
+
+        time.sleep(API_REQUEST_DELAY)
+
+    context.log(
+        f"Mise à jour terminée: {updated} modifiée(s), {skipped} ignorée(s), {failed} échec(s)."
+    )
+
+
+@celery_app.task(bind=True, name="edit_code_cert.run")
+def run_edit_code_cert_job(self, provider_id: int) -> None:
+    """Celery task wrapper for :func:`run_edit_code_cert`."""
+
+    job_id = self.request.id
+    context = JobContext(job_store, job_id)
+
+    set_cached_status(job_id, "running")
+    try:
+        job_store.set_status(job_id, "running")
+    except JobStoreError:
+        initialise_job(
+            job_store,
+            job_id=job_id,
+            description="edit-code-cert",
+            metadata={"provider_id": provider_id},
+        )
+        job_store.set_status(job_id, "running")
+
+    try:
+        run_edit_code_cert(context, provider_id)
+    except Exception as exc:  # pragma: no cover - propagated to Celery
+        context.set_status("failed", error=str(exc))
+        raise
+    else:
+        context.set_status("completed")
+
+
+def _start_edit_code_cert_job_inline(job_id: str, provider_id: int):
+    """Launch the code-cert workflow in a local background thread."""
+
+    def _run_inline() -> None:
+        context = JobContext(job_store, job_id)
+        set_cached_status(job_id, "running")
+        try:
+            job_store.set_status(job_id, "running")
+        except JobStoreError:
+            initialise_job(
+                job_store,
+                job_id=job_id,
+                description="edit-code-cert",
+                metadata={"provider_id": provider_id},
+            )
+            job_store.set_status(job_id, "running")
+
+        try:
+            run_edit_code_cert(context, provider_id)
+        except Exception as inline_exc:  # pragma: no cover - surfaced via job status
+            app.logger.exception(
+                "Inline code-cert job failed: provider_id=%s", provider_id
+            )
+            context.set_status("failed", error=str(inline_exc))
+        else:
+            context.set_status("completed")
+
+    threading.Thread(
+        target=_run_inline,
+        name=f"edit-code-cert-inline-{job_id}",
+        daemon=True,
+    ).start()
+
+    return jsonify({"status": "queued", "job_id": job_id, "mode": "inline"})
+
+
+@app.route("/edit-code-cert/process", methods=["POST"])
+def edit_code_cert_process():
+    provider_id = request.form.get("provider_id", type=int)
+
+    if provider_id is None:
+        return jsonify({"error": "provider_id requis"}), 400
+
+    job_id = initialise_job(
+        job_store,
+        job_id=uuid.uuid4().hex,
+        description="edit-code-cert",
+        metadata={"provider_id": provider_id},
+    )
+
+    if _is_task_queue_disabled():
+        return _start_edit_code_cert_job_inline(job_id, provider_id)
+
+    try:
+        run_edit_code_cert_job.apply_async(args=(provider_id,), task_id=job_id)
+    except QUEUE_EXCEPTIONS as exc:  # pragma: no cover - defensive, surfaced to client
+        app.logger.exception(
+            "Unable to enqueue edit-code-cert job: provider_id=%s; falling back to inline execution",
+            provider_id,
+        )
+        _disable_task_queue(str(exc))
+        return _start_edit_code_cert_job_inline(job_id, provider_id)
+    except Exception as exc:
+        if getattr(celery_app.conf, "task_always_eager", False):
+            app.logger.exception(
+                "Edit code-cert job failed during eager execution: provider_id=%s",
+                provider_id,
+            )
+            try:
+                status = job_store.get_status(job_id) or {}
+            except JobStoreError:
+                status = {}
+            payload = {"status": status.get("status", "failed"), "job_id": job_id}
+            error = status.get("error") or str(exc)
+            if error:
+                payload["error"] = error
+            return jsonify(payload)
+        raise
+
+    return jsonify({"status": "queued", "job_id": job_id})
+
+
+@app.route("/edit-code-cert/status/<job_id>", methods=["GET"])
+def edit_code_cert_status(job_id):
+    data, error_response, status = _load_job_status(job_id)
+    if error_response is not None:
+        return error_response, status
+    return jsonify(data)
 
 
 def run_fix(context: JobContext, provider_id: int, cert_id: int, action: str) -> None:
