@@ -45,9 +45,25 @@ _TABLE_COL_TOLERANCE = 40
 
 
 def _clean_extracted_text(page_txt: str) -> str:
+    page_txt = re.sub(r"(\w)-\n(\w)", r"\1\2", page_txt)
     page_txt = re.sub(r"(?im)^\s*(page\s*)?\d+\s*(/\s*\d+)?\s*$", "", page_txt)
     page_txt = re.sub(r"\n{3,}", "\n\n", page_txt).strip()
     return page_txt
+
+
+def _is_garbled_text(text: str) -> bool:
+    tokens = re.findall(r"[\w’']+", text)
+    if len(tokens) < 10:
+        return False
+    single_letters = sum(1 for tok in tokens if len(tok) == 1)
+    avg_len = sum(len(tok) for tok in tokens) / len(tokens)
+    return single_letters / len(tokens) > 0.45 or avg_len < 2.1
+
+
+def _extract_page_ocr_text(page: fitz.Page, clip: fitz.Rect) -> str:
+    pix = page.get_pixmap(clip=clip, dpi=220)
+    pil_img = _pixmap_to_pil(pix)
+    return pytesseract.image_to_string(pil_img, lang="fra+eng")
 
 
 def _pixmap_to_pil(pix: fitz.Pixmap) -> Image.Image:
@@ -234,6 +250,10 @@ def extract_text_from_pdf(pdf_path: str,
                 page_txt = page.get_text("text", clip=clip)
                 page_txt = _clean_extracted_text(page_txt)
 
+            if _is_garbled_text(page_txt):
+                ocr_txt = _extract_page_ocr_text(page, clip)
+                page_txt = _clean_extracted_text(ocr_txt)
+
             if page_txt:
                 text += page_txt + "\n"
 
@@ -248,6 +268,7 @@ _QUESTION_RE = re.compile(r'(?im)^\s*QUESTION\s*\d+\b')
 _NUMBERED_Q_RE = re.compile(r'(?m)^\s*\d+\s*[.)]\s+\S')
 _OPT_RE  = re.compile(r'^\s*([A-Oa-o])[\.\)]\s*(.+)$')        # A. / B) / c. ...
 _ANS_RE  = re.compile(r'(?im)^\s*Answer\s*:\s*(.+)$')
+_EMBEDDED_Q_RE = re.compile(r'(?im)^\s*(?:NEW\s+QUESTION\s+\d+|QUESTION\s*\d+)\b')
 
 
 def analyze_question_markers(text: str) -> dict:
@@ -303,6 +324,33 @@ def _strip_after_explanation(block: str) -> str:
         lines = lines[:cut_idx]
     return "\n".join(lines).strip()
 
+
+def _split_embedded_blocks(block: str) -> list[str]:
+    matches = list(_EMBEDDED_Q_RE.finditer(block))
+    if not matches:
+        return [block]
+    starts = [m.start() for m in matches]
+    if starts[0] != 0:
+        starts.insert(0, 0)
+    segments = []
+    for idx, start in enumerate(starts):
+        end = starts[idx + 1] if idx + 1 < len(starts) else len(block)
+        seg = block[start:end].strip()
+        if seg:
+            segments.append(seg)
+    return segments
+
+
+def _strip_leading_marker(block: str) -> str:
+    lines = block.splitlines()
+    if lines and _EMBEDDED_Q_RE.match(lines[0]):
+        cleaned = re.sub(r'(?i)^\s*(NEW\s+QUESTION\s+\d+|QUESTION\s*\d+)\b[:\s-]*', "", lines[0]).strip()
+        if cleaned:
+            lines[0] = cleaned
+        else:
+            lines = lines[1:]
+    return "\n".join(lines).strip()
+
 # --- Fonction principale: détecter les questions ---
 
 def detect_questions(text: str, module_id: int, analysis: Optional[dict] = None) -> dict:
@@ -317,134 +365,146 @@ def detect_questions(text: str, module_id: int, analysis: Optional[dict] = None)
       - Pour les autres questions : au moins 2 réponses
     """
     questions = []
+    dropped_too_many_answers = 0
+    dropped_no_answers = 0
     if analysis is None:
         analysis = analyze_question_markers(text)
 
     for qnum, raw_block in _split_blocks(text):
-        block = _strip_after_explanation(raw_block)
+        for embedded_block in _split_embedded_blocks(raw_block):
+            block = _strip_leading_marker(embedded_block)
+            block = _strip_after_explanation(block)
 
-        # Extrait la/les réponses correctes (Answer: ...)
-        correct_tokens = set()
-        m_ans = _ANS_RE.search(block)
-        if m_ans:
-            ans_raw = m_ans.group(1)
-            correct_tokens = {
-                tok.strip().upper()
-                for tok in re.findall(r'[A-O]|True|False', ans_raw, re.I)
-            }
-        # Retire la ligne "Answer: ..." du bloc
-        block = _ANS_RE.sub("", block).strip()
+            # Extrait la/les réponses correctes (Answer: ...)
+            correct_tokens = set()
+            m_ans = _ANS_RE.search(block)
+            if m_ans:
+                ans_raw = m_ans.group(1)
+                correct_tokens = {
+                    tok.strip().upper()
+                    for tok in re.findall(r'[A-O]|True|False', ans_raw, re.I)
+                }
+            # Retire la ligne "Answer: ..." du bloc
+            block = _ANS_RE.sub("", block).strip()
 
-        # Lignes utiles
-        lines = [l.rstrip() for l in block.splitlines() if l.strip()]
-        if not lines:
-            continue
+            # Lignes utiles
+            lines = [l.rstrip() for l in block.splitlines() if l.strip()]
+            if not lines:
+                continue
 
-        # Détection HOTSPOT / DRAG DROP
-        special_nature = None
-        first_line = lines[0]
-        if re.match(r'^\s*HOTSPOT\b', first_line, re.I):
-            special_nature = "matching"  # type 4 
-            # retire la ligne 'HOTSPOT ...'
-            lines = lines[1:]
-        elif re.match(r'^\s*DRAG\s*DROP\b', first_line, re.I):
-            special_nature = "drag-n-drop" # type 5   
-            # retire la ligne 'DRAG DROP ...'
-            lines = lines[1:]
+            # Détection HOTSPOT / DRAG DROP
+            special_nature = None
+            first_line = lines[0]
+            if re.match(r'^\s*HOTSPOT\b', first_line, re.I):
+                special_nature = "matching"  # type 4
+                # retire la ligne 'HOTSPOT ...'
+                lines = lines[1:]
+            elif re.match(r'^\s*DRAG\s*DROP\b', first_line, re.I):
+                special_nature = "drag-n-drop"  # type 5
+                # retire la ligne 'DRAG DROP ...'
+                lines = lines[1:]
 
-        # Certains dumps ont une ligne "- (Topic ...)" juste après
-        if lines and re.match(r'^\s*[-–—]\s*\(.*?\)\s*$', lines[0]):
-            lines = lines[1:]
+            # Certains dumps ont une ligne "- (Topic ...)" juste après
+            if lines and re.match(r'^\s*[-–—]\s*\(.*?\)\s*$', lines[0]):
+                lines = lines[1:]
 
-        # Cherche le premier choix A./B)/... pour borner l'énoncé
-        first_opt_idx = None
-        for i, l in enumerate(lines):
-            if _OPT_RE.match(l):
-                first_opt_idx = i
-                break
+            # Cherche le premier choix A./B)/... pour borner l'énoncé
+            first_opt_idx = None
+            for i, l in enumerate(lines):
+                if _OPT_RE.match(l):
+                    first_opt_idx = i
+                    break
 
-        # Cas spécial HOTSPOT / DRAG DROP : on ignore toutes les réponses
-        if special_nature:
-            # Énoncé = tout avant les options (si présentes), sinon toutes les lignes
-            if first_opt_idx is not None:
-                core_lines = lines[:first_opt_idx]
+            # Cas spécial HOTSPOT / DRAG DROP : on ignore toutes les réponses
+            if special_nature:
+                # Énoncé = tout avant les options (si présentes), sinon toutes les lignes
+                if first_opt_idx is not None:
+                    core_lines = lines[:first_opt_idx]
+                else:
+                    core_lines = lines
+                question_text = " ".join(core_lines).strip()
+                if not question_text:
+                    continue
+                questions.append({
+                    "context": "",
+                    "text": question_text,
+                    "scenario": "no",
+                    "level": "medium",
+                    "nature": special_nature,  # 'matching' ou 'drag-n-drop'
+                    "answers": []              # toujours vide
+                })
+                continue
+
+            # --------- cas "classiques" (QCM / True-False) ----------
+            answers = []
+            nature = "qcm"
+
+            if first_opt_idx is None:
+                # Heuristique True/False
+                has_tf_hint = any(re.search(r'\b(True|False)\b', ln, re.I) for ln in lines)
+                if has_tf_hint or (correct_tokens and correct_tokens.issubset({"TRUE", "FALSE"})):
+                    nature = "truefalse"
+                    question_text = " ".join(lines).strip()
+                    answers = [
+                        {"value": "True",  "target": None, "isok": 1 if "TRUE" in correct_tokens else 0},
+                        {"value": "False", "target": None, "isok": 1 if "FALSE" in correct_tokens else 0},
+                    ]
+                else:
+                    question_text = " ".join(lines).strip()
+                    answers = []
             else:
-                core_lines = lines
-            question_text = " ".join(core_lines).strip()
+                # Énoncé
+                question_text = " ".join(lines[:first_opt_idx]).strip()
+                if not question_text:
+                    question_text = " ".join(lines).strip()
+
+                # Réponses multi-lignes
+                cur_letter = None
+                cur_text_parts = []
+
+                def flush_current():
+                    nonlocal answers, cur_letter, cur_text_parts
+                    if cur_letter is None:
+                        return
+                    txt = " ".join(t.strip() for t in cur_text_parts).strip()
+                    if not txt:
+                        return
+                    clean = txt.replace("*", "").replace("(Correct)", "").strip()
+                    isok = 1 if cur_letter in correct_tokens else 0
+                    answers.append({"value": clean[:700], "target": None, "isok": isok})
+                    cur_letter, cur_text_parts = None, []
+
+                for l in lines[first_opt_idx:]:
+                    m = _OPT_RE.match(l)
+                    if m:
+                        flush_current()
+                        cur_letter = m.group(1).upper()
+                        first_text = m.group(2).strip()
+                        cur_text_parts = [first_text]
+                    else:
+                        if cur_letter is not None:
+                            cur_text_parts.append(l.strip())
+                flush_current()
+
             if not question_text:
                 continue
+
+            if nature == "qcm" and len(answers) > 6:
+                dropped_too_many_answers += 1
+                continue
+
+            if nature == "qcm" and not answers:
+                dropped_no_answers += 1
+                continue
+
             questions.append({
                 "context": "",
                 "text": question_text,
                 "scenario": "no",
                 "level": "medium",
-                "nature": special_nature,  # 'matching' ou 'drag-n-drop'
-                "answers": []              # toujours vide
+                "nature": nature,
+                "answers": answers
             })
-            continue
-
-        # --------- cas "classiques" (QCM / True-False) ----------
-        answers = []
-        nature = "qcm"
-
-        if first_opt_idx is None:
-            # Heuristique True/False
-            has_tf_hint = any(re.search(r'\b(True|False)\b', ln, re.I) for ln in lines)
-            if has_tf_hint or (correct_tokens and correct_tokens.issubset({"TRUE", "FALSE"})):
-                nature = "truefalse"
-                question_text = " ".join(lines).strip()
-                answers = [
-                    {"value": "True",  "target": None, "isok": 1 if "TRUE" in correct_tokens else 0},
-                    {"value": "False", "target": None, "isok": 1 if "FALSE" in correct_tokens else 0},
-                ]
-            else:
-                question_text = " ".join(lines).strip()
-                answers = []
-        else:
-            # Énoncé
-            question_text = " ".join(lines[:first_opt_idx]).strip()
-            if not question_text:
-                question_text = " ".join(lines).strip()
-
-            # Réponses multi-lignes
-            cur_letter = None
-            cur_text_parts = []
-
-            def flush_current():
-                nonlocal answers, cur_letter, cur_text_parts
-                if cur_letter is None:
-                    return
-                txt = " ".join(t.strip() for t in cur_text_parts).strip()
-                if not txt:
-                    return
-                clean = txt.replace("*", "").replace("(Correct)", "").strip()
-                isok = 1 if cur_letter in correct_tokens else 0
-                answers.append({"value": clean[:700], "target": None, "isok": isok})
-                cur_letter, cur_text_parts = None, []
-
-            for l in lines[first_opt_idx:]:
-                m = _OPT_RE.match(l)
-                if m:
-                    flush_current()
-                    cur_letter = m.group(1).upper()
-                    first_text = m.group(2).strip()
-                    cur_text_parts = [first_text]
-                else:
-                    if cur_letter is not None:
-                        cur_text_parts.append(l.strip())
-            flush_current()
-
-        if not question_text:
-            continue
-
-        questions.append({
-            "context": "",
-            "text": question_text,
-            "scenario": "no",
-            "level": "medium",
-            "nature": nature,
-            "answers": answers
-        })
 
     extracted_count = len(questions)
     expected_count = analysis.get("total_expected") or extracted_count
@@ -456,6 +516,8 @@ def detect_questions(text: str, module_id: int, analysis: Optional[dict] = None)
         "method": analysis.get("method"),
         "marker_counts": analysis.get("counts", {}),
         "questions_without_answers": sum(1 for q in questions if not q.get("answers")),
+        "dropped_too_many_answers": dropped_too_many_answers,
+        "dropped_no_answers": dropped_no_answers,
     }
 
     return {"module_id": module_id, "questions": questions, "analysis": report}
