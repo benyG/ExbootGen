@@ -11,7 +11,9 @@ from typing import Dict, Any, List, Optional
 import fitz  # PyMuPDF
 from PIL import Image
 import pytesseract
+from pytesseract import TesseractNotFoundError
 import mysql.connector
+import pdfplumber
 from google.cloud import storage
 from flask import Blueprint, request, jsonify
 from pdf2image import convert_from_path
@@ -63,7 +65,10 @@ def _is_garbled_text(text: str) -> bool:
 def _extract_page_ocr_text(page: fitz.Page, clip: fitz.Rect) -> str:
     pix = page.get_pixmap(clip=clip, dpi=220)
     pil_img = _pixmap_to_pil(pix)
-    return pytesseract.image_to_string(pil_img, lang="fra+eng")
+    try:
+        return pytesseract.image_to_string(pil_img, lang="fra+eng")
+    except TesseractNotFoundError:
+        return ""
 
 
 def _pixmap_to_pil(pix: fitz.Pixmap) -> Image.Image:
@@ -164,7 +169,10 @@ def _infer_table_from_words(words: list[dict]) -> str | None:
 
 
 def _classify_image_content(pil_img: Image.Image) -> dict:
-    words = _extract_ocr_words(pil_img)
+    try:
+        words = _extract_ocr_words(pil_img)
+    except TesseractNotFoundError:
+        words = []
     avg_conf = 0.0
     if words:
         avg_conf = sum(w["conf"] for w in words) / len(words)
@@ -191,18 +199,100 @@ def _extract_visual_block(page: fitz.Page, rect: fitz.Rect) -> str:
     return f'<img src="{url}" alt="pdf-image" />'
 
 
-def _extract_mixed_content(page: fitz.Page, clip: fitz.Rect) -> str:
+def _rect_key(rect: fitz.Rect) -> tuple[int, int, int, int]:
+    return (int(rect.x0), int(rect.y0), int(rect.x1), int(rect.y1))
+
+
+def _extract_tables_from_page(page: pdfplumber.page.Page, clip: fitz.Rect) -> list[dict]:
+    tables = []
+    for table in page.find_tables():
+        data = table.extract()
+        if not data:
+            continue
+        rect = fitz.Rect(*table.bbox)
+        if not rect.intersects(clip):
+            continue
+        rows_html = []
+        for row in data:
+            cells = [
+                html.escape("" if cell is None else str(cell).strip())
+                for cell in row
+            ]
+            cell_html = "".join(f"<td>{cell}</td>" for cell in cells)
+            rows_html.append(f"<tr>{cell_html}</tr>")
+        tables.append({"rect": rect, "html": "<table>" + "".join(rows_html) + "</table>"})
+    return tables
+
+
+def _line_overlaps_tables(line_rect: fitz.Rect, table_rects: list[fitz.Rect]) -> bool:
+    return any(line_rect.intersects(table_rect) for table_rect in table_rects)
+
+
+def _extract_mixed_content(
+    page: fitz.Page,
+    clip: fitz.Rect,
+    tables: list[dict],
+) -> str:
     parts = []
-    blocks = page.get_text("blocks", clip=clip)
-    blocks = sorted(blocks, key=lambda b: (b[1], b[0]))
-    for x0, y0, x1, y1, text, _, block_type in blocks:
-        rect = fitz.Rect(x0, y0, x1, y1)
+    items: list[tuple[float, float, str, object]] = []
+    seen_rects: set[tuple[int, int, int, int]] = set()
+    table_rects = [table["rect"] for table in tables]
+
+    text_dict = page.get_text("dict", clip=clip)
+    for block in text_dict.get("blocks", []):
+        block_type = block.get("type", 0)
+        block_bbox = block.get("bbox")
+        if block_bbox is None:
+            continue
+        rect = fitz.Rect(*block_bbox)
         if block_type == 0:
-            cleaned = _clean_extracted_text(text)
-            if cleaned:
-                parts.append(cleaned)
+            for line in block.get("lines", []):
+                line_bbox = line.get("bbox")
+                if line_bbox is None:
+                    continue
+                line_rect = fitz.Rect(*line_bbox)
+                if _line_overlaps_tables(line_rect, table_rects):
+                    continue
+                line_text = " ".join(
+                    span.get("text", "") for span in line.get("spans", [])
+                ).strip()
+                cleaned = _clean_extracted_text(line_text)
+                if cleaned:
+                    items.append((line_rect.y0, line_rect.x0, "text", cleaned))
         elif block_type == 1:
-            parts.append(_extract_visual_block(page, rect))
+            key = _rect_key(rect)
+            if key not in seen_rects:
+                seen_rects.add(key)
+                items.append((rect.y0, rect.x0, "image", rect))
+
+    for table in tables:
+        rect = table["rect"]
+        key = _rect_key(rect)
+        if key in seen_rects:
+            continue
+        seen_rects.add(key)
+        items.append((rect.y0, rect.x0, "table", table["html"]))
+
+    for image in page.get_images(full=True):
+        xref = image[0]
+        rects = page.get_image_rects(xref)
+        for rect in rects:
+            if not rect.intersects(clip):
+                continue
+            key = _rect_key(rect)
+            if key in seen_rects:
+                continue
+            seen_rects.add(key)
+            items.append((rect.y0, rect.x0, "image", rect))
+
+    items.sort(key=lambda item: (item[0], item[1]))
+    for _, _, kind, payload in items:
+        if kind == "text":
+            parts.append(payload)  # type: ignore[arg-type]
+        elif kind == "table":
+            parts.append(payload)  # type: ignore[arg-type]
+        else:
+            parts.append(_extract_visual_block(page, payload))  # type: ignore[arg-type]
     return "\n".join(parts).strip()
 
 
@@ -211,7 +301,8 @@ def extract_text_from_pdf(pdf_path: str,
                           skip_first_page: bool = True,
                           header_ratio: float = 0.10,
                           footer_ratio: float = 0.10,
-                          detect_visuals: bool = False) -> str:
+                          detect_visuals: bool = False,
+                          detect_tables: bool = True) -> str:
     """
     Extrait le texte utile :
       - ignore la 1ère page (skip_first_page=True)
@@ -234,6 +325,10 @@ def extract_text_from_pdf(pdf_path: str,
             text += txt + "\n"
         return text
 
+    plumber_doc = None
+    if detect_visuals and detect_tables:
+        plumber_doc = pdfplumber.open(pdf_path)
+
     # Extraction native via PyMuPDF
     with fitz.open(pdf_path) as doc:
         start_idx = 1 if (skip_first_page and doc.page_count > 0) else 0
@@ -244,8 +339,11 @@ def extract_text_from_pdf(pdf_path: str,
             bottom_cut = h * (1.0 - footer_ratio)
 
             clip = fitz.Rect(0, top_cut, page.rect.width, bottom_cut)
+            table_items = []
+            if detect_visuals and plumber_doc is not None:
+                table_items = _extract_tables_from_page(plumber_doc.pages[i], clip)
             if detect_visuals:
-                page_txt = _extract_mixed_content(page, clip)
+                page_txt = _extract_mixed_content(page, clip, table_items)
             else:
                 page_txt = page.get_text("text", clip=clip)
                 page_txt = _clean_extracted_text(page_txt)
@@ -256,6 +354,9 @@ def extract_text_from_pdf(pdf_path: str,
 
             if page_txt:
                 text += page_txt + "\n"
+
+    if plumber_doc is not None:
+        plumber_doc.close()
 
     return text
 
@@ -493,16 +594,6 @@ def detect_questions(text: str, module_id: int, analysis: Optional[dict] = None)
                 dropped_too_many_answers += 1
                 continue
 
-            if nature == "qcm":
-                normalized_answers = {
-                    re.sub(r"\s+", " ", (a.get("value") or "").strip().lower())
-                    for a in answers
-                    if a.get("value")
-                }
-                if normalized_answers == {"mastered", "not mastered"}:
-                    nature = "drag-n-drop"
-                    answers = []
-
             if nature == "qcm" and not answers:
                 dropped_no_answers += 1
                 continue
@@ -553,7 +644,7 @@ def upload_pdf_route():
     text = extract_text_from_pdf(
         save_path,
         use_ocr=False,
-        skip_first_page=True,
+        skip_first_page=False,
         header_ratio=0.10,
         footer_ratio=0.10,
         detect_visuals=True,
@@ -577,7 +668,7 @@ def import_questions_route():
     with open(tmp_json, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    NATURE_MAP = {"qcm": 1, "truefalse": 2}
+    NATURE_MAP = {"qcm": 1, "truefalse": 2, "matching": 4, "drag-n-drop": 5}
     q_imported = 0
     a_imported = 0
 
