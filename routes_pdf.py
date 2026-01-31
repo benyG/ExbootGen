@@ -493,6 +493,16 @@ def detect_questions(text: str, module_id: int, analysis: Optional[dict] = None)
                 dropped_too_many_answers += 1
                 continue
 
+            if nature == "qcm":
+                normalized_answers = {
+                    re.sub(r"\s+", " ", (a.get("value") or "").strip().lower())
+                    for a in answers
+                    if a.get("value")
+                }
+                if normalized_answers == {"mastered", "not mastered"}:
+                    nature = "drag-n-drop"
+                    answers = []
+
             if nature == "qcm" and not answers:
                 dropped_no_answers += 1
                 continue
