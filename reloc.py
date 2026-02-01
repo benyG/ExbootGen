@@ -14,20 +14,32 @@ from config import DB_CONFIG, OPENAI_API_KEY, OPENAI_MODEL
 OPENAI_ENDPOINT = 'https://api.openai.com/v1/responses'
 
 RELOC_MAPPING_SCHEMA = {
-    "type": "array",
-    "items": {
-        "type": "object",
-        "additionalProperties": False,
-        "required": ["question_id", "domain_to_affect"],
-        "properties": {
-            "question_id": {"type": "integer"},
-            "domain_to_affect": {"type": "integer"},
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["items"],
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["question_id", "domain_to_affect"],
+                "properties": {
+                    "question_id": {"type": "integer"},
+                    "domain_to_affect": {"type": "integer"},
+                },
+            },
         },
     },
 }
 
 def _json_schema_format(schema: dict, name: str) -> dict:
-    return {"type": "json_schema", "name": name, "strict": True, "schema": schema}
+    return {
+        "type": "json_schema",
+        "name": name,
+        "strict": True,
+        "schema": schema,
+    }
 
 
 def _build_response_payload(prompt: str, *, text_format: dict | None = None) -> dict:
@@ -118,7 +130,7 @@ def _relocate_questions(
         )
         prompt = (
             "TASK: As a coach proficient in the exam curriculum, assign each question to the correct domain using the module ID.\n"
-            "FORMAT: JSON array of objects {question_id: X, domain_to_affect: Y} where Y is module id.\n"
+            "FORMAT: JSON object with an items array of objects {question_id: X, domain_to_affect: Y} where Y is module id.\n"
             f"Exam id: {dst_cert}\n"
             f"Domains: {modules_info}\n"
             f"Questions: {questions_info}\n"
@@ -143,11 +155,12 @@ def _relocate_questions(
 
         content = _extract_response_text(resp.json())
         mapping = json.loads(content)
+        mapping_items = mapping.get("items", []) if isinstance(mapping, dict) else []
 
         conn2 = mysql.connector.connect(**DB_CONFIG)
         cur2 = conn2.cursor()
         moved = 0
-        for item in mapping:
+        for item in mapping_items:
             qid = item.get('question_id')
             mod_id = item.get('domain_to_affect')
             if isinstance(qid, int) and isinstance(mod_id, int):
@@ -279,7 +292,7 @@ def stream_relocate():
             )
             prompt = (
                 "TASK: As a coach proficient in the exam curriculum, assign each question to the correct domain using the module ID.\n"
-                "FORMAT: JSON array of objects {question_id: X, domain_to_affect: Y} where Y is module id.\n"
+                "FORMAT: JSON object with an items array of objects {question_id: X, domain_to_affect: Y} where Y is module id.\n"
                 f"Exam id: {dst_cert}\n"
                 f"Domains: {modules_info}\n"
                 f"Questions: {questions_info}\n"
@@ -304,11 +317,12 @@ def stream_relocate():
 
             content = _extract_response_text(resp.json())
             mapping = json.loads(content)
+            mapping_items = mapping.get("items", []) if isinstance(mapping, dict) else []
 
             conn2 = mysql.connector.connect(**DB_CONFIG)
             cur2 = conn2.cursor()
             moved = 0
-            for item in mapping:
+            for item in mapping_items:
                 qid = item.get('question_id')
                 mod_id = item.get('domain_to_affect')
                 if isinstance(qid, int) and isinstance(mod_id, int):
