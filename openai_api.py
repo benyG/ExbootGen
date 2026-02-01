@@ -391,28 +391,51 @@ def _run_completion(
     model: Optional[str] = None,
     web_search_options: Optional[dict] = None,
 ) -> str:
-    payload = {
-        "model": model or OPENAI_MODEL,
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt,
-            }
-        ],
-    }
+    payload = _build_response_payload(prompt, model=model)
     if web_search_options is not None:
-        payload["web_search_options"] = web_search_options
+        payload["tools"] = [_build_web_search_tool(web_search_options)]
 
     response = _post_with_retry(payload)
     resp_json = response.json()
-    if "choices" not in resp_json or not resp_json["choices"]:
-        raise Exception(f"Unexpected API Response: {resp_json}")
+    return _extract_response_text(resp_json)
 
-    message = resp_json["choices"][0].get("message", {})
-    if "content" not in message:
-        raise Exception(f"Unexpected API Response structure: {resp_json}")
 
-    return message["content"].strip()
+def _build_response_payload(prompt: str, *, model: Optional[str] = None) -> dict:
+    return {
+        "model": model or OPENAI_MODEL,
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": prompt,
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def _build_web_search_tool(options: Optional[dict]) -> dict:
+    tool = {"type": "web_search"}
+    if options:
+        tool.update(options)
+    return tool
+
+
+def _extract_response_text(resp_json: dict) -> str:
+    output_text = resp_json.get("output_text")
+    if output_text:
+        return output_text.strip()
+
+    output = resp_json.get("output", [])
+    for item in output:
+        for content in item.get("content", []):
+            if content.get("type") in ("output_text", "text") and content.get("text"):
+                return content["text"].strip()
+
+    raise Exception(f"Unexpected API Response structure: {resp_json}")
 
 def _render_prompt(template_map: dict, topic_type: str, certification: str, vendor: str, exam_url: str) -> str:
     try:
@@ -677,29 +700,11 @@ def generate_domains_outline(certification: str) -> dict:
             "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer des domaines."
         )
     prompt = DOMAIN_PROMPT_TEMPLATE.replace("{{NAME_OF_CERTIFICATION}}", certification)
-    payload = {
-        "model": OPENAI_SEARCH_MODEL,
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt,
-            }
-        ],
-        "web_search_options": {},
-    }
-
-    response = _post_with_retry(payload)
-    resp_json = response.json()
-    if "choices" not in resp_json or not resp_json["choices"]:
-        raise Exception(f"Unexpected API Response in generate_domains_outline: {resp_json}")
-
-    message = resp_json["choices"][0].get("message", {})
-    if "content" not in message:
-        raise Exception(
-            f"Unexpected API Response structure in generate_domains_outline: {resp_json}"
-        )
-
-    content = message["content"]
+    content = _run_completion(
+        prompt,
+        model=OPENAI_SEARCH_MODEL,
+        web_search_options={},
+    )
     return clean_and_decode_json(content)
 
 
@@ -1038,25 +1043,10 @@ RULES:
 5. Ensure every correct answer can be inferred directly from the content you include in the question.
 """
 
-        data = {
-            "model": OPENAI_MODEL,
-            "messages": [
-                {
-                    'role': 'user',
-                    'content': content_prompt
-                }
-            ]
-        }
+        payload = _build_response_payload(content_prompt)
 
-        response = _post_with_retry(data)
-
-        resp_json = response.json()
-        if 'choices' not in resp_json or not resp_json['choices']:
-            raise Exception(f"Unexpected API Response: {resp_json}")
-        if 'message' not in resp_json['choices'][0] or 'content' not in resp_json['choices'][0]['message']:
-            raise Exception(f"Unexpected API Response structure: {resp_json}")
-
-        content = resp_json['choices'][0]['message']['content']
+        response = _post_with_retry(payload)
+        content = _extract_response_text(response.json())
         decoded = clean_and_decode_json(content)
         all_questions.extend(decoded.get("questions", []))
         remaining -= current
@@ -1393,22 +1383,13 @@ def generate_lab_blueprint(
     )
     prompt = prompt.replace("{{", "{").replace("}}", "}")
 
-    payload = {
-        "model": OPENAI_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
-    }
+    payload = _build_response_payload(prompt)
 
     temperature = _model_temperature_override(OPENAI_MODEL)
     if temperature is not None:
         payload["temperature"] = temperature
     response = _post_with_retry(payload)
-    resp_json = response.json()
-    if "choices" not in resp_json or not resp_json["choices"]:
-        raise Exception(f"Unexpected API Response in generate_lab_blueprint: {resp_json}")
-    message = resp_json["choices"][0].get("message", {})
-    if "content" not in message:
-        raise Exception(f"Unexpected API Response structure in generate_lab_blueprint: {resp_json}")
-    content = message["content"]
+    content = _extract_response_text(response.json())
     return clean_and_decode_json(content)
 
 def analyze_certif(provider_name: str, certification: str) -> list:
@@ -1441,23 +1422,9 @@ RESPONSE FORMAT (JSON only, no additional text):.
 Provider: {provider_name}
 Certification: {certification}
 """
-    data = {
-        "model": OPENAI_MODEL,
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-    }
-    response = _post_with_retry(data)
-    resp_json = response.json()
-    if 'choices' not in resp_json or not resp_json['choices']:
-        raise Exception(f"Unexpected API Response in analyze_certif: {resp_json}")
-    if 'message' not in resp_json['choices'][0] or 'content' not in resp_json['choices'][0]['message']:
-        raise Exception(f"Unexpected API Response structure in analyze_certif: {resp_json}")
-    
-    content = resp_json['choices'][0]['message']['content']
+    payload = _build_response_payload(prompt)
+    response = _post_with_retry(payload)
+    content = _extract_response_text(response.json())
     decoded = clean_and_decode_json(content)
     return decoded
 
@@ -1510,16 +1477,9 @@ Question ID: {q['id']}
 Text: {q['text']}
 JSON:"""
 
-        payload = {
-            "model": OPENAI_MODEL,
-            "messages": [{"role": "user", "content": prompt}]
-        }
+        payload = _build_response_payload(prompt)
         response = _post_with_retry(payload)
-        resp_json = response.json()
-        if 'choices' not in resp_json or not resp_json['choices']:
-            raise Exception(f"Unexpected API Response: {resp_json}")
-        message = resp_json['choices'][0].get('message', {})
-        content = message.get('content', '')
+        content = _extract_response_text(response.json())
         decoded = clean_and_decode_json(content)
         results.append(decoded)
     return results

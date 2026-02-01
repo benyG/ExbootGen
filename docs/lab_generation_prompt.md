@@ -1,6 +1,6 @@
 # Prompt de génération automatique de labs Hands-on
 
-Utilisez le prompt ci-dessous avec l'API OpenAI (chat/completions) pour produire des labs compatibles avec le Hands-on Lab Player. Remplacez les sections encadrées par `{{...}}` par vos valeurs ou placez-les dans un bloc `input` du message système.
+Utilisez le prompt ci-dessous avec l'API OpenAI (responses) pour produire des labs compatibles avec le Hands-on Lab Player. Remplacez les sections encadrées par `{{...}}` par vos valeurs ou placez-les dans un bloc `input` du message système.
 
 ---
 **Prompt à transmettre à l'API :**

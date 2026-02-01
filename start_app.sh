@@ -16,7 +16,7 @@ export DB_NAME="exbootgen"
 
 # === Paramètres OpenAI ===
 export OPENAI_API_KEY="sk-remplacez-moi"
-export OPENAI_API_URL="https://api.openai.com/v1/chat/completions"
+export OPENAI_API_URL="https://api.openai.com/v1/responses"
 export OPENAI_MAX_RETRIES="5"
 export API_REQUEST_DELAY="1"
 export OPENAI_MODEL="gpt-5-mini"
