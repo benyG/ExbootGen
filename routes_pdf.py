@@ -4,7 +4,6 @@ import os
 import re
 import json
 import uuid
-import html
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
@@ -37,6 +36,43 @@ def db_conn():
     """Connexion MySQL (paramètres dans config.DB_CONFIG)."""
     return mysql.connector.connect(**DB_CONFIG)
 
+
+def _is_file_imported(filename: str) -> bool:
+    conn = db_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM pdf_import_history WHERE filename = %s LIMIT 1",
+            (filename,),
+        )
+        return cur.fetchone() is not None
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        conn.close()
+
+
+def _record_file_imported(filename: str, module_id: int | None) -> None:
+    conn = db_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO pdf_import_history (filename, module_id)
+            VALUES (%s, %s)
+            """,
+            (filename, module_id),
+        )
+        conn.commit()
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        conn.close()
+
 # ------------------------- Extraction du texte -------------------------
 
 _OCR_CONFIDENCE_MIN = 40
@@ -44,6 +80,9 @@ _OCR_WORDS_MIN = 4
 _TABLE_MIN_ROWS = 2
 _TABLE_MIN_COLS = 2
 _TABLE_COL_TOLERANCE = 40
+_MIN_IMAGE_WIDTH = 24
+_MIN_IMAGE_HEIGHT = 24
+_MIN_IMAGE_AREA = 600
 
 
 def _clean_extracted_text(page_txt: str) -> str:
@@ -124,12 +163,12 @@ def _extract_ocr_words(pil_img: Image.Image) -> list[dict]:
     return words
 
 
-def _infer_table_from_words(words: list[dict]) -> str | None:
+def _infer_table_from_words(words: list[dict]) -> bool:
     if not words:
-        return None
+        return False
     strong_words = [w for w in words if w["conf"] >= _OCR_CONFIDENCE_MIN]
     if len(strong_words) < _OCR_WORDS_MIN:
-        return None
+        return False
 
     lines: dict[int, list[dict]] = {}
     for w in strong_words:
@@ -137,7 +176,7 @@ def _infer_table_from_words(words: list[dict]) -> str | None:
         lines.setdefault(line_key, []).append(w)
     row_candidates = [sorted(line, key=lambda w: w["left"]) for line in lines.values() if len(line) >= _TABLE_MIN_COLS]
     if len(row_candidates) < _TABLE_MIN_ROWS:
-        return None
+        return False
 
     x_centers = []
     for line in row_candidates:
@@ -151,21 +190,8 @@ def _infer_table_from_words(words: list[dict]) -> str | None:
         else:
             columns[-1] = (columns[-1] + x) / 2
     if len(columns) < _TABLE_MIN_COLS:
-        return None
-
-    rows_html = []
-    for line in row_candidates:
-        cells = [""] * len(columns)
-        for w in line:
-            center = w["left"] + w["width"] / 2
-            idx = min(range(len(columns)), key=lambda i: abs(columns[i] - center))
-            if cells[idx]:
-                cells[idx] += f" {w['text']}"
-            else:
-                cells[idx] = w["text"]
-        cell_html = "".join(f"<td>{html.escape(cell.strip())}</td>" for cell in cells)
-        rows_html.append(f"<tr>{cell_html}</tr>")
-    return "<table>" + "".join(rows_html) + "</table>"
+        return False
+    return True
 
 
 def _classify_image_content(pil_img: Image.Image) -> dict:
@@ -177,11 +203,11 @@ def _classify_image_content(pil_img: Image.Image) -> dict:
     if words:
         avg_conf = sum(w["conf"] for w in words) / len(words)
     has_text = len(words) >= _OCR_WORDS_MIN and avg_conf >= _OCR_CONFIDENCE_MIN
-    table_html = _infer_table_from_words(words) if has_text else None
+    is_table = _infer_table_from_words(words) if has_text else False
     return {
         "has_text": has_text,
         "text": " ".join(w["text"] for w in words).strip(),
-        "table_html": table_html,
+        "is_table": is_table,
     }
 
 
@@ -189,8 +215,11 @@ def _extract_visual_block(page: fitz.Page, rect: fitz.Rect) -> str:
     pix = page.get_pixmap(clip=rect, dpi=200)
     pil_img = _pixmap_to_pil(pix)
     analysis = _classify_image_content(pil_img)
-    if analysis["table_html"]:
-        return analysis["table_html"]
+    if analysis["is_table"]:
+        url = _upload_pil_to_gcs(pil_img)
+        if not url:
+            url = _image_to_data_uri(pil_img)
+        return f'<img src="{url}" alt="pdf-image" />'
     if analysis["has_text"] and analysis["text"]:
         return analysis["text"]
     url = _upload_pil_to_gcs(pil_img)
@@ -203,24 +232,23 @@ def _rect_key(rect: fitz.Rect) -> tuple[int, int, int, int]:
     return (int(rect.x0), int(rect.y0), int(rect.x1), int(rect.y1))
 
 
-def _extract_tables_from_page(page: pdfplumber.page.Page, clip: fitz.Rect) -> list[dict]:
-    tables = []
+def _is_small_rect(rect: fitz.Rect) -> bool:
+    width = max(0.0, rect.width)
+    height = max(0.0, rect.height)
+    if width < _MIN_IMAGE_WIDTH or height < _MIN_IMAGE_HEIGHT:
+        return True
+    return width * height < _MIN_IMAGE_AREA
+
+
+def _extract_tables_from_page(page: pdfplumber.page.Page, clip: fitz.Rect) -> list[fitz.Rect]:
+    tables: list[fitz.Rect] = []
     for table in page.find_tables():
-        data = table.extract()
-        if not data:
-            continue
         rect = fitz.Rect(*table.bbox)
         if not rect.intersects(clip):
             continue
-        rows_html = []
-        for row in data:
-            cells = [
-                html.escape("" if cell is None else str(cell).strip())
-                for cell in row
-            ]
-            cell_html = "".join(f"<td>{cell}</td>" for cell in cells)
-            rows_html.append(f"<tr>{cell_html}</tr>")
-        tables.append({"rect": rect, "html": "<table>" + "".join(rows_html) + "</table>"})
+        if _is_small_rect(rect):
+            continue
+        tables.append(rect)
     return tables
 
 
@@ -231,12 +259,12 @@ def _line_overlaps_tables(line_rect: fitz.Rect, table_rects: list[fitz.Rect]) ->
 def _extract_mixed_content(
     page: fitz.Page,
     clip: fitz.Rect,
-    tables: list[dict],
+    tables: list[fitz.Rect],
 ) -> str:
     parts = []
     items: list[tuple[float, float, str, object]] = []
     seen_rects: set[tuple[int, int, int, int]] = set()
-    table_rects = [table["rect"] for table in tables]
+    table_rects = tables
 
     text_dict = page.get_text("dict", clip=clip)
     for block in text_dict.get("blocks", []):
@@ -261,17 +289,18 @@ def _extract_mixed_content(
                     items.append((line_rect.y0, line_rect.x0, "text", cleaned))
         elif block_type == 1:
             key = _rect_key(rect)
-            if key not in seen_rects:
+            if key not in seen_rects and not _is_small_rect(rect):
                 seen_rects.add(key)
                 items.append((rect.y0, rect.x0, "image", rect))
 
-    for table in tables:
-        rect = table["rect"]
+    for rect in tables:
         key = _rect_key(rect)
         if key in seen_rects:
             continue
+        if _is_small_rect(rect):
+            continue
         seen_rects.add(key)
-        items.append((rect.y0, rect.x0, "table", table["html"]))
+        items.append((rect.y0, rect.x0, "image", rect))
 
     for image in page.get_images(full=True):
         xref = image[0]
@@ -282,6 +311,8 @@ def _extract_mixed_content(
             key = _rect_key(rect)
             if key in seen_rects:
                 continue
+            if _is_small_rect(rect):
+                continue
             seen_rects.add(key)
             items.append((rect.y0, rect.x0, "image", rect))
 
@@ -289,10 +320,10 @@ def _extract_mixed_content(
     for _, _, kind, payload in items:
         if kind == "text":
             parts.append(payload)  # type: ignore[arg-type]
-        elif kind == "table":
-            parts.append(payload)  # type: ignore[arg-type]
         else:
-            parts.append(_extract_visual_block(page, payload))  # type: ignore[arg-type]
+            visual = _extract_visual_block(page, payload)  # type: ignore[arg-type]
+            if visual:
+                parts.append(visual)
     return "\n".join(parts).strip()
 
 
@@ -451,6 +482,10 @@ def _strip_leading_marker(block: str) -> str:
         else:
             lines = lines[1:]
     return "\n".join(lines).strip()
+
+
+def _normalize_html_quotes(value: str) -> str:
+    return value.replace('\\"', '"').replace("\\'", "'")
 
 # --- Fonction principale: détecter les questions ---
 
@@ -638,6 +673,10 @@ def upload_pdf_route():
         return jsonify({"status": "error", "message": "Aucun fichier envoyé"}), 400
 
     filename = os.path.basename(file.filename or "upload.pdf")
+    if _is_file_imported(filename):
+        return jsonify(
+            {"status": "already_imported", "message": "Fichier déjà importé"}
+        ), 200
     save_path = os.path.join(UPLOAD_DIR, filename)
     file.save(save_path)
 
@@ -650,6 +689,7 @@ def upload_pdf_route():
         detect_visuals=True,
     )
     data = detect_questions(text, module_id)
+    data["source_filename"] = filename
     session_id = str(uuid.uuid4())
 
     tmp_json = os.path.join(UPLOAD_DIR, f"{session_id}.json")
@@ -668,6 +708,10 @@ def import_questions_route():
     with open(tmp_json, "r", encoding="utf-8") as f:
         data = json.load(f)
 
+    source_filename = data.get("source_filename")
+    if source_filename and _is_file_imported(source_filename):
+        return jsonify({"status": "error", "message": "Fichier déjà importé"}), 400
+
     NATURE_MAP = {"qcm": 1, "truefalse": 2, "matching": 4, "drag-n-drop": 5}
     q_imported = 0
     a_imported = 0
@@ -677,6 +721,7 @@ def import_questions_route():
         cur = conn.cursor()
         for q in data.get("questions", []):
             q_text = (q.get("text") or "").strip()
+            q_text = _normalize_html_quotes(q_text)
             q_level = int(q.get("level") or 1)
             q_nature = NATURE_MAP.get((q.get("nature") or "qcm").lower(), 1)
             answers = q.get("answers") or []
@@ -701,6 +746,7 @@ def import_questions_route():
 
             for ans in answers:
                 raw_val = (ans.get("value") or ans.get("text") or "").strip()
+                raw_val = _normalize_html_quotes(raw_val)
                 if not raw_val:
                     continue
 
@@ -721,6 +767,8 @@ def import_questions_route():
                 )
 
         conn.commit()
+        if source_filename:
+            _record_file_imported(source_filename, data.get("module_id"))
     except Exception as e:
         conn.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
