@@ -631,6 +631,7 @@ def api_mcp_import_local():
 
             root_path = resolve_search_root()
             code_cert_lower = code_cert.lower()
+            code_cert_prefix = code_cert_lower.split()[0] if " " in code_cert_lower else ""
             code_cert_compact = re.sub(r"[^a-z0-9]+", "", code_cert_lower)
             matches: list[Path] = []
             for dirpath, _, files in os.walk(root_path):
@@ -638,6 +639,10 @@ def api_mcp_import_local():
                     if not name.lower().endswith(".pdf"):
                         continue
                     lower_name = name.lower()
+                    if code_cert_prefix:
+                        if lower_name.startswith(code_cert_prefix):
+                            matches.append(Path(dirpath) / name)
+                        continue
                     if code_cert_lower in lower_name:
                         matches.append(Path(dirpath) / name)
                         continue
