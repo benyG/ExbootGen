@@ -15,8 +15,6 @@ from config import (
     OPENAI_TIMEOUT_SECONDS,
 )
 
-OPENAI_SEARCH_MODEL = "gpt-5-search-api"
-
 CODE_CERT_PROMPT_TEMPLATE = (
     "You are a certification researcher.\n"
     "Task: For the provider \"{provider}\", find the official exam identifier "
@@ -394,6 +392,8 @@ def _run_completion(
     payload = _build_response_payload(prompt, model=model)
     if web_search_options is not None:
         payload["tools"] = [_build_web_search_tool(web_search_options)]
+        payload["tool_choice"] = {"type": "web_search"}
+        payload["include"] = ["web_search_call.action.sources"]
 
     response = _post_with_retry(payload)
     resp_json = response.json()
@@ -563,7 +563,6 @@ def generate_module_blueprint_excerpt(
 
     return _run_completion(
         prompt,
-        model=OPENAI_SEARCH_MODEL,
         web_search_options={},
     )
 
@@ -702,7 +701,6 @@ def generate_domains_outline(certification: str) -> dict:
     prompt = DOMAIN_PROMPT_TEMPLATE.replace("{{NAME_OF_CERTIFICATION}}", certification)
     content = _run_completion(
         prompt,
-        model=OPENAI_SEARCH_MODEL,
         web_search_options={},
     )
     return clean_and_decode_json(content)
@@ -732,7 +730,6 @@ def generate_code_cert_keys(provider_name: str, certifications: list[dict]) -> l
     )
     raw_content = _run_completion(
         prompt,
-        model=OPENAI_SEARCH_MODEL,
         web_search_options={},
     )
     decoded = clean_and_decode_json(raw_content)
