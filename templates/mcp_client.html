@@ -222,10 +222,11 @@
       transition: width 0.4s ease;
     }
     .progress-steps { margin-top: 0.85rem; display: grid; gap: 0.4rem; font-size: 0.85rem; color: var(--text-muted); }
-    .step-item { display: flex; justify-content: space-between; gap: 0.75rem; }
+    .step-item { display: flex; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
     .step-item.is-current { color: #7dd3fc; }
     .step-item.is-done { color: #a7f3d0; }
     .step-item.is-error { color: #fca5a5; }
+    .step-diagnostic { width: 100%; margin-top: 0.1rem; font-size: 0.78rem; color: #fca5a5; }
 
     @media (max-width: 960px) {
       .nav-toggle { display: inline-flex; }
@@ -412,6 +413,7 @@
       toolSchemas: {},
       planSteps: [],
       runJobId: null,
+      runDiagnostics: {},
     };
 
     async function fetchJSON(url, options) {
@@ -897,15 +899,18 @@
       }
     }
 
-    function renderPlanSteps(completedStep, currentStep, failedSteps = []) {
+    function renderPlanSteps(completedStep, currentStep, failedSteps = [], diagnostics = {}) {
       clearElement(progressStepsEl);
       const steps = state.planSteps || [];
       if (!steps.length) {
         progressStepsEl.innerHTML = '<div class="empty-state">Plan non chargé. Cliquez sur “Générer le plan”.</div>';
         return;
       }
+      const normalizedDiagnostics = diagnostics || {};
       steps.forEach((step, index) => {
         const stepNumber = index + 1;
+        const key = step.step ?? stepNumber;
+        const diagnostic = normalizedDiagnostics[key];
         const item = document.createElement('div');
         item.className = 'step-item';
         if (stepNumber <= completedStep) {
@@ -916,15 +921,21 @@
         if (failedSteps.includes(stepNumber)) {
           item.classList.add('is-error');
         }
+        let diagnosticLine = '';
+        if (diagnostic?.reason) {
+          const prefix = diagnostic.status === 'blocked' ? 'Bloqué' : 'Échec';
+          diagnosticLine = `<div class="step-diagnostic">${prefix} · ${diagnostic.reason}</div>`;
+        }
         item.innerHTML = `
           <span>Étape ${step.step ?? stepNumber} · ${step.name || 'action'}</span>
           <span>${step.endpoint || ''}</span>
+          ${diagnosticLine}
         `;
         progressStepsEl.appendChild(item);
       });
     }
 
-    function updatePlanProgress(snapshot) {
+    function updatePlanProgress(snapshot, diagnostics) {
       const counters = snapshot?.counters || {};
       const totalSteps = Number(counters.total_steps || state.planSteps.length || 0);
       const completedSteps = Number(counters.completed_steps || 0);
@@ -939,16 +950,48 @@
       const currentLine = currentName ? `Étape en cours: ${currentName}` : '';
       progressMetaEl.textContent = [statusLabel, statusLine, currentLine].filter(Boolean).join(' · ');
       progressFillEl.style.width = `${Math.min(100, Math.max(0, progress))}%`;
-      renderPlanSteps(completedSteps, currentStep, failedSteps);
+      renderPlanSteps(completedSteps, currentStep, failedSteps, diagnostics);
     }
 
     function setRunJobId(jobId) {
       state.runJobId = jobId;
       if (jobId) {
         localStorage.setItem('mcpRunJobId', jobId);
+        state.runDiagnostics[jobId] = state.runDiagnostics[jobId] || {};
       } else {
         localStorage.removeItem('mcpRunJobId');
       }
+    }
+
+    function buildDiagnostics(results) {
+      const diagnostics = {};
+      if (!Array.isArray(results)) {
+        return diagnostics;
+      }
+      results.forEach((result, index) => {
+        if (!result || !result.diagnostic || !result.diagnostic.reason) {
+          return;
+        }
+        const key = result.step ?? index + 1;
+        diagnostics[key] = {
+          status: result.diagnostic.status || 'failed',
+          reason: result.diagnostic.reason,
+          blocked_by: result.diagnostic.blocked_by,
+        };
+      });
+      return diagnostics;
+    }
+
+    async function fetchRunDiagnostics(jobId) {
+      const data = await fetchJSON('/api/mcp/run/history');
+      const runs = Array.isArray(data?.runs) ? data.runs : [];
+      const run = runs.find((entry) => entry.job_id === jobId);
+      if (!run || !Array.isArray(run.results)) {
+        return null;
+      }
+      const diagnostics = buildDiagnostics(run.results);
+      state.runDiagnostics[jobId] = diagnostics;
+      return diagnostics;
     }
 
     async function pollRunStatus(job) {
@@ -964,7 +1007,12 @@
           : '';
         job.context = counters.current_name ? `Étape en cours: ${counters.current_name}` : '';
         renderJobStatus();
-        updatePlanProgress(data);
+        const failedSteps = Array.isArray(counters.failed_steps) ? counters.failed_steps : [];
+        let diagnostics = state.runDiagnostics[job.job_id];
+        if (!diagnostics && (failedSteps.length || (data.status && !['queued', 'running'].includes(data.status)))) {
+          diagnostics = await fetchRunDiagnostics(job.job_id);
+        }
+        updatePlanProgress(data, diagnostics);
         if (data.status && !['queued', 'running'].includes(data.status)) {
           job.done = true;
           setRunButtonLoading(false);
@@ -1162,7 +1210,7 @@
         });
         planOutput.textContent = JSON.stringify(data, null, 2);
         storePlanSteps(data.plan || []);
-        updatePlanProgress({ status: 'ready', counters: { total_steps: (data.plan || []).length } });
+        updatePlanProgress({ status: 'ready', counters: { total_steps: (data.plan || []).length } }, null);
       } catch (err) {
         planError.textContent = err.message;
         planOutput.textContent = 'Impossible de générer le plan.';
@@ -1217,7 +1265,7 @@
       updatePlanEligibility();
     });
     loadStoredPlanSteps();
-    updatePlanProgress({ status: 'idle', counters: { total_steps: state.planSteps.length } });
+    updatePlanProgress({ status: 'idle', counters: { total_steps: state.planSteps.length } }, null);
     buildToolSchemas();
     loadTools();
     populatePlanProviders().then(updatePlanCertifications).then(updatePlanCodeCert).then(updatePlanEligibility);
