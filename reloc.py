@@ -138,7 +138,8 @@ def _relocate_questions(
             json=payload,
             timeout=60,
         )
-        resp.raise_for_status()
+        if not resp.ok:
+            raise ValueError(f"OpenAI error {resp.status_code}: {resp.text}")
 
         content = _extract_response_text(resp.json())
         mapping = json.loads(content)
@@ -298,7 +299,8 @@ def stream_relocate():
                 json=payload,
                 timeout=60,
             )
-            resp.raise_for_status()
+            if not resp.ok:
+                raise ValueError(f"OpenAI error {resp.status_code}: {resp.text}")
 
             content = _extract_response_text(resp.json())
             mapping = json.loads(content)
