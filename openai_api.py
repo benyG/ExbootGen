@@ -389,11 +389,8 @@ def _run_completion(
     prompt: str,
     *,
     model: Optional[str] = None,
-    web_search_options: Optional[dict] = None,
 ) -> str:
     payload = _build_response_payload(prompt, model=model)
-    if web_search_options is not None:
-        payload["tools"] = [_build_web_search_tool(web_search_options)]
 
     response = _post_with_retry(payload)
     resp_json = response.json()
@@ -415,13 +412,6 @@ def _build_response_payload(prompt: str, *, model: Optional[str] = None) -> dict
             }
         ],
     }
-
-
-def _build_web_search_tool(options: Optional[dict]) -> dict:
-    tool = {"type": "web_search"}
-    if options:
-        tool.update(options)
-    return tool
 
 
 def _extract_response_text(resp_json: dict) -> str:
@@ -564,7 +554,6 @@ def generate_module_blueprint_excerpt(
     return _run_completion(
         prompt,
         model=OPENAI_SEARCH_MODEL,
-        web_search_options={},
     )
 
 def _build_course_art_prompt(certification: str, vendor: str) -> str:
@@ -703,7 +692,6 @@ def generate_domains_outline(certification: str) -> dict:
     content = _run_completion(
         prompt,
         model=OPENAI_SEARCH_MODEL,
-        web_search_options={},
     )
     return clean_and_decode_json(content)
 
@@ -733,7 +721,6 @@ def generate_code_cert_keys(provider_name: str, certifications: list[dict]) -> l
     raw_content = _run_completion(
         prompt,
         model=OPENAI_SEARCH_MODEL,
-        web_search_options={},
     )
     decoded = clean_and_decode_json(raw_content)
     if isinstance(decoded, dict):
