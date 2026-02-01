@@ -386,6 +386,43 @@ def update_certification_pub(cert_id: int, pub_status: int) -> None:
     conn.close()
 
 
+def get_provider_pub_status(provider_id: int) -> dict:
+    """Return pub status info for a provider's certifications."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT DISTINCT pub FROM courses WHERE prov = %s",
+            (provider_id,),
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            return {"pub": None, "mixed": False, "count": 0}
+        distinct = {row[0] for row in rows}
+        if len(distinct) == 1:
+            return {"pub": list(distinct)[0], "mixed": False, "count": len(rows)}
+        return {"pub": None, "mixed": True, "count": len(rows)}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def update_provider_certifications_pub(provider_id: int, pub_status: int) -> int:
+    """Update pub status for all certifications in a provider."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        query = "UPDATE courses SET pub = %s WHERE prov = %s"
+        cursor.execute(query, (pub_status, provider_id))
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def update_certification_code_cert_key(
     cert_id: int,
     new_code: str,
