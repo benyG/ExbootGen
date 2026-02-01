@@ -9,9 +9,16 @@ import mysql.connector
 from flask import Blueprint, jsonify, render_template, request
 
 from config import DB_CONFIG
-from openai_api import generate_module_blueprint_excerpt
 
 module_blueprints_bp = Blueprint("module_blueprints", __name__)
+
+
+def _load_generate_module_blueprint_excerpt():
+    """Import the OpenAI helper lazily to avoid circular imports at startup."""
+
+    from openai_api import generate_module_blueprint_excerpt
+
+    return generate_module_blueprint_excerpt
 
 
 def _to_text(value):
@@ -323,6 +330,7 @@ def api_generate_blueprints(cert_id: int):
     results: list[dict] = []
     updates: list[tuple[str, int]] = []
 
+    generate_module_blueprint_excerpt = _load_generate_module_blueprint_excerpt()
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_map = {
             executor.submit(
