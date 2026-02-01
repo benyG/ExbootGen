@@ -15,7 +15,7 @@ set "DB_NAME=exbootgen"
 
 REM === Paramètres OpenAI ===
 set "OPENAI_API_KEY=sk-remplacez-moi"
-set "OPENAI_API_URL=https://api.openai.com/v1/chat/completions"
+set "OPENAI_API_URL=https://api.openai.com/v1/responses"
 set "OPENAI_MAX_RETRIES=5"
 set "API_REQUEST_DELAY=1"
 set "OPENAI_MODEL=gpt-5-mini"

@@ -12,7 +12,38 @@ import requests
 
 from config import DB_CONFIG, OPENAI_API_KEY, OPENAI_MODEL
 
-OPENAI_ENDPOINT = 'https://api.openai.com/v1/chat/completions'
+OPENAI_ENDPOINT = 'https://api.openai.com/v1/responses'
+
+
+def _build_response_payload(prompt: str) -> dict:
+    return {
+        "model": OPENAI_MODEL,
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": prompt,
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def _extract_response_text(resp_json: dict) -> str:
+    output_text = resp_json.get("output_text")
+    if output_text:
+        return output_text.strip()
+
+    output = resp_json.get("output", [])
+    for item in output:
+        for content in item.get("content", []):
+            if content.get("type") in ("output_text", "text") and content.get("text"):
+                return content["text"].strip()
+
+    raise ValueError(f"réponse OpenAI invalide: {resp_json}")
 
 reloc_bp = Blueprint('reloc', __name__)
 
@@ -75,10 +106,7 @@ def _relocate_questions(
             f"Questions: {questions_info}\n"
         )
 
-        payload = {
-            "model": OPENAI_MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-        }
+        payload = _build_response_payload(prompt)
 
         resp = requests.post(
             OPENAI_ENDPOINT,
@@ -91,11 +119,7 @@ def _relocate_questions(
         )
         resp.raise_for_status()
 
-        choices = resp.json().get('choices', [])
-        if not choices or 'message' not in choices[0]:
-            raise ValueError("réponse OpenAI invalide")
-
-        content = choices[0]['message']['content']
+        content = _extract_response_text(resp.json())
         cleaned = re.sub(r"```json|```", "", content).strip()
         try:
             mapping = json.loads(cleaned)
@@ -244,10 +268,7 @@ def stream_relocate():
                 f"Questions: {questions_info}\n"
             )
 
-            payload = {
-                "model": OPENAI_MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-            }
+            payload = _build_response_payload(prompt)
 
             resp = requests.post(
                 OPENAI_ENDPOINT,
@@ -260,11 +281,7 @@ def stream_relocate():
             )
             resp.raise_for_status()
 
-            choices = resp.json().get('choices', [])
-            if not choices or 'message' not in choices[0]:
-                raise ValueError("réponse OpenAI invalide")
-
-            content = choices[0]['message']['content']
+            content = _extract_response_text(resp.json())
             cleaned = re.sub(r"```json|```", "", content).strip()
             try:
                 mapping = json.loads(cleaned)
