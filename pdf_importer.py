@@ -579,16 +579,16 @@ def api_mcp_import_local():
                 }
             ), 404
 
-        def normalize_path(raw_path: str) -> tuple[Path, bool]:
+        def normalize_path(raw_path: str, base_root: Path) -> tuple[Path, bool]:
             candidate = Path(raw_path)
             if candidate.is_absolute():
                 return candidate.resolve(), True
-            return (PDF_SEARCH_ROOT / candidate).resolve(), False
+            return (base_root / candidate).resolve(), False
 
         def resolve_search_root() -> Path:
             if not search_root:
                 return PDF_SEARCH_ROOT
-            resolved_root, is_absolute = normalize_path(search_root)
+            resolved_root, is_absolute = normalize_path(search_root, PDF_SEARCH_ROOT)
             if not resolved_root.exists() or not resolved_root.is_dir():
                 raise FileNotFoundError(f"Répertoire introuvable: {search_root}")
             if not _is_within_allowed_roots(resolved_root, allowed_roots):
@@ -597,11 +597,12 @@ def api_mcp_import_local():
 
         def collect_files() -> list[Path]:
             if file_paths:
+                base_root = resolve_search_root() if search_root else PDF_SEARCH_ROOT
                 resolved_files: list[Path] = []
                 for raw_path in file_paths:
                     if not isinstance(raw_path, str) or not raw_path.strip():
                         continue
-                    resolved, is_absolute = normalize_path(raw_path.strip())
+                    resolved, is_absolute = normalize_path(raw_path.strip(), base_root)
 
 # Si le chemin exact n'existe pas (cas Linux: FS sensible à la casse),
 # tenter une résolution insensible à la casse sur le nom de fichier
