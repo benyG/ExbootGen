@@ -34,7 +34,7 @@ CODE_CERT_PROMPT_TEMPLATE = (
 DOMAIN_PROMPT_TEMPLATE = (
     "Retrieve the official domains of the exam outline course for the certification "
     "{{NAME_OF_CERTIFICATION}} along with their descriptions.\n"
-    "Reference Sources: only from official website of the specified certification vendor.\n"
+    "Reference sources: only the official website of the specified certification vendor. If the vendor's official website is unavailable, find the most reliable source to the best of your knowledge.\n"
     "If direct browsing is not available, rely on your most accurate and up-to-date knowledge of the vendor's official exam outline to provide accurate domains and descriptions, without mentioning any limitations.\n"
     "Each domain must correspond to a section from the official outline and include a concise vendor-aligned description.\n"
     "If you include sources, they must be listed only in a top-level \"sources\" array.\n"
@@ -531,7 +531,7 @@ def generate_module_blueprint_excerpt(
         f"{code_line}"
         "RULES:\n"
         "- 150–300 words\n"
-        "- Focus only on what’s listed in the official exam blueprint and if you don’t have access to the official exam blueprint, use the most accurate and up-to-date internal knowledge you possess.\n"
+        "- Focus only on what’s listed in the official exam blueprint and if you don’t have access to the official exam blueprint, use the most accurate and up-to-date and reliable source to the best of your knowledge.\n"
         "- If you are unsure whether a topic is covered in the certification curriculum, do not include it in the excerpt.\n"
         "- If you include sources, list them only at the end in a dedicated 'Sources:' section with bullet URLs.\n"
         "STRICT RESPONSE STRUCTURE:\n"
