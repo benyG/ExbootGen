@@ -36,6 +36,43 @@ def db_conn():
     """Connexion MySQL (paramètres dans config.DB_CONFIG)."""
     return mysql.connector.connect(**DB_CONFIG)
 
+
+def _is_file_imported(filename: str) -> bool:
+    conn = db_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM pdf_import_history WHERE filename = %s LIMIT 1",
+            (filename,),
+        )
+        return cur.fetchone() is not None
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        conn.close()
+
+
+def _record_file_imported(filename: str, module_id: int | None) -> None:
+    conn = db_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO pdf_import_history (filename, module_id)
+            VALUES (%s, %s)
+            """,
+            (filename, module_id),
+        )
+        conn.commit()
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        conn.close()
+
 # ------------------------- Extraction du texte -------------------------
 
 _OCR_CONFIDENCE_MIN = 40
@@ -636,6 +673,10 @@ def upload_pdf_route():
         return jsonify({"status": "error", "message": "Aucun fichier envoyé"}), 400
 
     filename = os.path.basename(file.filename or "upload.pdf")
+    if _is_file_imported(filename):
+        return jsonify(
+            {"status": "already_imported", "message": "Fichier déjà importé"}
+        ), 200
     save_path = os.path.join(UPLOAD_DIR, filename)
     file.save(save_path)
 
@@ -648,6 +689,7 @@ def upload_pdf_route():
         detect_visuals=True,
     )
     data = detect_questions(text, module_id)
+    data["source_filename"] = filename
     session_id = str(uuid.uuid4())
 
     tmp_json = os.path.join(UPLOAD_DIR, f"{session_id}.json")
@@ -665,6 +707,10 @@ def import_questions_route():
 
     with open(tmp_json, "r", encoding="utf-8") as f:
         data = json.load(f)
+
+    source_filename = data.get("source_filename")
+    if source_filename and _is_file_imported(source_filename):
+        return jsonify({"status": "error", "message": "Fichier déjà importé"}), 400
 
     NATURE_MAP = {"qcm": 1, "truefalse": 2, "matching": 4, "drag-n-drop": 5}
     q_imported = 0
@@ -721,6 +767,8 @@ def import_questions_route():
                 )
 
         conn.commit()
+        if source_filename:
+            _record_file_imported(source_filename, data.get("module_id"))
     except Exception as e:
         conn.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
