@@ -27,14 +27,7 @@ RELOC_MAPPING_SCHEMA = {
 }
 
 def _json_schema_format(schema: dict, name: str) -> dict:
-    return {
-        "type": "json_schema",
-        "json_schema": {
-            "name": name,
-            "strict": True,
-            "schema": schema,
-        },
-    }
+    return {"type": "json_schema", "name": name, "strict": True, "schema": schema}
 
 
 def _build_response_payload(prompt: str, *, text_format: dict | None = None) -> dict:
