@@ -2199,6 +2199,38 @@ def mcp_client_update_cert_pub():
     return jsonify({"status": "ok", "cert_id": cert_id, "pub": pub_status})
 
 
+@app.route("/api/mcp/client/providers/<int:provider_id>/pub")
+def mcp_client_provider_pub(provider_id: int):
+    """Return provider-level pub state."""
+
+    data = db.get_provider_pub_status(provider_id)
+    return jsonify({"status": "ok", **data})
+
+
+@app.route("/api/mcp/client/providers/pub", methods=["POST"])
+def mcp_client_update_provider_pub():
+    """Update pub status for all certifications in a provider."""
+
+    payload = request.get_json(silent=True) or {}
+    provider_id = payload.get("provider_id")
+    pub_status = payload.get("pub")
+    try:
+        provider_id = int(provider_id)
+        pub_status = int(pub_status)
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "provider_id ou pub invalide"}), 400
+
+    updated = db.update_provider_certifications_pub(provider_id, pub_status)
+    return jsonify(
+        {
+            "status": "ok",
+            "provider_id": provider_id,
+            "pub": pub_status,
+            "updated": updated,
+        }
+    )
+
+
 @app.route("/populate", methods=["GET", "POST"])
 def populate_index():
     if request.method == "POST":

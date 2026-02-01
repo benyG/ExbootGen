@@ -487,6 +487,20 @@ def _strip_leading_marker(block: str) -> str:
 def _normalize_html_quotes(value: str) -> str:
     return value.replace('\\"', '"').replace("\\'", "'")
 
+
+def _normalize_answer_text(value: str) -> str:
+    return re.sub(r'[^a-z]+', ' ', value.lower()).strip()
+
+
+def _is_mastered_not_mastered(answers: list[dict]) -> bool:
+    if len(answers) != 2:
+        return False
+    normalized = {
+        _normalize_answer_text(ans.get("value") or ans.get("text") or "")
+        for ans in answers
+    }
+    return normalized == {"mastered", "not mastered"}
+
 # --- Fonction principale: détecter les questions ---
 
 def detect_questions(text: str, module_id: int, analysis: Optional[dict] = None) -> dict:
@@ -624,6 +638,10 @@ def detect_questions(text: str, module_id: int, analysis: Optional[dict] = None)
 
             if not question_text:
                 continue
+
+            if nature == "qcm" and _is_mastered_not_mastered(answers):
+                nature = "drag-n-drop"
+                answers = []
 
             if nature == "qcm" and len(answers) > 6:
                 dropped_too_many_answers += 1

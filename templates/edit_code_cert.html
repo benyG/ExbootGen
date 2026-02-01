@@ -108,6 +108,7 @@
     label { font-weight: 500; font-size: 0.95rem; color: var(--text-primary); display: block; margin-bottom: 0.35rem; }
     select, button { width: 100%; border-radius: 14px; border: 1px solid rgba(148, 163, 184, 0.22); padding: 0.75rem 0.95rem; background: rgba(10, 15, 28, 0.85); color: var(--text-primary); font-family: inherit; font-size: 0.95rem; transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease; }
     select:focus, button:focus { outline: none; border-color: rgba(71, 245, 192, 0.6); box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.22); }
+    .status-note { font-size: 0.85rem; color: var(--text-muted); }
 
     .stellar-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 0.85rem 1.6rem; border-radius: 999px; background: linear-gradient(135deg, rgba(71,245,192,0.9), rgba(124,247,255,0.85)); color: #020617; font-weight: 600; text-decoration: none; border: none; cursor: pointer; box-shadow: 0 14px 35px rgba(71, 245, 192, 0.3); transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition); }
     .stellar-button:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 18px 42px rgba(71, 245, 192, 0.38); }
@@ -186,6 +187,20 @@
               <option value="{{ provider[0] }}">{{ provider[1] }}</option>
             {% endfor %}
           </select>
+        </div>
+        <div>
+          <label for="pubState">State (pub)</label>
+          <select id="pubState">
+            <option value="">Sélectionner un état</option>
+            <option value="0">offline (0)</option>
+            <option value="1">online (1)</option>
+            <option value="2">autorun (2)</option>
+            <option value="3">update (3)</option>
+          </select>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:0.6rem;">
+          <button type="button" id="pubUpdate">Mettre à jour le state</button>
+          <span id="pubStatus" class="status-note"></span>
         </div>
         <div style="grid-column:1 / -1; display:flex; justify-content:flex-end;">
           <button type="submit" id="startUpdate" class="stellar-button">Update Code</button>
@@ -268,6 +283,9 @@
       const $updatedCount = $("#updated-count");
       const $skippedCount = $("#skipped-count");
       const $failedCount = $("#failed-count");
+      const $pubState = $("#pubState");
+      const $pubUpdate = $("#pubUpdate");
+      const $pubStatus = $("#pubStatus");
       const $jobSection = $("#job-section");
       const $jobStatus = $("#job-status");
       const $jobIdLabel = $("#job-id-label");
@@ -275,6 +293,8 @@
       const $startButton = $("#startUpdate");
       const statusUrlTemplate = "{{ url_for('edit_code_cert_status', job_id='__JOB__') }}";
       const processUrl = "{{ url_for('edit_code_cert_process') }}";
+      const providerPubUrl = "{{ url_for('mcp_client_update_provider_pub') }}";
+      const providerPubStateTemplate = "{{ url_for('mcp_client_provider_pub', provider_id='__PROVIDER__') }}";
       let poller = null;
       let currentJobId = null;
       let lastLogIndex = 0;
@@ -301,6 +321,73 @@
         $updatedCount.text(updated);
         $skippedCount.text(skipped);
         $failedCount.text(`${failed} échec(s)`);
+      }
+
+      function setPubStatus(message, tone = "muted") {
+        $pubStatus.text(message);
+        if (tone === "error") {
+          $pubStatus.css("color", "#f87171");
+        } else if (tone === "success") {
+          $pubStatus.css("color", "var(--accent)");
+        } else {
+          $pubStatus.css("color", "var(--text-muted)");
+        }
+      }
+
+      function syncProviderPubState() {
+        const providerId = $provider.val();
+        if (!providerId) {
+          $pubState.val("");
+          setPubStatus("");
+          return;
+        }
+        setPubStatus("");
+        $.get(providerPubStateTemplate.replace("__PROVIDER__", providerId))
+          .done(function(resp) {
+            if (resp?.mixed) {
+              $pubState.val("");
+              setPubStatus("États multiples détectés pour ce provider.", "muted");
+              return;
+            }
+            if (resp?.pub === null || resp?.pub === undefined) {
+              $pubState.val("");
+              return;
+            }
+            $pubState.val(String(resp.pub));
+          })
+          .fail(function() {
+            $pubState.val("");
+            setPubStatus("Impossible de charger le state du provider.", "error");
+          });
+      }
+
+      function updateProviderPubState() {
+        const providerId = $provider.val();
+        if (!providerId) {
+          setPubStatus("Sélectionnez un provider.", "error");
+          return;
+        }
+        if (!$pubState.val()) {
+          setPubStatus("Sélectionnez un état.", "error");
+          return;
+        }
+        setPubStatus("Mise à jour en cours…");
+        $.ajax({
+          url: providerPubUrl,
+          method: "POST",
+          contentType: "application/json",
+          data: JSON.stringify({
+            provider_id: Number(providerId),
+            pub: Number($pubState.val()),
+          }),
+        })
+          .done(function(resp) {
+            setPubStatus(`Mise à jour OK (${resp.updated || 0} certification(s)).`, "success");
+          })
+          .fail(function(xhr) {
+            const message = xhr.responseJSON?.message || "Erreur lors de la mise à jour.";
+            setPubStatus(message, "error");
+          });
       }
 
       function updateJobStatus(status){
@@ -346,6 +433,10 @@
           });
         }, 2000);
       }
+
+      syncProviderPubState();
+      $provider.on("change", syncProviderPubState);
+      $pubUpdate.on("click", updateProviderPubState);
 
       $("#code-cert-form").on("submit", function(evt){
         evt.preventDefault();
