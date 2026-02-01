@@ -26,8 +26,8 @@ RELOC_MAPPING_SCHEMA = {
     },
 }
 
-def _json_schema_format(schema: dict) -> dict:
-    return {"type": "json_schema", "strict": True, "schema": schema}
+def _json_schema_format(schema: dict, name: str) -> dict:
+    return {"type": "json_schema", "name": name, "strict": True, "schema": schema}
 
 
 def _build_response_payload(prompt: str, *, text_format: dict | None = None) -> dict:
@@ -126,7 +126,7 @@ def _relocate_questions(
 
         payload = _build_response_payload(
             prompt,
-            text_format=_json_schema_format(RELOC_MAPPING_SCHEMA),
+            text_format=_json_schema_format(RELOC_MAPPING_SCHEMA, "reloc_mapping"),
         )
 
         resp = requests.post(
@@ -286,7 +286,7 @@ def stream_relocate():
 
             payload = _build_response_payload(
                 prompt,
-                text_format=_json_schema_format(RELOC_MAPPING_SCHEMA),
+                text_format=_json_schema_format(RELOC_MAPPING_SCHEMA, "reloc_mapping"),
             )
 
             resp = requests.post(

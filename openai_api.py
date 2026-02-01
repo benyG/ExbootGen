@@ -1795,8 +1795,8 @@ def _run_completion(
     return _extract_response_text(resp_json)
 
 
-def _json_schema_format(schema: dict) -> dict:
-    return {"type": "json_schema", "strict": True, "schema": schema}
+def _json_schema_format(schema: dict, name: str) -> dict:
+    return {"type": "json_schema", "name": name, "strict": True, "schema": schema}
 
 
 def _build_response_payload(
@@ -1934,7 +1934,7 @@ def generate_linkedin_carousel(subject: str, question: str) -> dict:
     )
     raw_content = _run_completion(
         prompt,
-        text_format=_json_schema_format(LINKEDIN_CAROUSEL_SCHEMA),
+        text_format=_json_schema_format(LINKEDIN_CAROUSEL_SCHEMA, "linkedin_carousel"),
     )
     return clean_and_decode_json(raw_content)
 
@@ -2010,7 +2010,10 @@ def generate_certification_course_art(certification: str, vendor: str) -> dict:
     prompt = _build_course_art_prompt(certification, vendor)
     raw_content = _run_completion(
         prompt,
-        text_format=_json_schema_format(CERTIFICATION_PRESENTATION_SCHEMA),
+        text_format=_json_schema_format(
+            CERTIFICATION_PRESENTATION_SCHEMA,
+            "certification_presentation",
+        ),
     )
     return clean_and_decode_json(raw_content)
 
@@ -2115,7 +2118,7 @@ def generate_domains_outline(certification: str) -> dict:
     content = _run_completion(
         prompt,
         web_search_options={},
-        text_format=_json_schema_format(DOMAIN_RESPONSE_SCHEMA),
+        text_format=_json_schema_format(DOMAIN_RESPONSE_SCHEMA, "domain_outline"),
     )
     return clean_and_decode_json(content)
 
@@ -2145,7 +2148,7 @@ def generate_code_cert_keys(provider_name: str, certifications: list[dict]) -> l
     raw_content = _run_completion(
         prompt,
         web_search_options={},
-        text_format=_json_schema_format(CODE_CERT_RESPONSE_SCHEMA),
+        text_format=_json_schema_format(CODE_CERT_RESPONSE_SCHEMA, "code_cert_keys"),
     )
     decoded = clean_and_decode_json(raw_content)
     if isinstance(decoded, dict):
@@ -2457,7 +2460,7 @@ RULES:
 
         payload = _build_response_payload(
             content_prompt,
-            text_format=_json_schema_format(QUESTIONS_RESPONSE_SCHEMA),
+            text_format=_json_schema_format(QUESTIONS_RESPONSE_SCHEMA, "questions"),
         )
 
         response = _post_with_retry(payload)
@@ -2800,7 +2803,7 @@ def generate_lab_blueprint(
 
     payload = _build_response_payload(
         prompt,
-        text_format=_json_schema_format(LAB_RESPONSE_SCHEMA),
+        text_format=_json_schema_format(LAB_RESPONSE_SCHEMA, "lab_blueprint"),
     )
 
     temperature = _model_temperature_override(OPENAI_MODEL)
@@ -2842,7 +2845,10 @@ Certification: {certification}
 """
     payload = _build_response_payload(
         prompt,
-        text_format=_json_schema_format(ANALYZE_CERTIF_RESPONSE_SCHEMA),
+        text_format=_json_schema_format(
+            ANALYZE_CERTIF_RESPONSE_SCHEMA,
+            "certification_analysis",
+        ),
     )
     response = _post_with_retry(payload)
     content = _extract_response_text(response.json())
@@ -2899,9 +2905,10 @@ Text: {q['text']}
 JSON:"""
 
         schema = ASSIGN_ANSWERS_SCHEMA if mode == "assign" else COMPLETE_ANSWERS_SCHEMA
+        schema_name = "assign_answers" if mode == "assign" else "complete_answers"
         payload = _build_response_payload(
             prompt,
-            text_format=_json_schema_format(schema),
+            text_format=_json_schema_format(schema, schema_name),
         )
         response = _post_with_retry(payload)
         content = _extract_response_text(response.json())
