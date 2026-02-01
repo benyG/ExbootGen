@@ -27,7 +27,14 @@ RELOC_MAPPING_SCHEMA = {
 }
 
 def _json_schema_format(schema: dict, name: str) -> dict:
-    return {"type": "json_schema", "name": name, "strict": True, "schema": schema}
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": name,
+            "strict": True,
+            "schema": schema,
+        },
+    }
 
 
 def _build_response_payload(prompt: str, *, text_format: dict | None = None) -> dict:
@@ -138,7 +145,8 @@ def _relocate_questions(
             json=payload,
             timeout=60,
         )
-        resp.raise_for_status()
+        if not resp.ok:
+            raise ValueError(f"OpenAI error {resp.status_code}: {resp.text}")
 
         content = _extract_response_text(resp.json())
         mapping = json.loads(content)
@@ -298,7 +306,8 @@ def stream_relocate():
                 json=payload,
                 timeout=60,
             )
-            resp.raise_for_status()
+            if not resp.ok:
+                raise ValueError(f"OpenAI error {resp.status_code}: {resp.text}")
 
             content = _extract_response_text(resp.json())
             mapping = json.loads(content)
