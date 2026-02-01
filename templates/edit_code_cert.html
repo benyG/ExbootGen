@@ -294,7 +294,7 @@
       const statusUrlTemplate = "{{ url_for('edit_code_cert_status', job_id='__JOB__') }}";
       const processUrl = "{{ url_for('edit_code_cert_process') }}";
       const providerPubUrl = "{{ url_for('mcp_client_update_provider_pub') }}";
-      const providerPubStateTemplate = "{{ url_for('mcp_client_provider_pub', provider_id='__PROVIDER__') }}";
+      const providerPubStateTemplate = "{{ url_for('mcp_client_provider_pub', provider_id=0) }}";
       let poller = null;
       let currentJobId = null;
       let lastLogIndex = 0;
@@ -342,7 +342,8 @@
           return;
         }
         setPubStatus("");
-        $.get(providerPubStateTemplate.replace("__PROVIDER__", providerId))
+        const stateUrl = providerPubStateTemplate.replace(/0$/, String(providerId));
+        $.get(stateUrl)
           .done(function(resp) {
             if (resp?.mixed) {
               $pubState.val("");
