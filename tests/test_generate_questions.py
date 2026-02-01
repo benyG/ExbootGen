@@ -14,7 +14,7 @@ class DummyResponse:
         self.status_code = 200
     def json(self):
         content = json.dumps({"questions": [{"text": q} for q in self._questions]})
-        return {"choices": [{"message": {"content": content}}]}
+        return {"output_text": content}
     def raise_for_status(self):
         pass
 
@@ -24,7 +24,8 @@ class GenerateQuestionsBatchingTest(unittest.TestCase):
 
         def fake_post(url, headers, json=None, timeout=0):
             import re
-            m = re.search(r"generate (\d+) questions", json['messages'][0]['content'])
+            prompt = json["input"][0]["content"][0]["text"]
+            m = re.search(r"generate (\d+) questions", prompt)
             n = int(m.group(1)) if m else 1
             call_counts.append(n)
             qs = [f"q{len(call_counts)}_{i}" for i in range(n)]

@@ -3,7 +3,6 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
-import re
 from time import sleep
 
 from flask import Blueprint, Response, render_template, request
@@ -14,9 +13,25 @@ from config import DB_CONFIG, OPENAI_API_KEY, OPENAI_MODEL
 
 OPENAI_ENDPOINT = 'https://api.openai.com/v1/responses'
 
+RELOC_MAPPING_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["question_id", "domain_to_affect"],
+        "properties": {
+            "question_id": {"type": "integer"},
+            "domain_to_affect": {"type": "integer"},
+        },
+    },
+}
 
-def _build_response_payload(prompt: str) -> dict:
-    return {
+def _json_schema_format(schema: dict) -> dict:
+    return {"type": "json_schema", "strict": True, "schema": schema}
+
+
+def _build_response_payload(prompt: str, *, text_format: dict | None = None) -> dict:
+    payload = {
         "model": OPENAI_MODEL,
         "input": [
             {
@@ -30,6 +45,9 @@ def _build_response_payload(prompt: str) -> dict:
             }
         ],
     }
+    if text_format is not None:
+        payload["text"] = {"format": text_format}
+    return payload
 
 
 def _extract_response_text(resp_json: dict) -> str:
@@ -106,7 +124,10 @@ def _relocate_questions(
             f"Questions: {questions_info}\n"
         )
 
-        payload = _build_response_payload(prompt)
+        payload = _build_response_payload(
+            prompt,
+            text_format=_json_schema_format(RELOC_MAPPING_SCHEMA),
+        )
 
         resp = requests.post(
             OPENAI_ENDPOINT,
@@ -120,12 +141,7 @@ def _relocate_questions(
         resp.raise_for_status()
 
         content = _extract_response_text(resp.json())
-        cleaned = re.sub(r"```json|```", "", content).strip()
-        try:
-            mapping = json.loads(cleaned)
-        except json.JSONDecodeError:
-            cleaned2 = cleaned.replace("\n", "").replace("\\", "")
-            mapping = json.loads(cleaned2)
+        mapping = json.loads(content)
 
         conn2 = mysql.connector.connect(**DB_CONFIG)
         cur2 = conn2.cursor()
@@ -268,7 +284,10 @@ def stream_relocate():
                 f"Questions: {questions_info}\n"
             )
 
-            payload = _build_response_payload(prompt)
+            payload = _build_response_payload(
+                prompt,
+                text_format=_json_schema_format(RELOC_MAPPING_SCHEMA),
+            )
 
             resp = requests.post(
                 OPENAI_ENDPOINT,
@@ -282,12 +301,7 @@ def stream_relocate():
             resp.raise_for_status()
 
             content = _extract_response_text(resp.json())
-            cleaned = re.sub(r"```json|```", "", content).strip()
-            try:
-                mapping = json.loads(cleaned)
-            except json.JSONDecodeError:
-                cleaned2 = cleaned.replace("\n", "").replace("\\", "")
-                mapping = json.loads(cleaned2)
+            mapping = json.loads(content)
 
             conn2 = mysql.connector.connect(**DB_CONFIG)
             cur2 = conn2.cursor()
