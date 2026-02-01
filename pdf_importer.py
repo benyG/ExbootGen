@@ -590,6 +590,8 @@ def api_mcp_import_local():
                 return PDF_SEARCH_ROOT
             resolved_root, is_absolute = normalize_path(search_root)
             if not resolved_root.exists() or not resolved_root.is_dir():
+                if search_root == DEFAULT_PDF_DIRECTORY:
+                    return PDF_SEARCH_ROOT
                 raise FileNotFoundError(f"Répertoire introuvable: {search_root}")
             if not _is_within_allowed_roots(resolved_root, allowed_roots):
                 raise ValueError(f"Chemin non autorisé: {search_root}")
