@@ -3064,6 +3064,18 @@ def _call_internal(endpoint: str, method: str, payload: dict | None = None) -> t
     return data, response.status_code
 
 
+def _extract_mcp_error_message(data: object) -> str | None:
+    if not isinstance(data, dict):
+        return None
+    for key in ("message", "error", "details", "detail", "reason"):
+        value = data.get(key)
+        if value:
+            return str(value)
+    if data.get("status") == "error":
+        return "Erreur MCP sans message détaillé."
+    return None
+
+
 def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
     cert_id = payload.get("cert_id")
     provider_id = payload.get("provider_id")
@@ -3244,7 +3256,7 @@ def _execute_mcp_plan(
     steps = plan_data.get("plan", []) or []
     total_steps = len(steps)
     failed_steps: list[int] = []
-    skipped_certifications: dict[int, str] = {}
+    skipped_certifications: dict[int, dict] = {}
     context.update_counters(
         total_steps=total_steps,
         completed_steps=0,
@@ -3260,6 +3272,7 @@ def _execute_mcp_plan(
         step_payload = step.get("payload") or {}
         cert_id = step.get("cert_id")
         if cert_id and cert_id in skipped_certifications:
+            skipped_info = skipped_certifications[cert_id]
             entry = {
                 "step": step.get("step"),
                 "name": step.get("name"),
@@ -3267,7 +3280,12 @@ def _execute_mcp_plan(
                 "status_code": 204,
                 "result": {
                     "status": "skipped",
-                    "message": skipped_certifications.get(cert_id, "Étape ignorée après erreur."),
+                    "message": skipped_info.get("message", "Étape ignorée après erreur."),
+                },
+                "diagnostic": {
+                    "status": "blocked",
+                    "blocked_by": skipped_info.get("blocked_by"),
+                    "reason": skipped_info.get("reason"),
                 },
             }
             results.append(entry)
@@ -3293,6 +3311,14 @@ def _execute_mcp_plan(
             "status_code": status,
             "result": data,
         }
+        diagnostic_message = None
+        if status >= 400:
+            diagnostic_message = _extract_mcp_error_message(data)
+            if diagnostic_message:
+                entry["diagnostic"] = {
+                    "status": "failed",
+                    "reason": diagnostic_message,
+                }
         results.append(entry)
         if status >= 400:
             failed_steps.append(idx)
@@ -3309,7 +3335,16 @@ def _execute_mcp_plan(
                         "les étapes suivantes pour cette certification sont ignorées."
                     )
             if cert_id:
-                skipped_certifications[cert_id] = skip_reason
+                skipped_certifications[cert_id] = {
+                    "message": skip_reason,
+                    "reason": diagnostic_message,
+                    "blocked_by": {
+                        "step": step.get("step"),
+                        "name": step.get("name"),
+                        "endpoint": endpoint,
+                        "status_code": status,
+                    },
+                }
                 context.log(f"Certification {cert_id}: {skip_reason}")
         if step.get("finalize_pub") and step.get("cert_id") and status < 400:
             cert_id = step.get("cert_id")
