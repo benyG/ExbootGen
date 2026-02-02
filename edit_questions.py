@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, jsonify, request, g
 import json
 import mimetypes
+import re
 import mysql.connector
 from google.cloud import storage
 from werkzeug.utils import secure_filename
@@ -10,6 +11,18 @@ from pathlib import Path
 from config import DB_CONFIG, GCS_BUCKET_NAME, GCS_UPLOAD_FOLDER
 
 edit_question_bp = Blueprint('edit_question', __name__)
+
+IMG_TAG_RE = re.compile(r"\s*<img[^>]*>\s*", re.IGNORECASE)
+BR_TAG_RE = re.compile(r"\s*<br\s*/?>\s*", re.IGNORECASE)
+
+
+def normalize_question_text(text: str) -> str:
+    if not text:
+        return ''
+    normalized = IMG_TAG_RE.sub(' ', text)
+    normalized = BR_TAG_RE.sub(' ', normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()
 
 
 def get_db():
@@ -171,6 +184,61 @@ def api_correction_list():
     return jsonify({'results': results, 'total': len(results)})
 
 
+@edit_question_bp.route('/api/duplicates')
+def api_duplicate_list():
+    certification_id = request.args.get('certification_id')
+    if not certification_id:
+        return jsonify({'error': 'La certification est requise'}), 400
+
+    db = get_db()
+    cur = db.cursor(dictionary=True)
+    cur.execute(
+        """
+        SELECT q.id,
+               q.text,
+               q.src_file,
+               m.name AS module_name,
+               c.name AS certification_name,
+               p.name AS provider_name
+          FROM questions q
+          JOIN modules m ON q.module = m.id
+          JOIN courses c ON m.course = c.id
+          JOIN provs p ON c.prov = p.id
+         WHERE c.id = %s
+         ORDER BY q.id DESC
+        """,
+        (certification_id,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+
+    groups: dict[str, list[dict]] = {}
+    for row in rows:
+        normalized = normalize_question_text(row.get('text') or '')
+        if not normalized:
+            continue
+        groups.setdefault(normalized, []).append(row)
+
+    results = []
+    for normalized, items in groups.items():
+        if len(items) < 2:
+            continue
+        for item in items:
+            text_preview = normalized[:220]
+            results.append({
+                'id': item['id'],
+                'text_preview': text_preview,
+                'src_file': item.get('src_file'),
+                'module_name': item.get('module_name'),
+                'provider': item.get('provider_name'),
+                'certification': item.get('certification_name'),
+                'duplicate_count': len(items),
+            })
+
+    results.sort(key=lambda item: (-item['duplicate_count'], item['id']), reverse=False)
+    return jsonify({'results': results, 'total': len(results)})
+
+
 @edit_question_bp.route('/api/questions', methods=['POST'])
 def api_create_question():
     payload = request.get_json() or {}
@@ -216,6 +284,28 @@ def api_create_question():
     if not module_exists:
         cur.close()
         return jsonify({'error': 'Module introuvable'}), 404
+
+    cur.execute("SELECT course FROM modules WHERE id = %s", (module_id,))
+    course_row = cur.fetchone()
+    course_id = course_row[0] if course_row else None
+    normalized_text = normalize_question_text(text)
+    if course_id:
+        cur.execute(
+            """
+            SELECT q.id, q.text
+              FROM questions q
+              JOIN modules m ON q.module = m.id
+             WHERE m.course = %s
+            """,
+            (course_id,),
+        )
+        for existing_id, existing_text in cur.fetchall():
+            if normalize_question_text(existing_text) == normalized_text:
+                cur.close()
+                return jsonify({
+                    'error': 'Une question similaire existe déjà',
+                    'existing_id': existing_id,
+                }), 409
 
     try:
         cur.execute(
@@ -341,12 +431,34 @@ def api_update_question(question_id: int):
 
     db = get_db()
     cur = db.cursor()
-    cur.execute("SELECT nature FROM questions WHERE id = %s", (question_id,))
+    cur.execute(
+        "SELECT q.nature, m.course FROM questions q JOIN modules m ON q.module = m.id WHERE q.id = %s",
+        (question_id,),
+    )
     row = cur.fetchone()
     if not row:
         cur.close()
         return jsonify({'error': 'Question introuvable'}), 404
-    current_nature = row[0]
+    current_nature, course_id = row
+
+    normalized_text = normalize_question_text(text)
+    if course_id:
+        cur.execute(
+            """
+            SELECT q.id, q.text
+              FROM questions q
+              JOIN modules m ON q.module = m.id
+             WHERE m.course = %s AND q.id != %s
+            """,
+            (course_id, question_id),
+        )
+        for existing_id, existing_text in cur.fetchall():
+            if normalize_question_text(existing_text) == normalized_text:
+                cur.close()
+                return jsonify({
+                    'error': 'Une question similaire existe déjà',
+                    'existing_id': existing_id,
+                }), 409
 
     if nature is None:
         nature = current_nature
