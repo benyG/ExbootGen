@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, jsonify, request, g
 import json
 import mimetypes
 import re
+from urllib.parse import urlparse, unquote
 import mysql.connector
 from google.cloud import storage
 from werkzeug.utils import secure_filename
@@ -14,6 +15,7 @@ edit_question_bp = Blueprint('edit_question', __name__)
 
 IMG_TAG_RE = re.compile(r"\s*<img[^>]*>\s*", re.IGNORECASE)
 BR_TAG_RE = re.compile(r"\s*<br\s*/?>\s*", re.IGNORECASE)
+IMG_SRC_RE = re.compile(r"<img[^>]+src=[\"']?([^\"'>\s]+)[\"']?[^>]*>", re.IGNORECASE)
 
 
 def normalize_question_text(text: str) -> str:
@@ -23,6 +25,54 @@ def normalize_question_text(text: str) -> str:
     normalized = BR_TAG_RE.sub(' ', normalized)
     normalized = re.sub(r"\s+", " ", normalized)
     return normalized.strip()
+
+
+def extract_image_urls(text: str) -> list[str]:
+    if not text:
+        return []
+    return [match.group(1) for match in IMG_SRC_RE.finditer(text)]
+
+
+def question_has_image(text: str) -> bool:
+    if not text:
+        return False
+    return IMG_SRC_RE.search(text) is not None
+
+
+def gcs_object_name_from_url(url: str) -> str | None:
+    if not url:
+        return None
+    parsed = urlparse(url)
+    path = unquote(parsed.path or '').lstrip('/')
+    host = parsed.netloc or ''
+    if url.startswith('gs://'):
+        return url[len('gs://'):].split('/', 1)[1]
+    if host == 'storage.googleapis.com':
+        if path.startswith(f"{GCS_BUCKET_NAME}/"):
+            return path[len(GCS_BUCKET_NAME) + 1:]
+        return None
+    if host.endswith('.storage.googleapis.com'):
+        bucket = host.split('.')[0]
+        if bucket == GCS_BUCKET_NAME:
+            return path
+    if host.startswith(f"{GCS_BUCKET_NAME}."):
+        return path
+    return None
+
+
+def delete_gcs_images(urls: list[str]) -> None:
+    if not urls:
+        return
+    client = storage.Client()
+    bucket = client.bucket(GCS_BUCKET_NAME)
+    for url in urls:
+        object_name = gcs_object_name_from_url(url)
+        if not object_name:
+            continue
+        try:
+            bucket.blob(object_name).delete()
+        except Exception:
+            continue
 
 
 def get_db():
@@ -128,6 +178,7 @@ def api_search():
             'module_name': row.get('module_name'),
             'provider': row.get('provider_name'),
             'certification': row.get('certification_name'),
+            'has_image': question_has_image(row.get('text') or ''),
         })
 
     return jsonify({'results': results})
@@ -179,6 +230,7 @@ def api_correction_list():
             'certification': row.get('certification_name'),
             'answer_count': row.get('answer_count', 0),
             'correct_count': row.get('correct_count', 0),
+            'has_image': question_has_image(row.get('text') or ''),
         })
 
     return jsonify({'results': results, 'total': len(results)})
@@ -233,6 +285,7 @@ def api_duplicate_list():
                 'provider': item.get('provider_name'),
                 'certification': item.get('certification_name'),
                 'duplicate_count': len(items),
+                'has_image': question_has_image(item.get('text') or ''),
             })
 
     results.sort(key=lambda item: (-item['duplicate_count'], item['id']), reverse=False)
@@ -534,11 +587,13 @@ def api_update_question(question_id: int):
 def api_delete_question(question_id: int):
     db = get_db()
     cur = db.cursor()
-    cur.execute("SELECT COUNT(*) FROM questions WHERE id = %s", (question_id,))
-    exists = cur.fetchone()[0]
-    if not exists:
+    cur.execute("SELECT text FROM questions WHERE id = %s", (question_id,))
+    row = cur.fetchone()
+    if not row:
         cur.close()
         return jsonify({'error': 'Question introuvable'}), 404
+    question_text = row[0] or ''
+    image_urls = extract_image_urls(question_text)
 
     try:
         cur.execute("DELETE FROM quest_ans WHERE question = %s", (question_id,))
@@ -550,6 +605,7 @@ def api_delete_question(question_id: int):
         raise
 
     cur.close()
+    delete_gcs_images(image_urls)
     return jsonify({'status': 'deleted', 'id': question_id})
 
 

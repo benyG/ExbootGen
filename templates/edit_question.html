@@ -87,6 +87,21 @@
     }
     .result-card small { display: block; color: var(--muted); margin-top: 0.35rem; }
     .result-card .src { color: #c084fc; font-size: 0.9rem; }
+    .result-card .image-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: rgba(56, 189, 248, 0.95);
+      border: 1px solid rgba(56, 189, 248, 0.5);
+      background: rgba(56, 189, 248, 0.16);
+      margin-top: 0.45rem;
+      width: fit-content;
+    }
 
     .editor {
       background: var(--panel-soft);
@@ -471,6 +486,7 @@
         <article class="result-card" data-id="${r.id}">
           <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
           <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
+          ${r.has_image ? '<span class="image-badge">image</span>' : ''}
           <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
           <small class="src">${r.src_file ? `src_file : ${escapeHtml(r.src_file)}` : 'src_file non renseigné'}</small>
         </article>
@@ -515,6 +531,7 @@
         <article class="result-card" data-id="${r.id}">
           <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
           <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
+          ${r.has_image ? '<span class="image-badge">image</span>' : ''}
           <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
           <small class="src">${issue}</small>
         </article>
@@ -573,6 +590,7 @@
         <article class="result-card" data-id="${r.id}">
           <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
           <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
+          ${r.has_image ? '<span class="image-badge">image</span>' : ''}
           <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
           <small class="src">Duplicata (groupe ${r.duplicate_count})</small>
         </article>
