@@ -87,6 +87,21 @@
     }
     .result-card small { display: block; color: var(--muted); margin-top: 0.35rem; }
     .result-card .src { color: #c084fc; font-size: 0.9rem; }
+    .result-card .image-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: rgba(56, 189, 248, 0.95);
+      border: 1px solid rgba(56, 189, 248, 0.5);
+      background: rgba(56, 189, 248, 0.16);
+      margin-top: 0.45rem;
+      width: fit-content;
+    }
 
     .editor {
       background: var(--panel-soft);
@@ -230,6 +245,10 @@
           <input type="checkbox" id="correctionModeToggle">
           Mode correction
         </label>
+        <label style="display:flex; align-items:center; gap:0.4rem; color: var(--muted); font-size: 0.95rem;">
+          <input type="checkbox" id="duplicateModeToggle">
+          Mode duplicata
+        </label>
         <span class="status" id="searchStatus">Saisissez au moins un mot-clé.</span>
       </div>
     </section>
@@ -347,6 +366,7 @@
     const moduleSelectWrap = document.getElementById('moduleSelectWrap');
     const addModeToggle = document.getElementById('addModeToggle');
     const correctionModeToggle = document.getElementById('correctionModeToggle');
+    const duplicateModeToggle = document.getElementById('duplicateModeToggle');
     const correctionNav = document.getElementById('correctionNav');
     const prevCorrection = document.getElementById('prevCorrection');
     const nextCorrection = document.getElementById('nextCorrection');
@@ -373,8 +393,10 @@
     let currentQuestionId = null;
     let isAddMode = false;
     let isCorrectionMode = false;
+    let isDuplicateMode = false;
     let correctionQuestions = [];
     let correctionIndex = -1;
+    let duplicateQuestions = [];
 
     const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
     nav?.querySelectorAll('a[data-route]').forEach(link => {
@@ -440,6 +462,10 @@
         searchStatus.textContent = 'Mode correction activé : utilisez NEXT / PREVIOUS pour naviguer.';
         return;
       }
+      if (isDuplicateMode) {
+        searchStatus.textContent = 'Mode duplicata activé : sélectionnez une certification.';
+        return;
+      }
       const q = searchText.value.trim();
       if (!q) {
         searchStatus.textContent = 'Veuillez saisir un mot-clé.';
@@ -460,6 +486,7 @@
         <article class="result-card" data-id="${r.id}">
           <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
           <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
+          ${r.has_image ? '<span class="image-badge">image</span>' : ''}
           <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
           <small class="src">${r.src_file ? `src_file : ${escapeHtml(r.src_file)}` : 'src_file non renseigné'}</small>
         </article>
@@ -504,6 +531,7 @@
         <article class="result-card" data-id="${r.id}">
           <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
           <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
+          ${r.has_image ? '<span class="image-badge">image</span>' : ''}
           <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
           <small class="src">${issue}</small>
         </article>
@@ -531,6 +559,43 @@
         deleteBtn.disabled = true;
       }
       updateCorrectionStatus();
+    }
+
+    async function loadDuplicateList() {
+      const certId = certificationSelect.value;
+      if (!certId) {
+        resultsContainer.innerHTML = '';
+        resultsCount.textContent = 'Sélectionnez une certification.';
+        searchStatus.textContent = 'Mode duplicata : sélectionnez une certification.';
+        duplicateQuestions = [];
+        return;
+      }
+      searchStatus.textContent = 'Recherche des duplicatas…';
+      resultsContainer.innerHTML = '';
+      const res = await fetch(`/edit-question/api/duplicates?certification_id=${certId}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        resultsCount.textContent = err.error || 'Erreur pendant la recherche.';
+        searchStatus.textContent = 'Impossible de charger les duplicatas.';
+        duplicateQuestions = [];
+        return;
+      }
+      const data = await res.json();
+      duplicateQuestions = data.results || [];
+      resultsCount.textContent = `${duplicateQuestions.length} question(s) en duplicata`;
+      searchStatus.textContent = duplicateQuestions.length
+        ? 'Cliquez sur une carte pour ouvrir la question et supprimer les doublons.'
+        : 'Aucun duplicata détecté pour cette certification.';
+      resultsContainer.innerHTML = duplicateQuestions.map(r => `
+        <article class="result-card" data-id="${r.id}">
+          <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
+          <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
+          ${r.has_image ? '<span class="image-badge">image</span>' : ''}
+          <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
+          <small class="src">Duplicata (groupe ${r.duplicate_count})</small>
+        </article>
+      `).join('');
+      setActiveResultCard(currentQuestionId);
     }
 
     async function loadQuestion(questionId) {
@@ -610,8 +675,13 @@
       if (enabled && isCorrectionMode) {
         setCorrectionMode(false);
       }
+      if (enabled && isDuplicateMode) {
+        setDuplicateMode(false);
+      }
       isAddMode = enabled;
       addModeToggle.checked = enabled;
+      correctionModeToggle.disabled = enabled;
+      duplicateModeToggle.disabled = enabled;
       moduleSelectWrap.classList.toggle('hidden', !enabled);
       addBtn.classList.toggle('hidden', !enabled);
       saveBtn.classList.toggle('hidden', enabled);
@@ -663,6 +733,7 @@
       correctionModeToggle.checked = enabled;
       correctionNav.classList.toggle('hidden', !enabled);
       addModeToggle.disabled = enabled;
+      duplicateModeToggle.disabled = enabled;
       searchBtn.disabled = enabled || isAddMode;
       searchText.disabled = enabled || isAddMode;
       if (enabled) {
@@ -674,6 +745,24 @@
         correctionIndex = -1;
         correctionRemaining.textContent = '';
         correctionPosition.textContent = '';
+        resultsCount.textContent = 'Aucun résultat pour le moment.';
+        searchStatus.textContent = 'Saisissez au moins un mot-clé.';
+      }
+    }
+
+    function setDuplicateMode(enabled) {
+      isDuplicateMode = enabled;
+      duplicateModeToggle.checked = enabled;
+      correctionNav.classList.add('hidden');
+      addModeToggle.disabled = enabled;
+      correctionModeToggle.disabled = enabled;
+      searchBtn.disabled = enabled || isAddMode;
+      searchText.disabled = enabled || isAddMode;
+      if (enabled) {
+        searchText.value = '';
+        loadDuplicateList();
+      } else {
+        duplicateQuestions = [];
         resultsCount.textContent = 'Aucun résultat pour le moment.';
         searchStatus.textContent = 'Saisissez au moins un mot-clé.';
       }
@@ -830,6 +919,10 @@
         loadCorrectionList();
         return;
       }
+      if (isDuplicateMode) {
+        loadDuplicateList();
+        return;
+      }
       searchQuestions();
     });
     addModeToggle.addEventListener('change', (event) => {
@@ -840,6 +933,13 @@
         setAddMode(false);
       }
       setCorrectionMode(event.target.checked);
+    });
+    duplicateModeToggle.addEventListener('change', (event) => {
+      if (event.target.checked) {
+        setAddMode(false);
+        setCorrectionMode(false);
+      }
+      setDuplicateMode(event.target.checked);
     });
     moduleSelect?.addEventListener('change', () => {
       saveStatus.textContent = '';
@@ -924,6 +1024,9 @@
         deleteBtn.disabled = true;
         if (isCorrectionMode) {
           loadCorrectionList();
+        }
+        if (isDuplicateMode) {
+          loadDuplicateList();
         }
       } else {
         const err = await res.json().catch(() => ({}));

@@ -1,6 +1,8 @@
 from flask import Blueprint, render_template, jsonify, request, g
 import json
 import mimetypes
+import re
+from urllib.parse import urlparse, unquote
 import mysql.connector
 from google.cloud import storage
 from werkzeug.utils import secure_filename
@@ -10,6 +12,67 @@ from pathlib import Path
 from config import DB_CONFIG, GCS_BUCKET_NAME, GCS_UPLOAD_FOLDER
 
 edit_question_bp = Blueprint('edit_question', __name__)
+
+IMG_TAG_RE = re.compile(r"\s*<img[^>]*>\s*", re.IGNORECASE)
+BR_TAG_RE = re.compile(r"\s*<br\s*/?>\s*", re.IGNORECASE)
+IMG_SRC_RE = re.compile(r"<img[^>]+src=[\"']?([^\"'>\s]+)[\"']?[^>]*>", re.IGNORECASE)
+
+
+def normalize_question_text(text: str) -> str:
+    if not text:
+        return ''
+    normalized = IMG_TAG_RE.sub(' ', text)
+    normalized = BR_TAG_RE.sub(' ', normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()
+
+
+def extract_image_urls(text: str) -> list[str]:
+    if not text:
+        return []
+    return [match.group(1) for match in IMG_SRC_RE.finditer(text)]
+
+
+def question_has_image(text: str) -> bool:
+    if not text:
+        return False
+    return IMG_SRC_RE.search(text) is not None
+
+
+def gcs_object_name_from_url(url: str) -> str | None:
+    if not url:
+        return None
+    parsed = urlparse(url)
+    path = unquote(parsed.path or '').lstrip('/')
+    host = parsed.netloc or ''
+    if url.startswith('gs://'):
+        return url[len('gs://'):].split('/', 1)[1]
+    if host == 'storage.googleapis.com':
+        if path.startswith(f"{GCS_BUCKET_NAME}/"):
+            return path[len(GCS_BUCKET_NAME) + 1:]
+        return None
+    if host.endswith('.storage.googleapis.com'):
+        bucket = host.split('.')[0]
+        if bucket == GCS_BUCKET_NAME:
+            return path
+    if host.startswith(f"{GCS_BUCKET_NAME}."):
+        return path
+    return None
+
+
+def delete_gcs_images(urls: list[str]) -> None:
+    if not urls:
+        return
+    client = storage.Client()
+    bucket = client.bucket(GCS_BUCKET_NAME)
+    for url in urls:
+        object_name = gcs_object_name_from_url(url)
+        if not object_name:
+            continue
+        try:
+            bucket.blob(object_name).delete()
+        except Exception:
+            continue
 
 
 def get_db():
@@ -115,6 +178,7 @@ def api_search():
             'module_name': row.get('module_name'),
             'provider': row.get('provider_name'),
             'certification': row.get('certification_name'),
+            'has_image': question_has_image(row.get('text') or ''),
         })
 
     return jsonify({'results': results})
@@ -166,8 +230,65 @@ def api_correction_list():
             'certification': row.get('certification_name'),
             'answer_count': row.get('answer_count', 0),
             'correct_count': row.get('correct_count', 0),
+            'has_image': question_has_image(row.get('text') or ''),
         })
 
+    return jsonify({'results': results, 'total': len(results)})
+
+
+@edit_question_bp.route('/api/duplicates')
+def api_duplicate_list():
+    certification_id = request.args.get('certification_id')
+    if not certification_id:
+        return jsonify({'error': 'La certification est requise'}), 400
+
+    db = get_db()
+    cur = db.cursor(dictionary=True)
+    cur.execute(
+        """
+        SELECT q.id,
+               q.text,
+               q.src_file,
+               m.name AS module_name,
+               c.name AS certification_name,
+               p.name AS provider_name
+          FROM questions q
+          JOIN modules m ON q.module = m.id
+          JOIN courses c ON m.course = c.id
+          JOIN provs p ON c.prov = p.id
+         WHERE c.id = %s
+         ORDER BY q.id DESC
+        """,
+        (certification_id,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+
+    groups: dict[str, list[dict]] = {}
+    for row in rows:
+        normalized = normalize_question_text(row.get('text') or '')
+        if not normalized:
+            continue
+        groups.setdefault(normalized, []).append(row)
+
+    results = []
+    for normalized, items in groups.items():
+        if len(items) < 2:
+            continue
+        for item in items:
+            text_preview = normalized[:220]
+            results.append({
+                'id': item['id'],
+                'text_preview': text_preview,
+                'src_file': item.get('src_file'),
+                'module_name': item.get('module_name'),
+                'provider': item.get('provider_name'),
+                'certification': item.get('certification_name'),
+                'duplicate_count': len(items),
+                'has_image': question_has_image(item.get('text') or ''),
+            })
+
+    results.sort(key=lambda item: (-item['duplicate_count'], item['id']), reverse=False)
     return jsonify({'results': results, 'total': len(results)})
 
 
@@ -216,6 +337,28 @@ def api_create_question():
     if not module_exists:
         cur.close()
         return jsonify({'error': 'Module introuvable'}), 404
+
+    cur.execute("SELECT course FROM modules WHERE id = %s", (module_id,))
+    course_row = cur.fetchone()
+    course_id = course_row[0] if course_row else None
+    normalized_text = normalize_question_text(text)
+    if course_id:
+        cur.execute(
+            """
+            SELECT q.id, q.text
+              FROM questions q
+              JOIN modules m ON q.module = m.id
+             WHERE m.course = %s
+            """,
+            (course_id,),
+        )
+        for existing_id, existing_text in cur.fetchall():
+            if normalize_question_text(existing_text) == normalized_text:
+                cur.close()
+                return jsonify({
+                    'error': 'Une question similaire existe déjà',
+                    'existing_id': existing_id,
+                }), 409
 
     try:
         cur.execute(
@@ -341,12 +484,34 @@ def api_update_question(question_id: int):
 
     db = get_db()
     cur = db.cursor()
-    cur.execute("SELECT nature FROM questions WHERE id = %s", (question_id,))
+    cur.execute(
+        "SELECT q.nature, m.course FROM questions q JOIN modules m ON q.module = m.id WHERE q.id = %s",
+        (question_id,),
+    )
     row = cur.fetchone()
     if not row:
         cur.close()
         return jsonify({'error': 'Question introuvable'}), 404
-    current_nature = row[0]
+    current_nature, course_id = row
+
+    normalized_text = normalize_question_text(text)
+    if course_id:
+        cur.execute(
+            """
+            SELECT q.id, q.text
+              FROM questions q
+              JOIN modules m ON q.module = m.id
+             WHERE m.course = %s AND q.id != %s
+            """,
+            (course_id, question_id),
+        )
+        for existing_id, existing_text in cur.fetchall():
+            if normalize_question_text(existing_text) == normalized_text:
+                cur.close()
+                return jsonify({
+                    'error': 'Une question similaire existe déjà',
+                    'existing_id': existing_id,
+                }), 409
 
     if nature is None:
         nature = current_nature
@@ -422,11 +587,13 @@ def api_update_question(question_id: int):
 def api_delete_question(question_id: int):
     db = get_db()
     cur = db.cursor()
-    cur.execute("SELECT COUNT(*) FROM questions WHERE id = %s", (question_id,))
-    exists = cur.fetchone()[0]
-    if not exists:
+    cur.execute("SELECT text FROM questions WHERE id = %s", (question_id,))
+    row = cur.fetchone()
+    if not row:
         cur.close()
         return jsonify({'error': 'Question introuvable'}), 404
+    question_text = row[0] or ''
+    image_urls = extract_image_urls(question_text)
 
     try:
         cur.execute("DELETE FROM quest_ans WHERE question = %s", (question_id,))
@@ -438,6 +605,7 @@ def api_delete_question(question_id: int):
         raise
 
     cur.close()
+    delete_gcs_images(image_urls)
     return jsonify({'status': 'deleted', 'id': question_id})
 
 
