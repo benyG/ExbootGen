@@ -474,42 +474,16 @@ QUESTIONS_RESPONSE_SCHEMA = {
 }
 
 ANALYZE_CERTIF_RESPONSE_SCHEMA = {
-    "type": "array",
-    "minItems": 5,
-    "maxItems": 5,
-    "prefixItems": [
-        {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["case"],
-            "properties": {"case": {"type": "string", "enum": ["0", "1"]}},
-        },
-        {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["archi"],
-            "properties": {"archi": {"type": "string", "enum": ["0", "1"]}},
-        },
-        {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["config"],
-            "properties": {"config": {"type": "string", "enum": ["0", "1"]}},
-        },
-        {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["console"],
-            "properties": {"console": {"type": "string", "enum": ["0", "1"]}},
-        },
-        {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["code"],
-            "properties": {"code": {"type": "string", "enum": ["0", "1"]}},
-        },
-    ],
-    "items": False,
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["case", "archi", "config", "console", "code"],
+    "properties": {
+        "case": {"type": "string", "enum": ["0", "1"]},
+        "archi": {"type": "string", "enum": ["0", "1"]},
+        "config": {"type": "string", "enum": ["0", "1"]},
+        "console": {"type": "string", "enum": ["0", "1"]},
+        "code": {"type": "string", "enum": ["0", "1"]},
+    },
 }
 
 ASSIGN_ANSWERS_SCHEMA = {
@@ -2813,12 +2787,12 @@ def generate_lab_blueprint(
     content = _extract_response_text(response.json())
     return clean_and_decode_json(content)
 
-def analyze_certif(provider_name: str, certification: str) -> list:
+def analyze_certif(provider_name: str, certification: str) -> dict:
     """Analyse a certification using the OpenAI API.
 
     The call asks the model whether the syllabus supports practical scenarios in
     various contexts (case study, architecture, configuration, console or code)
-    and returns a list of dictionaries with 0/1 values.
+    and returns a dictionary with 0/1 values.
     """
     prompt = f"""
 TASK: Retrieve the syllabus and content for the specified domain of the indicated certification exam. Analyze whether the topics typically covered for this certification support the creation of exam questions featuring practical scenarios in the following areas:
@@ -2832,13 +2806,7 @@ Format your response as a decodable single-line JSON object.
 For each key, set value to 1 (Yes) if the syllabus supports generating questions with a practical scenario in that area, or 0 (No) if it does not. 
 Please base your analysis on the specifics of the provided syllabus. 
 RESPONSE FORMAT (JSON only, no additional text):.
-[
-{{"case": "0"}},
-{{"archi": "0"}},
-{{"config": "0"}},
-{{"console": "0"}},
-{{"code": "0"}}
-]
+{{"case": "0", "archi": "0", "config": "0", "console": "0", "code": "0"}}
 
 Provider: {provider_name}
 Certification: {certification}
@@ -2853,7 +2821,15 @@ Certification: {certification}
     response = _post_with_retry(payload)
     content = _extract_response_text(response.json())
     decoded = clean_and_decode_json(content)
-    return decoded
+    if isinstance(decoded, list):
+        merged = {}
+        for entry in decoded:
+            if isinstance(entry, dict):
+                merged.update(entry)
+        return merged
+    if isinstance(decoded, dict):
+        return decoded
+    return {}
 
 def correct_questions(provider_name: str, cert_name: str, questions: list, mode: str) -> list:
     """Use OpenAI to correct or complete questions.

@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Mapping
 
 from flask import Blueprint, jsonify, render_template, request
 
@@ -32,7 +32,11 @@ def labs_generator() -> str:
     return render_template("labs_generator.html", providers=providers)
 
 
-def _flatten_analysis(analysis: Iterable[Dict[str, str]]) -> Dict[str, str]:
+def _flatten_analysis(
+    analysis: Mapping[str, str] | Iterable[Dict[str, str]],
+) -> Dict[str, str]:
+    if isinstance(analysis, Mapping):
+        return {key: str(value) for key, value in analysis.items()}
     flattened: Dict[str, str] = {}
     for entry in analysis:
         for key, value in entry.items():

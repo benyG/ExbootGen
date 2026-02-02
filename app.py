@@ -3638,7 +3638,7 @@ def run_population(
     # Certification analysis
     try:
         analysis_result = analyze_certif(provider_name, cert_name)
-        analysis = {k: str(v).strip('"') for d in analysis_result for k, v in d.items()}
+        analysis = {k: str(v).strip('"') for k, v in analysis_result.items()}
         log_analysis = f"Certification analysis: {analysis}"
     except Exception as exc:
         analysis = {}
@@ -3897,7 +3897,7 @@ def run_population_mcp_questions(
 
     try:
         analysis_result = analyze_certif(provider_name, cert_name)
-        analysis = {k: str(v).strip('"') for d in analysis_result for k, v in d.items()}
+        analysis = {k: str(v).strip('"') for k, v in analysis_result.items()}
         log_analysis = f"Certification analysis: {analysis}"
     except Exception as exc:
         analysis = {}
