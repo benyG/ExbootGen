@@ -59,6 +59,43 @@ def _is_within_allowed_roots(path: Path, roots: list[Path]) -> bool:
             continue
     return False
 
+
+def _is_file_imported(filename: str) -> bool:
+    conn = db_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM pdf_import_history WHERE filename = %s LIMIT 1",
+            (filename,),
+        )
+        return cur.fetchone() is not None
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        conn.close()
+
+
+def _record_file_imported(filename: str, module_id: int | None) -> None:
+    conn = db_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO pdf_import_history (filename, module_id)
+            VALUES (%s, %s)
+            """,
+            (filename, module_id),
+        )
+        conn.commit()
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        conn.close()
+
 # Mémoire légère (session d’analyse)
 # Chaque session stocke l'identifiant du module/domaine sous la clé
 # ``domain_id`` (nouveau flux) ou ``module_id`` (ancien flux /upload-pdf).
@@ -664,6 +701,8 @@ def api_mcp_import_local():
             "imported_answers": 0,
             "reused_answers": 0,
             "files": [],
+            "skipped_files": 0,
+            "already_imported_files": [],
         }
 
         try:
@@ -674,6 +713,19 @@ def api_mcp_import_local():
             return jsonify({"status": "error", "message": str(exc)}), 400
 
         for resolved in resolved_files:
+            filename = resolved.name
+            if _is_file_imported(filename):
+                totals["files"].append(
+                    {
+                        "filename": filename,
+                        "imported_questions": 0,
+                        "skipped_questions": 0,
+                        "status": "already_imported",
+                    }
+                )
+                totals["skipped_files"] += 1
+                totals["already_imported_files"].append(filename)
+                continue
             text = extract_text_from_pdf(
                 str(resolved),
                 use_ocr=False,
@@ -683,7 +735,6 @@ def api_mcp_import_local():
                 detect_visuals=True,
             )
             data = detect_questions(text, module_id)
-            filename = resolved.name
             for q in data.get("questions", []):
                 q.setdefault("src_file", filename)
             stats = db.insert_questions(module_id, data, "no")
@@ -696,6 +747,7 @@ def api_mcp_import_local():
             )
             for key in ("imported_questions", "skipped_questions", "imported_answers", "reused_answers"):
                 totals[key] += stats.get(key, 0)
+            _record_file_imported(filename, module_id)
 
         return jsonify(
             {
@@ -1017,6 +1069,9 @@ def upload_pdf():
     def process_pdf(path):
         if not os.path.isfile(path):
             raise FileNotFoundError(f"Fichier introuvable: {path}")
+        filename = os.path.basename(path)
+        if _is_file_imported(filename):
+            return {"filename": filename, "status": "already_imported"}
         text = extract_text_from_pdf(
             path,
             use_ocr=False,
@@ -1026,10 +1081,9 @@ def upload_pdf():
             detect_visuals=True,
         )
         data = detect_questions(text, module_id)
-        filename = os.path.basename(path)
         for q in data.get("questions", []):
             q["src_file"] = filename
-        return {"filename": filename, "json_data": data}
+        return {"filename": filename, "json_data": data, "status": "pending_import"}
 
     results = []
     try:
@@ -1067,21 +1121,37 @@ def import_questions():
                 "skipped_questions": 0,
                 "imported_answers": 0,
                 "reused_answers": 0,
+                "skipped_files": 0,
+                "already_imported_files": [],
             }
             for entry in data.get("files", []):
                 json_data = entry.get("json_data") or {}
                 filename = entry.get("filename")
+                if not filename:
+                    continue
+                if entry.get("status") == "already_imported" or _is_file_imported(filename):
+                    totals["skipped_files"] += 1
+                    totals["already_imported_files"].append(filename)
+                    continue
                 for q in json_data.get("questions", []):
                     q.setdefault("src_file", filename)
                 stats = db.insert_questions(module_id, json_data, "no")
                 for key in totals:
+                    if key in ("skipped_files", "already_imported_files"):
+                        continue
                     totals[key] += stats.get(key, 0)
+                _record_file_imported(filename, module_id)
             return jsonify({"status": "ok", **totals})
         else:
             questions = data.get("questions", [])
+            filename = data.get("filename")
+            if filename and _is_file_imported(filename):
+                return jsonify({"status": "error", "message": "Fichier déjà importé"}), 400
             for q in questions:
-                q.setdefault("src_file", data.get("filename"))
+                q.setdefault("src_file", filename)
             stats = db.insert_questions(module_id, {"questions": questions}, "no")
+            if filename:
+                _record_file_imported(filename, module_id)
             return jsonify({"status": "ok", **stats})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
