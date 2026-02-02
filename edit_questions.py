@@ -348,6 +348,15 @@ def api_update_question(question_id: int):
         return jsonify({'error': 'Question introuvable'}), 404
     current_nature = row[0]
 
+    cur.execute(
+        "SELECT id FROM questions WHERE text = %s AND id != %s LIMIT 1",
+        (text, question_id),
+    )
+    duplicate_row = cur.fetchone()
+    if duplicate_row:
+        cur.close()
+        return jsonify({'error': 'Une question avec ce texte existe déjà'}), 409
+
     if nature is None:
         nature = current_nature
     try:
