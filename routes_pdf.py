@@ -83,6 +83,8 @@ _TABLE_COL_TOLERANCE = 40
 _MIN_IMAGE_WIDTH = 24
 _MIN_IMAGE_HEIGHT = 24
 _MIN_IMAGE_AREA = 600
+_HEADER_BAND_Y1 = 40.6933
+_FOOTER_BAND_Y0 = 1169.2079
 
 
 def _clean_extracted_text(page_txt: str) -> str:
@@ -90,6 +92,41 @@ def _clean_extracted_text(page_txt: str) -> str:
     page_txt = re.sub(r"(?im)^\s*(page\s*)?\d+\s*(/\s*\d+)?\s*$", "", page_txt)
     page_txt = re.sub(r"\n{3,}", "\n\n", page_txt).strip()
     return page_txt
+
+
+def _vertical_bounds(page_height: float,
+                     header_ratio: float,
+                     footer_ratio: float) -> tuple[float, float]:
+    if page_height >= _FOOTER_BAND_Y0 and _HEADER_BAND_Y1 < _FOOTER_BAND_Y0:
+        top = min(max(_HEADER_BAND_Y1, 0.0), page_height)
+        bottom = min(max(_FOOTER_BAND_Y0, 0.0), page_height)
+    else:
+        top = page_height * header_ratio
+        bottom = page_height * (1.0 - footer_ratio)
+    if bottom <= top:
+        top, bottom = 0.0, page_height
+    return top, bottom
+
+
+def _rect_within_vertical_bounds(rect: fitz.Rect, top: float, bottom: float) -> bool:
+    return rect.y0 >= top and rect.y1 <= bottom
+
+
+def _strip_explanation_sections(text: str) -> str:
+    question_start = re.compile(r'(?im)^\s*(NEW\s+QUESTION\s+\d+|QUESTION\s*\d+|\d+\s*[.)]\s+\S)')
+    explanation_marker = re.compile(r'(?i)\b(Explanation|Reference)\s*:?\b')
+    lines = text.splitlines()
+    filtered: list[str] = []
+    skipping = False
+    for line in lines:
+        if skipping and question_start.match(line):
+            skipping = False
+        if not skipping and explanation_marker.search(line):
+            skipping = True
+            continue
+        if not skipping:
+            filtered.append(line)
+    return "\n".join(filtered).strip()
 
 
 def _is_garbled_text(text: str) -> bool:
@@ -260,6 +297,8 @@ def _extract_mixed_content(
     page: fitz.Page,
     clip: fitz.Rect,
     tables: list[fitz.Rect],
+    top: float,
+    bottom: float,
 ) -> str:
     parts = []
     items: list[tuple[float, float, str, object]] = []
@@ -279,6 +318,8 @@ def _extract_mixed_content(
                 if line_bbox is None:
                     continue
                 line_rect = fitz.Rect(*line_bbox)
+                if not _rect_within_vertical_bounds(line_rect, top, bottom):
+                    continue
                 if _line_overlaps_tables(line_rect, table_rects):
                     continue
                 line_text = " ".join(
@@ -289,12 +330,16 @@ def _extract_mixed_content(
                     items.append((line_rect.y0, line_rect.x0, "text", cleaned))
         elif block_type == 1:
             key = _rect_key(rect)
+            if not _rect_within_vertical_bounds(rect, top, bottom):
+                continue
             if key not in seen_rects and not _is_small_rect(rect):
                 seen_rects.add(key)
                 items.append((rect.y0, rect.x0, "image", rect))
 
     for rect in tables:
         key = _rect_key(rect)
+        if not _rect_within_vertical_bounds(rect, top, bottom):
+            continue
         if key in seen_rects:
             continue
         if _is_small_rect(rect):
@@ -309,6 +354,8 @@ def _extract_mixed_content(
             if not rect.intersects(clip):
                 continue
             key = _rect_key(rect)
+            if not _rect_within_vertical_bounds(rect, top, bottom):
+                continue
             if key in seen_rects:
                 continue
             if _is_small_rect(rect):
@@ -325,6 +372,34 @@ def _extract_mixed_content(
             if visual:
                 parts.append(visual)
     return "\n".join(parts).strip()
+
+
+def _extract_text_lines(
+    page: fitz.Page,
+    clip: fitz.Rect,
+    top: float,
+    bottom: float,
+) -> str:
+    items: list[tuple[float, float, str]] = []
+    text_dict = page.get_text("dict", clip=clip)
+    for block in text_dict.get("blocks", []):
+        if block.get("type", 0) != 0:
+            continue
+        for line in block.get("lines", []):
+            line_bbox = line.get("bbox")
+            if line_bbox is None:
+                continue
+            line_rect = fitz.Rect(*line_bbox)
+            if not _rect_within_vertical_bounds(line_rect, top, bottom):
+                continue
+            line_text = " ".join(
+                span.get("text", "") for span in line.get("spans", [])
+            ).strip()
+            cleaned = _clean_extracted_text(line_text)
+            if cleaned:
+                items.append((line_rect.y0, line_rect.x0, cleaned))
+    items.sort(key=lambda item: (item[0], item[1]))
+    return "\n".join(item[2] for item in items).strip()
 
 
 def extract_text_from_pdf(pdf_path: str,
@@ -347,14 +422,15 @@ def extract_text_from_pdf(pdf_path: str,
             images = images[1:]
         for img in images:
             w, h = img.size
-            top = int(h * header_ratio)
-            bottom = int(h * (1.0 - footer_ratio))
+            top, bottom = _vertical_bounds(h, header_ratio, footer_ratio)
+            top = int(top)
+            bottom = int(bottom)
             if bottom <= top:
                 top, bottom = 0, h
             cropped = img.crop((0, top, w, bottom))
             txt = pytesseract.image_to_string(cropped, lang="fra+eng")
             text += txt + "\n"
-        return text
+        return _strip_explanation_sections(text)
 
     plumber_doc = None
     if detect_visuals and detect_tables:
@@ -366,18 +442,16 @@ def extract_text_from_pdf(pdf_path: str,
         for i in range(start_idx, doc.page_count):
             page = doc[i]
             h = page.rect.height
-            top_cut = h * header_ratio
-            bottom_cut = h * (1.0 - footer_ratio)
+            top_cut, bottom_cut = _vertical_bounds(h, header_ratio, footer_ratio)
 
             clip = fitz.Rect(0, top_cut, page.rect.width, bottom_cut)
             table_items = []
             if detect_visuals and plumber_doc is not None:
                 table_items = _extract_tables_from_page(plumber_doc.pages[i], clip)
             if detect_visuals:
-                page_txt = _extract_mixed_content(page, clip, table_items)
+                page_txt = _extract_mixed_content(page, clip, table_items, top_cut, bottom_cut)
             else:
-                page_txt = page.get_text("text", clip=clip)
-                page_txt = _clean_extracted_text(page_txt)
+                page_txt = _extract_text_lines(page, clip, top_cut, bottom_cut)
 
             if _is_garbled_text(page_txt):
                 ocr_txt = _extract_page_ocr_text(page, clip)
@@ -389,7 +463,7 @@ def extract_text_from_pdf(pdf_path: str,
     if plumber_doc is not None:
         plumber_doc.close()
 
-    return text
+    return _strip_explanation_sections(text)
 
 # --------------------------- Parsing des questions ---------------------------
 
@@ -449,7 +523,9 @@ def _strip_after_explanation(block: str) -> str:
     lines = [l for l in block.splitlines()]
     cut_idx = None
     for i, l in enumerate(lines):
-        if re.match(r'(?i)^\s*(Explanation|Reference)\b', l):
+        if re.search(r'(?i)\b(Explanation|Reference)\s*:', l) or re.match(
+            r'(?i)^\s*(Explanation|Reference)\b', l
+        ):
             cut_idx = i
             break
     if cut_idx is not None:
