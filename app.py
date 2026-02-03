@@ -2142,6 +2142,11 @@ def mcp_client():
     return render_template("mcp_client.html")
 
 
+@app.route("/planner")
+def planner():
+    return render_template("planner.html")
+
+
 @app.route("/api/mcp/unpublished-certifications")
 def mcp_unpublished_certifications():
     """Return unpublished certifications with default domain metrics for MCP."""
@@ -2158,6 +2163,28 @@ def mcp_client_providers():
         for provider_id, name in db.get_providers()
     ]
     return jsonify({"providers": providers})
+
+
+@app.route("/api/planner/providers")
+def planner_providers():
+    """Return providers for planner selects."""
+
+    providers = [
+        {"id": provider_id, "name": name}
+        for provider_id, name in db.get_providers()
+    ]
+    return jsonify({"providers": providers})
+
+
+@app.route("/api/planner/certifications/<int:provider_id>")
+def planner_certifications(provider_id: int):
+    """Return certifications with pub state for a provider."""
+
+    certifications = [
+        {"id": cert_id, "name": name, "code": code, "pub": pub}
+        for cert_id, name, code, pub in db.get_certifications_by_provider_with_pub(provider_id)
+    ]
+    return jsonify({"certifications": certifications})
 
 
 @app.route("/api/mcp/client/certifications/<int:provider_id>")
@@ -3349,9 +3376,9 @@ def _execute_mcp_plan(
         if step.get("finalize_pub") and step.get("cert_id") and status < 400:
             cert_id = step.get("cert_id")
             try:
-                db.update_certification_pub(cert_id, 0)
+                db.update_certification_pub(cert_id, 3)
                 context.log(
-                    f"Certification {cert_id}: pub mis à jour à 0 après orchestration."
+                    f"Certification {cert_id}: pub mis à jour à 3 après orchestration."
                 )
             except Exception as exc:  # pragma: no cover - defensive logging only
                 context.log(
