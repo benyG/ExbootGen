@@ -390,7 +390,42 @@ def get_certifications_by_provider_with_pub(provider_id):
                 FROM questions q
                 JOIN modules m ON m.id = q.module
                 WHERE m.course = c.id
-            ) AS total_questions
+            ) AS total_questions,
+            (
+                SELECT m_def.id
+                FROM modules m_def
+                WHERE m_def.course = 23
+                  AND (
+                    TRIM(m_def.code_cert) = TRIM(c.code_cert_key)
+                    OR m_def.name = LEFT(CONCAT(c.name, '-default'), 255)
+                  )
+                ORDER BY m_def.id DESC
+                LIMIT 1
+            ) AS default_module_id,
+            (
+                SELECT c_def.id
+                FROM modules m_def
+                JOIN courses c_def ON c_def.id = m_def.course
+                WHERE m_def.course = 23
+                  AND (
+                    TRIM(m_def.code_cert) = TRIM(c.code_cert_key)
+                    OR m_def.name = LEFT(CONCAT(c.name, '-default'), 255)
+                  )
+                ORDER BY m_def.id DESC
+                LIMIT 1
+            ) AS default_cert_id,
+            (
+                SELECT c_def.prov
+                FROM modules m_def
+                JOIN courses c_def ON c_def.id = m_def.course
+                WHERE m_def.course = 23
+                  AND (
+                    TRIM(m_def.code_cert) = TRIM(c.code_cert_key)
+                    OR m_def.name = LEFT(CONCAT(c.name, '-default'), 255)
+                  )
+                ORDER BY m_def.id DESC
+                LIMIT 1
+            ) AS default_provider_id
         FROM courses c
         WHERE c.prov = %s
     """

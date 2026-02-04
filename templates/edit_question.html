@@ -91,7 +91,13 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0.9rem; }
-    .result-card { background: var(--panel-soft); border: 1px solid var(--border); border-radius: 14px; padding: 0.9rem 1rem; cursor: pointer; transition: 0.2s ease; }
+    .results.duplicate-groups { display: flex; flex-direction: column; gap: 1.2rem; }
+    .duplicate-group { background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(251, 146, 60, 0.2); border-radius: 16px; padding: 0.75rem; }
+    .duplicate-group-header { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.6rem; }
+    .duplicate-group-title { font-weight: 600; color: #fbbf24; }
+    .duplicate-group-count { font-size: 0.85rem; color: var(--muted); }
+    .duplicate-group-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0.9rem; }
+    .result-card { background: var(--panel-soft); border: 1px solid var(--border); border-radius: 14px; padding: 0.9rem 1rem; cursor: pointer; transition: 0.2s ease; position: relative; }
     .result-card:hover { border-color: rgba(124,247,255,0.6); transform: translateY(-2px); }
     .result-card.selected {
       border-color: var(--accent);
@@ -100,6 +106,20 @@
     }
     .result-card small { display: block; color: var(--muted); margin-top: 0.35rem; }
     .result-card .src { color: #c084fc; font-size: 0.9rem; }
+    .result-card .exact-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #fdba74;
+      border: 1px solid rgba(251, 146, 60, 0.45);
+      background: rgba(251, 146, 60, 0.15);
+      margin-top: 0.45rem;
+      width: fit-content;
+    }
     .result-card .image-badge {
       display: inline-flex;
       align-items: center;
@@ -115,6 +135,29 @@
       margin-top: 0.45rem;
       width: fit-content;
     }
+    .card-delete {
+      position: absolute;
+      top: 0.6rem;
+      right: 0.6rem;
+      border: 1px solid rgba(248, 113, 113, 0.65);
+      background: rgba(248, 113, 113, 0.16);
+      color: #fecaca;
+      border-radius: 10px;
+      padding: 0.25rem 0.4rem;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .card-delete:hover { border-color: #f87171; color: #fee2e2; }
+    .verify-btn {
+      background: rgba(250, 204, 21, 0.18);
+      border: 1px solid rgba(250, 204, 21, 0.6);
+      color: #fde68a;
+      padding: 0.55rem 0.9rem;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .verify-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .editor {
       background: var(--panel-soft);
@@ -267,9 +310,12 @@
     </section>
 
     <section class="panel">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.6rem;">
         <h2 style="margin: 0;">Résultats</h2>
-        <span class="status" id="resultsCount">Aucun résultat pour le moment.</span>
+        <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+          <button type="button" class="verify-btn hidden" id="verifyDuplicates">Verify</button>
+          <span class="status" id="resultsCount">Aucun résultat pour le moment.</span>
+        </div>
       </div>
       <div class="results" id="results"></div>
     </section>
@@ -391,6 +437,7 @@
     const searchStatus = document.getElementById('searchStatus');
     const searchText = document.getElementById('searchText');
     const searchBtn = document.getElementById('searchBtn');
+    const verifyDuplicatesBtn = document.getElementById('verifyDuplicates');
     const questionEditor = document.getElementById('questionEditor');
     const uploadStatus = document.getElementById('uploadStatus');
     const srcFileInput = document.getElementById('srcFile');
@@ -412,6 +459,7 @@
     let isAddMode = false;
     let isCorrectionMode = false;
     let isDuplicateMode = false;
+    let isDuplicateVerifyMode = false;
     let correctionQuestions = [];
     let correctionIndex = -1;
     let duplicateQuestions = [];
@@ -433,6 +481,28 @@
       const div = document.createElement('div');
       div.textContent = text ?? '';
       return div.innerHTML;
+    };
+
+    const getResultCardHtml = (r, extra = {}) => {
+      const exactGroupId = extra.exactGroupId || null;
+      const imageBadge = r.has_image ? '<span class="image-badge">image</span>' : '';
+      const exactBadge = exactGroupId ? `<span class="exact-badge">Duplicata ${exactGroupId}</span>` : '';
+      const srcLine = extra.srcLine || (r.src_file ? `src_file : ${escapeHtml(r.src_file)}` : 'src_file non renseigné');
+      return `
+        <article class="result-card" data-id="${r.id}"${exactGroupId ? ` data-group="${exactGroupId}"` : ''}>
+          <button type="button" class="card-delete" data-id="${r.id}" title="Supprimer la question" aria-label="Supprimer la question">🗑️</button>
+          <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
+          <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
+          ${imageBadge}
+          ${exactBadge}
+          <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
+          <small class="src">${srcLine}</small>
+        </article>
+      `;
+    };
+
+    const resetResultsLayout = () => {
+      resultsContainer.classList.remove('duplicate-groups');
     };
 
     function setSelectOptions(selectEl, placeholder, items) {
@@ -503,6 +573,7 @@
       setButtonLoading(searchBtn, true);
       searchStatus.textContent = 'Recherche en cours…';
       resultsContainer.innerHTML = '';
+      resetResultsLayout();
       const params = new URLSearchParams({ q });
       if (providerSelect.value) params.append('provider_id', providerSelect.value);
       if (certificationSelect.value) params.append('certification_id', certificationSelect.value);
@@ -513,15 +584,7 @@
         resultsCount.textContent = `${results.length} résultat(s)`;
         searchStatus.textContent = results.length ? 'Cliquez sur une carte pour charger la question.' : 'Aucun résultat pour cette recherche.';
 
-        resultsContainer.innerHTML = results.map(r => `
-          <article class="result-card" data-id="${r.id}">
-            <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
-            <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
-            ${r.has_image ? '<span class="image-badge">image</span>' : ''}
-            <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
-            <small class="src">${r.src_file ? `src_file : ${escapeHtml(r.src_file)}` : 'src_file non renseigné'}</small>
-          </article>
-        `).join('');
+        resultsContainer.innerHTML = results.map(r => getResultCardHtml(r)).join('');
         setActiveResultCard(currentQuestionId);
       } finally {
         setButtonLoading(searchBtn, false);
@@ -561,15 +624,7 @@
         const issue = r.answer_count === 0
           ? 'Sans réponse'
           : 'Aucune bonne réponse';
-        return `
-        <article class="result-card" data-id="${r.id}">
-          <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
-          <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
-          ${r.has_image ? '<span class="image-badge">image</span>' : ''}
-          <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
-          <small class="src">${issue}</small>
-        </article>
-      `;
+        return getResultCardHtml(r, { srcLine: issue });
       }).join('');
       setActiveResultCard(currentQuestionId);
       if (correctionQuestions.length) {
@@ -599,6 +654,7 @@
       const certId = certificationSelect.value;
       if (!certId) {
         resultsContainer.innerHTML = '';
+        resetResultsLayout();
         resultsCount.textContent = 'Sélectionnez une certification.';
         searchStatus.textContent = 'Mode duplicata : sélectionnez une certification.';
         duplicateQuestions = [];
@@ -606,6 +662,8 @@
       }
       searchStatus.textContent = 'Recherche des duplicatas…';
       resultsContainer.innerHTML = '';
+      resetResultsLayout();
+      isDuplicateVerifyMode = false;
       const res = await fetch(`/edit-question/api/duplicates?certification_id=${certId}`);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -620,16 +678,59 @@
       searchStatus.textContent = duplicateQuestions.length
         ? 'Cliquez sur une carte pour ouvrir la question et supprimer les doublons.'
         : 'Aucun duplicata détecté pour cette certification.';
-      resultsContainer.innerHTML = duplicateQuestions.map(r => `
-        <article class="result-card" data-id="${r.id}">
-          <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
-          <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
-          ${r.has_image ? '<span class="image-badge">image</span>' : ''}
-          <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
-          <small class="src">Duplicata (groupe ${r.duplicate_count})</small>
-        </article>
-      `).join('');
+      resultsContainer.innerHTML = duplicateQuestions.map(r => getResultCardHtml(r, {
+        srcLine: `Duplicata (groupe ${r.duplicate_count})`,
+      })).join('');
       setActiveResultCard(currentQuestionId);
+    }
+
+    async function verifyExactDuplicates() {
+      const certId = certificationSelect.value;
+      if (!certId) {
+        searchStatus.textContent = 'Sélectionnez une certification pour vérifier les duplicatas.';
+        return;
+      }
+      isDuplicateVerifyMode = true;
+      setButtonLoading(verifyDuplicatesBtn, true);
+      searchStatus.textContent = 'Vérification des duplicatas exacts…';
+      resultsContainer.innerHTML = '';
+      resultsContainer.classList.add('duplicate-groups');
+      try {
+        const res = await fetch(`/edit-question/api/duplicates/verify?certification_id=${certId}`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          resultsCount.textContent = err.error || 'Erreur pendant la vérification.';
+          searchStatus.textContent = 'Impossible de vérifier les duplicatas.';
+          return;
+        }
+        const data = await res.json();
+        const groups = data.groups || [];
+        resultsCount.textContent = `${data.total || 0} question(s) en duplicata exact`;
+        searchStatus.textContent = groups.length
+          ? 'Duplicatas exacts regroupés. Cliquez sur une carte pour la traiter.'
+          : 'Aucun duplicata exact détecté pour cette certification.';
+        if (!groups.length) {
+          resultsContainer.innerHTML = '<div class="status">Aucun duplicata exact détecté.</div>';
+          return;
+        }
+        resultsContainer.innerHTML = groups.map(group => `
+          <div class="duplicate-group" data-group="${group.group_id}">
+            <div class="duplicate-group-header">
+              <span class="duplicate-group-title">Duplicata ${group.group_id}</span>
+              <span class="duplicate-group-count">${group.count} question(s)</span>
+            </div>
+            <div class="duplicate-group-grid">
+              ${(group.items || []).map(item => getResultCardHtml(item, {
+                exactGroupId: group.group_id,
+                srcLine: item.src_file ? `src_file : ${escapeHtml(item.src_file)}` : 'src_file non renseigné',
+              })).join('')}
+            </div>
+          </div>
+        `).join('');
+        setActiveResultCard(currentQuestionId);
+      } finally {
+        setButtonLoading(verifyDuplicatesBtn, false);
+      }
     }
 
     async function loadQuestion(questionId) {
@@ -792,6 +893,7 @@
       correctionModeToggle.disabled = enabled;
       searchBtn.disabled = enabled || isAddMode;
       searchText.disabled = enabled || isAddMode;
+      verifyDuplicatesBtn.classList.toggle('hidden', !enabled);
       if (enabled) {
         searchText.value = '';
         loadDuplicateList();
@@ -799,6 +901,8 @@
         duplicateQuestions = [];
         resultsCount.textContent = 'Aucun résultat pour le moment.';
         searchStatus.textContent = 'Saisissez au moins un mot-clé.';
+        resetResultsLayout();
+        isDuplicateVerifyMode = false;
       }
     }
 
@@ -923,7 +1027,51 @@
 
     document.getElementById('addAnswer').addEventListener('click', () => addAnswerField());
 
-    resultsContainer.addEventListener('click', (e) => {
+    resultsContainer.addEventListener('click', async (e) => {
+      const deleteButton = e.target.closest('.card-delete');
+      if (deleteButton?.dataset.id) {
+        e.stopPropagation();
+        const questionId = deleteButton.dataset.id;
+        const confirmDelete = window.confirm(`Supprimer définitivement la question #${questionId} ?`);
+        if (!confirmDelete) return;
+        setButtonLoading(deleteButton, true);
+        saveStatus.textContent = 'Suppression en cours…';
+        try {
+          const res = await fetch(`/edit-question/api/questions/${questionId}`, { method: 'DELETE' });
+          if (res.ok) {
+            saveStatus.textContent = 'Question supprimée.';
+            if (String(currentQuestionId) === String(questionId)) {
+              currentQuestionId = null;
+              questionEditor.innerHTML = '';
+              srcFileInput.value = '';
+              descrInput.value = '';
+              natureSelect.value = '1';
+              renderAnswers([]);
+              editorStatus.textContent = 'Sélectionnez une question pour l\'éditer.';
+              contextInfo.textContent = '';
+              saveBtn.disabled = true;
+              deleteBtn.disabled = true;
+            }
+            if (isCorrectionMode) {
+              loadCorrectionList();
+            } else if (isDuplicateMode) {
+              if (isDuplicateVerifyMode) {
+                verifyExactDuplicates();
+              } else {
+                loadDuplicateList();
+              }
+            } else {
+              searchQuestions();
+            }
+          } else {
+            const err = await res.json().catch(() => ({}));
+            saveStatus.textContent = err.error || 'Erreur pendant la suppression.';
+          }
+        } finally {
+          setButtonLoading(deleteButton, false);
+        }
+        return;
+      }
       const card = e.target.closest('.result-card');
       if (card?.dataset.id) {
         if (isCorrectionMode) {
@@ -975,6 +1123,7 @@
       }
       setDuplicateMode(event.target.checked);
     });
+    verifyDuplicatesBtn.addEventListener('click', verifyExactDuplicates);
     moduleSelect?.addEventListener('change', () => {
       saveStatus.textContent = '';
     });
@@ -1030,6 +1179,12 @@
           saveStatus.textContent = 'Question mise à jour avec succès.';
           if (isCorrectionMode) {
             loadCorrectionList(true);
+          } else if (isDuplicateMode) {
+            if (isDuplicateVerifyMode) {
+              verifyExactDuplicates();
+            } else {
+              loadDuplicateList();
+            }
           }
         } else {
           const err = await res.json().catch(() => ({}));
@@ -1066,7 +1221,11 @@
             loadCorrectionList();
           }
           if (isDuplicateMode) {
-            loadDuplicateList();
+            if (isDuplicateVerifyMode) {
+              verifyExactDuplicates();
+            } else {
+              loadDuplicateList();
+            }
           }
         } else {
           const err = await res.json().catch(() => ({}));

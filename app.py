@@ -2262,8 +2262,20 @@ def planner_certifications(provider_id: int):
             "code": code,
             "pub": pub,
             "total_questions": int(total_questions or 0),
+            "default_module_id": default_module_id,
+            "default_cert_id": default_cert_id,
+            "default_provider_id": default_provider_id,
         }
-        for cert_id, name, code, pub, total_questions in db.get_certifications_by_provider_with_pub(provider_id)
+        for (
+            cert_id,
+            name,
+            code,
+            pub,
+            total_questions,
+            default_module_id,
+            default_cert_id,
+            default_provider_id,
+        ) in db.get_certifications_by_provider_with_pub(provider_id)
     ]
     return jsonify({"certifications": certifications})
 

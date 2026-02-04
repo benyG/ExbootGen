@@ -258,6 +258,8 @@
     const filterStatus = document.getElementById('filterStatus');
     const filterAutorun = document.getElementById('filterAutorun');
     const filterUpdate = document.getElementById('filterUpdate');
+    const pdfBase = "{{ url_for('pdf.index') }}";
+    const populateBase = "{{ url_for('populate_index') }}";
 
     let providersCache = [];
     let certificationsCache = [];
@@ -325,11 +327,25 @@
 
         const links = document.createElement('div');
         links.className = 'card-links';
-        const baseParams = `provider_id=${providerSelect.value}&cert_id=${cert.id}`;
+        const baseParams = new URLSearchParams({
+          provider_id: providerSelect.value,
+          cert_id: cert.id
+        });
+        const defaultProviderId = cert.default_provider_id || providerSelect.value;
+        const defaultCertId = cert.default_cert_id || cert.id;
+        const importParams = new URLSearchParams({
+          provider_id: defaultProviderId,
+          cert_id: defaultCertId
+        });
+        if (cert.default_module_id) {
+          importParams.set('module_id', cert.default_module_id);
+        }
         links.innerHTML = `
           <a class="card-link" href="/blueprints?${baseParams}">Blueprint</a>
           <a class="card-link" href="/edit-question?${baseParams}">Question</a>
           <a class="card-link" href="/articles?${baseParams}">Article</a>
+          <a class="card-link" href="${pdfBase}?${importParams}">Import PDF</a>
+          <a class="card-link" href="${populateBase}?${baseParams}">Populate (AI)</a>
         `;
         links.querySelectorAll('a').forEach(link => {
           link.addEventListener('click', (event) => event.stopPropagation());
