@@ -398,6 +398,10 @@
     let correctionIndex = -1;
     let duplicateQuestions = [];
 
+    const params = new URLSearchParams(window.location.search);
+    const preselectProviderId = params.get('provider_id');
+    const preselectCertId = params.get('cert_id');
+
     const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
     nav?.querySelectorAll('a[data-route]').forEach(link => {
       const target = (link.dataset.route || '').replace(/\/$/, '') || '/';
@@ -432,9 +436,13 @@
       const res = await fetch('/edit-question/api/providers');
       const providers = await res.json();
       setSelectOptions(providerSelect, '— Tous —', providers);
+      if (preselectProviderId) {
+        providerSelect.value = preselectProviderId;
+        await loadCertifications(preselectCertId);
+      }
     }
 
-    async function loadCertifications() {
+    async function loadCertifications(preselectedCertId = null) {
       const provId = providerSelect.value;
       setSelectOptions(certificationSelect, '— Toutes —', []);
       setSelectOptions(moduleSelect, '— Sélectionner —', []);
@@ -442,6 +450,9 @@
       const res = await fetch(`/edit-question/api/certifications/${provId}`);
       const certs = await res.json();
       setSelectOptions(certificationSelect, '— Toutes —', certs);
+      if (preselectedCertId) {
+        certificationSelect.value = preselectedCertId;
+      }
     }
 
     async function loadModules() {
