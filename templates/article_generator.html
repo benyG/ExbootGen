@@ -855,12 +855,20 @@
       generateCarouselBtn.disabled = !hasCarouselInput;
     }
 
+    const params = new URLSearchParams(window.location.search);
+    const preselectProviderId = params.get('provider_id');
+    const preselectCertId = params.get('cert_id');
+
     async function fetchProviders() {
       try {
         const response = await fetch('/quest/api/providers');
         if (!response.ok) throw new Error('Impossible de récupérer les providers');
         providers = await response.json();
         renderProviders(providers);
+        if (preselectProviderId) {
+          providerSelect.value = preselectProviderId;
+          await loadCertificationsForProvider(preselectProviderId, preselectCertId);
+        }
       } catch (error) {
         setStatus(error.message, true);
       }
@@ -917,8 +925,7 @@
       renderProviders(filtered);
     });
 
-    providerSelect.addEventListener('change', async () => {
-      const providerId = providerSelect.value;
+    async function loadCertificationsForProvider(providerId, certId) {
       resetGeneratedContent();
       certSearch.value = '';
       certifications = [];
@@ -935,11 +942,19 @@
         if (!response.ok) throw new Error('Erreur lors de la récupération des certifications');
         certifications = await response.json();
         renderCertifications(certifications);
+        if (certId) {
+          certSelect.value = certId;
+        }
         setStatus('');
       } catch (error) {
         setStatus(error.message, true);
       }
       updateActionAvailability();
+    }
+
+    providerSelect.addEventListener('change', async () => {
+      const providerId = providerSelect.value;
+      await loadCertificationsForProvider(providerId, null);
     });
 
     certSearch.addEventListener('input', () => {
