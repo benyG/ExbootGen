@@ -246,5 +246,32 @@ class PopulateQueueDisableTest(unittest.TestCase):
         self.assertEqual(response_again.status_code, 200)
         self.assertEqual(response_again.get_json()["mode"], "local")
 
+
+class PopulateMcpQuestionsTest(unittest.TestCase):
+    def setUp(self):
+        app._reset_task_queue_state_for_testing()
+        self.client = app.app.test_client()
+
+    def tearDown(self) -> None:
+        app._reset_task_queue_state_for_testing()
+        with jobs._JOB_CACHE._lock:
+            jobs._JOB_CACHE._jobs.clear()
+        return super().tearDown()
+
+    def test_mcp_populate_enqueues_job(self):
+        os.environ["MCP_API_TOKEN"] = "test-token"
+        with patch.object(app.run_population_mcp_job, "apply_async") as apply_mock:
+            response = self.client.post(
+                "/api/mcp/certifications/2/populate-questions",
+                json={"provider_id": 1},
+                headers={"X-MCP-Token": "test-token"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "queued")
+        self.assertIn("job_id", payload)
+        apply_mock.assert_called_once()
+
 if __name__ == '__main__':
     unittest.main()
