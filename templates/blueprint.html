@@ -213,6 +213,19 @@
     }
 
     button.primary:hover { transform: translateY(-3px); box-shadow: 0 18px 42px rgba(71,245,192,0.38); }
+    button.is-loading { position: relative; padding-right: 2.4rem; opacity: 0.85; }
+    button.is-loading::after {
+      content: '';
+      position: absolute;
+      right: 1rem;
+      width: 0.9rem;
+      height: 0.9rem;
+      border-radius: 50%;
+      border: 2px solid rgba(148, 163, 184, 0.4);
+      border-top-color: #38bdf8;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     button.ghost {
       background: rgba(10, 15, 28, 0.68);
@@ -546,6 +559,11 @@
     const preselectCertId = Number(params.get('cert_id'));
     let pendingCertId = Number.isFinite(preselectCertId) ? preselectCertId : null;
     generationLog.style.display = 'none';
+    const setButtonLoading = (button, isLoading) => {
+      if (!button) return;
+      button.classList.toggle('is-loading', isLoading);
+      button.disabled = isLoading;
+    };
 
     function setGenerationStatus(message, tone = 'muted') {
       generationStatus.textContent = message || '';
@@ -884,7 +902,7 @@
             return;
           }
 
-          saveAllBtn.disabled = true;
+          setButtonLoading(saveAllBtn, true);
           saveAllBtn.textContent = 'Sauvegarde…';
           setSaveStatus('Sauvegarde en cours…');
 
@@ -940,7 +958,7 @@
           } catch (err) {
             setSaveStatus(err.message || 'Erreur lors de la sauvegarde.', 'error');
           } finally {
-            saveAllBtn.disabled = false;
+            setButtonLoading(saveAllBtn, false);
             saveAllBtn.textContent = originalSaveLabel;
           }
         });
@@ -958,7 +976,7 @@
           setGenerationStatus('Génération des blueprints en cours…');
           generationLog.textContent = '';
           generationLog.style.display = 'none';
-          generateBtn.disabled = true;
+          setButtonLoading(generateBtn, true);
           generateBtn.textContent = 'Génération…';
           let latestResults = [];
 
@@ -996,7 +1014,7 @@
           } catch (err) {
             setGenerationStatus(err.message || 'Erreur lors de la génération.', 'error');
           } finally {
-            generateBtn.disabled = false;
+            setButtonLoading(generateBtn, false);
             generateBtn.textContent = originalLabel;
             await refreshModules(certSel.value);
             if (Array.isArray(latestResults) && latestResults.length) {

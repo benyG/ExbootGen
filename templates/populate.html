@@ -114,6 +114,19 @@
     .stellar-button:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 18px 42px rgba(71, 245, 192, 0.38); }
     .stellar-button.secondary { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.32); color: var(--text-primary); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.08); }
     .stellar-button.secondary:hover { background: rgba(30, 41, 69, 0.75); box-shadow: 0 16px 38px rgba(15, 23, 42, 0.45); }
+    .stellar-button.is-loading { position: relative; padding-right: 2.6rem; opacity: 0.85; }
+    .stellar-button.is-loading::after {
+      content: '';
+      position: absolute;
+      right: 1.1rem;
+      width: 0.9rem;
+      height: 0.9rem;
+      border-radius: 50%;
+      border: 2px solid rgba(148, 163, 184, 0.4);
+      border-top-color: #38bdf8;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.4rem; margin-top: 2rem; }
 
@@ -139,6 +152,18 @@
     .modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.2rem; flex-wrap: wrap; }
     .pill-button { padding: 0.65rem 1.2rem; border-radius: 999px; border: 1px solid rgba(148,163,184,0.22); background: rgba(15, 19, 32, 0.75); color: var(--text-primary); cursor: pointer; transition: transform 0.25s ease, background 0.25s ease, border-color 0.25s ease; }
     .pill-button:hover { background: rgba(30,41,69,0.9); transform: translateY(-1px); border-color: rgba(148,163,184,0.32); }
+    .pill-button.is-loading { position: relative; padding-right: 2.2rem; opacity: 0.85; }
+    .pill-button.is-loading::after {
+      content: '';
+      position: absolute;
+      right: 0.85rem;
+      width: 0.75rem;
+      height: 0.75rem;
+      border-radius: 50%;
+      border: 2px solid rgba(148, 163, 184, 0.4);
+      border-top-color: #38bdf8;
+      animation: spin 0.8s linear infinite;
+    }
 
     .status-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.2rem; margin-top: 1.5rem; }
     .status-card { border-radius: var(--radius-lg); padding: 1.4rem 1.6rem; background: rgba(8, 12, 24, 0.78); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: 0 16px 34px rgba(8, 12, 23, 0.48); display: flex; flex-direction: column; gap: 0.35rem; }
@@ -365,6 +390,11 @@
 
       const distributionPanel = document.getElementById('distributionPanel');
       const distributionToggle = document.getElementById('toggleDistributionPanel');
+      const setButtonLoading = (button, isLoading) => {
+        if (!button) return;
+        button.classList.toggle('is-loading', isLoading);
+        button.disabled = isLoading;
+      };
 
       const getCurrentDistribution = () => {
         try {
@@ -441,6 +471,12 @@
         }
       });
 
+      const selectForm = document.getElementById('select-form');
+      selectForm?.addEventListener('submit', () => {
+        const submitButton = selectForm.querySelector('button[type="submit"]');
+        setButtonLoading(submitButton, true);
+      });
+
       document.getElementById('cancelDistribution').addEventListener('click', () => {
         syncInputsFromState();
         closeDistributionPanel();
@@ -496,6 +532,11 @@
   {% else %}
   <script>
     $(document).ready(function(){
+        const setButtonLoading = (button, isLoading) => {
+            if (!button) return;
+            button.classList.toggle('is-loading', isLoading);
+            button.disabled = isLoading;
+        };
         let poller = null;
         let lastLogIndex = 0;
 
@@ -546,6 +587,7 @@
                             poller = null;
                         }
                         currentJobId = null;
+                        setButtonLoading(document.getElementById('startPopulate'), false);
                     }
                 }
             }, "json").fail(function(xhr){
@@ -568,6 +610,7 @@
         }
 
         $("#startPopulate").click(function(){
+            setButtonLoading(this, true);
             $("#logList").empty();
             $("#progressBarFill").css("width", "0%").text("0%");
             $("#analysisResult").text("En attente...");
@@ -585,9 +628,11 @@
                     startPolling(currentJobId);
                 } else {
                     appendLog("Impossible de démarrer le traitement.", "text-red-400");
+                    setButtonLoading(document.getElementById('startPopulate'), false);
                 }
             }, "json").fail(function(xhr){
                 appendLog("Erreur au démarrage: " + xhr.responseText, "text-red-400");
+                setButtonLoading(document.getElementById('startPopulate'), false);
             });
         });
 
@@ -596,10 +641,14 @@
                 appendLog("Aucun traitement en cours.", "text-yellow-300");
                 return;
             }
+            const button = this;
+            setButtonLoading(button, true);
             $.post(pauseUrlTemplate.replace('__JOB__', currentJobId), {}, function(){
                 appendLog("Processus mis en pause.");
             }, "json").fail(function(){
                 appendLog("Impossible de mettre en pause le traitement.", "text-red-400");
+            }).always(function(){
+                setButtonLoading(button, false);
             });
         });
 
@@ -608,10 +657,14 @@
                 appendLog("Aucun traitement en cours.", "text-yellow-300");
                 return;
             }
+            const button = this;
+            setButtonLoading(button, true);
             $.post(resumeUrlTemplate.replace('__JOB__', currentJobId), {}, function(){
                 appendLog("Processus repris.");
             }, "json").fail(function(){
                 appendLog("Impossible de reprendre le traitement.", "text-red-400");
+            }).always(function(){
+                setButtonLoading(button, false);
             });
         });
     });

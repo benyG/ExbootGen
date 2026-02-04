@@ -76,6 +76,19 @@
     button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 0.75rem 1rem; border-radius: 10px; cursor: pointer; }
     button.danger { background: rgba(248, 113, 113, 0.18); border: 1px solid rgba(248, 113, 113, 0.55); color: #fecaca; padding: 0.75rem 1rem; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; min-width: 48px; }
     button.danger:hover { border-color: #f87171; color: #fee2e2; }
+    button.is-loading { position: relative; padding-right: 2.4rem; opacity: 0.85; }
+    button.is-loading::after {
+      content: '';
+      position: absolute;
+      right: 1rem;
+      width: 0.9rem;
+      height: 0.9rem;
+      border-radius: 50%;
+      border: 2px solid rgba(148, 163, 184, 0.4);
+      border-top-color: #38bdf8;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0.9rem; }
     .result-card { background: var(--panel-soft); border: 1px solid var(--border); border-radius: 14px; padding: 0.9rem 1rem; cursor: pointer; transition: 0.2s ease; }
@@ -389,6 +402,11 @@
     const saveBtn = document.getElementById('saveBtn');
     const saveStatus = document.getElementById('saveStatus');
     const deleteBtn = document.getElementById('deleteBtn');
+    const setButtonLoading = (button, isLoading) => {
+      if (!button) return;
+      button.classList.toggle('is-loading', isLoading);
+      button.disabled = isLoading;
+    };
 
     let currentQuestionId = null;
     let isAddMode = false;
@@ -482,27 +500,32 @@
         searchStatus.textContent = 'Veuillez saisir un mot-clé.';
         return;
       }
+      setButtonLoading(searchBtn, true);
       searchStatus.textContent = 'Recherche en cours…';
       resultsContainer.innerHTML = '';
       const params = new URLSearchParams({ q });
       if (providerSelect.value) params.append('provider_id', providerSelect.value);
       if (certificationSelect.value) params.append('certification_id', certificationSelect.value);
-      const res = await fetch(`/edit-question/api/search?${params.toString()}`);
-      const data = await res.json();
-      const results = data.results || [];
-      resultsCount.textContent = `${results.length} résultat(s)`;
-      searchStatus.textContent = results.length ? 'Cliquez sur une carte pour charger la question.' : 'Aucun résultat pour cette recherche.';
+      try {
+        const res = await fetch(`/edit-question/api/search?${params.toString()}`);
+        const data = await res.json();
+        const results = data.results || [];
+        resultsCount.textContent = `${results.length} résultat(s)`;
+        searchStatus.textContent = results.length ? 'Cliquez sur une carte pour charger la question.' : 'Aucun résultat pour cette recherche.';
 
-      resultsContainer.innerHTML = results.map(r => `
-        <article class="result-card" data-id="${r.id}">
-          <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
-          <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
-          ${r.has_image ? '<span class="image-badge">image</span>' : ''}
-          <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
-          <small class="src">${r.src_file ? `src_file : ${escapeHtml(r.src_file)}` : 'src_file non renseigné'}</small>
-        </article>
-      `).join('');
-      setActiveResultCard(currentQuestionId);
+        resultsContainer.innerHTML = results.map(r => `
+          <article class="result-card" data-id="${r.id}">
+            <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
+            <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
+            ${r.has_image ? '<span class="image-badge">image</span>' : ''}
+            <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
+            <small class="src">${r.src_file ? `src_file : ${escapeHtml(r.src_file)}` : 'src_file non renseigné'}</small>
+          </article>
+        `).join('');
+        setActiveResultCard(currentQuestionId);
+      } finally {
+        setButtonLoading(searchBtn, false);
+      }
     }
 
     async function loadCorrectionList(keepCurrent = false) {
@@ -972,6 +995,7 @@
 
     saveBtn.addEventListener('click', async () => {
       if (!currentQuestionId) return;
+      setButtonLoading(saveBtn, true);
       saveStatus.textContent = 'Enregistrement en cours…';
       const answers = Array.from(document.querySelectorAll('.answer-item')).map(item => {
         const baseMeta = item.dataset.meta ? JSON.parse(item.dataset.meta) : {};
@@ -996,19 +1020,23 @@
         nature: Number.parseInt(natureSelect.value || '1', 10),
         answers,
       };
-      const res = await fetch(`/edit-question/api/questions/${currentQuestionId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        saveStatus.textContent = 'Question mise à jour avec succès.';
-        if (isCorrectionMode) {
-          loadCorrectionList(true);
+      try {
+        const res = await fetch(`/edit-question/api/questions/${currentQuestionId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          saveStatus.textContent = 'Question mise à jour avec succès.';
+          if (isCorrectionMode) {
+            loadCorrectionList(true);
+          }
+        } else {
+          const err = await res.json().catch(() => ({}));
+          saveStatus.textContent = err.error || 'Erreur pendant la sauvegarde.';
         }
-      } else {
-        const err = await res.json().catch(() => ({}));
-        saveStatus.textContent = err.error || 'Erreur pendant la sauvegarde.';
+      } finally {
+        setButtonLoading(saveBtn, false);
       }
     });
 
@@ -1016,33 +1044,36 @@
       if (!currentQuestionId) return;
       const confirmDelete = window.confirm(`Supprimer définitivement la question #${currentQuestionId} ?`);
       if (!confirmDelete) return;
-      deleteBtn.disabled = true;
+      setButtonLoading(deleteBtn, true);
       saveStatus.textContent = 'Suppression en cours…';
-      const res = await fetch(`/edit-question/api/questions/${currentQuestionId}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        saveStatus.textContent = 'Question supprimée.';
-        currentQuestionId = null;
-        questionEditor.innerHTML = '';
-        srcFileInput.value = '';
-        descrInput.value = '';
-        natureSelect.value = '1';
-        renderAnswers([]);
-        editorStatus.textContent = 'Sélectionnez une question pour l\'éditer.';
-        contextInfo.textContent = '';
-        saveBtn.disabled = true;
-        deleteBtn.disabled = true;
-        if (isCorrectionMode) {
-          loadCorrectionList();
+      try {
+        const res = await fetch(`/edit-question/api/questions/${currentQuestionId}`, {
+          method: 'DELETE',
+        });
+        if (res.ok) {
+          saveStatus.textContent = 'Question supprimée.';
+          currentQuestionId = null;
+          questionEditor.innerHTML = '';
+          srcFileInput.value = '';
+          descrInput.value = '';
+          natureSelect.value = '1';
+          renderAnswers([]);
+          editorStatus.textContent = 'Sélectionnez une question pour l\'éditer.';
+          contextInfo.textContent = '';
+          saveBtn.disabled = true;
+          deleteBtn.disabled = true;
+          if (isCorrectionMode) {
+            loadCorrectionList();
+          }
+          if (isDuplicateMode) {
+            loadDuplicateList();
+          }
+        } else {
+          const err = await res.json().catch(() => ({}));
+          saveStatus.textContent = err.error || 'Erreur pendant la suppression.';
         }
-        if (isDuplicateMode) {
-          loadDuplicateList();
-        }
-      } else {
-        const err = await res.json().catch(() => ({}));
-        saveStatus.textContent = err.error || 'Erreur pendant la suppression.';
-        deleteBtn.disabled = false;
+      } finally {
+        setButtonLoading(deleteBtn, false);
       }
     });
 
@@ -1078,7 +1109,7 @@
         saveStatus.textContent = 'Ajoutez au moins une réponse.';
         return;
       }
-      addBtn.disabled = true;
+      setButtonLoading(addBtn, true);
       saveStatus.textContent = 'Ajout de la question…';
       const payload = {
         module_id: moduleId,
@@ -1088,22 +1119,25 @@
         nature: Number.parseInt(natureSelect.value || '1', 10),
         answers,
       };
-      const res = await fetch('/edit-question/api/questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        saveStatus.textContent = 'Question ajoutée avec succès.';
-        questionEditor.innerHTML = '';
-        srcFileInput.value = '';
-        descrInput.value = '';
-        renderAnswers([]);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        saveStatus.textContent = err.error || 'Erreur pendant l’ajout.';
+      try {
+        const res = await fetch('/edit-question/api/questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          saveStatus.textContent = 'Question ajoutée avec succès.';
+          questionEditor.innerHTML = '';
+          srcFileInput.value = '';
+          descrInput.value = '';
+          renderAnswers([]);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          saveStatus.textContent = err.error || 'Erreur pendant l’ajout.';
+        }
+      } finally {
+        setButtonLoading(addBtn, false);
       }
-      addBtn.disabled = false;
     });
 
     loadProviders();

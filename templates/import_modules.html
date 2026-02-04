@@ -292,6 +292,19 @@
     }
 
     button#import-btn:hover { transform: translateY(-3px); box-shadow: 0 18px 42px rgba(71,245,192,0.38); }
+    button.is-loading { position: relative; padding-right: 2.4rem; opacity: 0.85; }
+    button.is-loading::after {
+      content: '';
+      position: absolute;
+      right: 1rem;
+      width: 0.9rem;
+      height: 0.9rem;
+      border-radius: 50%;
+      border: 2px solid rgba(148, 163, 184, 0.4);
+      border-top-color: #38bdf8;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     .json-stats {
       display: flex;
@@ -595,6 +608,11 @@
     const pubStatus = document.getElementById('pubStatus');
     const generateBtn = document.getElementById('generate-json-btn');
     const generationStatus = document.getElementById('generationStatus');
+    const setButtonLoading = (button, isLoading) => {
+      if (!button) return;
+      button.classList.toggle('is-loading', isLoading);
+      button.disabled = isLoading;
+    };
 
     function updateStats() {
       const length = jsonInput.value.length;
@@ -804,6 +822,7 @@
           setPubStatus('Sélectionnez un état.', 'error');
           return;
         }
+        setButtonLoading(pubUpdate, true);
         try {
           const data = await loadJSON('/api/mcp/client/certifications/pub', {
             method: 'POST',
@@ -813,6 +832,8 @@
           setPubStatus(`Mise à jour OK (pub=${data.pub}).`, 'success');
         } catch (err) {
           setPubStatus(err.message || 'Erreur lors de la mise à jour.', 'error');
+        } finally {
+          setButtonLoading(pubUpdate, false);
         }
       }
 
@@ -888,7 +909,7 @@
         }
 
         setGenerationStatus('Génération en cours…');
-        generateBtn.disabled = true;
+        setButtonLoading(generateBtn, true);
         generateBtn.textContent = 'Génération…';
         try {
           const payload = await loadJSON(`${base}api/certifications/${certId}/generate-domains`, { method: 'POST' });
@@ -901,7 +922,7 @@
         } catch (err) {
           setGenerationStatus(err.message || 'Erreur lors de la génération.', 'error');
         } finally {
-          generateBtn.disabled = false;
+          setButtonLoading(generateBtn, false);
           generateBtn.textContent = originalLabel;
         }
       });
@@ -925,40 +946,45 @@
         const total = domains.length;
         log.textContent = '';
         bar.style.width = '0%';
+        setButtonLoading(importBtn, true);
 
-        for (let i = 0; i < total; i++) {
-          const dom = domains[i] || {};
-          const name = dom.name || dom.module_name;
-          const descr = dom.descr !== undefined ? dom.descr : dom.module_descr;
+        try {
+          for (let i = 0; i < total; i++) {
+            const dom = domains[i] || {};
+            const name = dom.name || dom.module_name;
+            const descr = dom.descr !== undefined ? dom.descr : dom.module_descr;
 
-          if (!name) {
-            log.textContent += `⚠️ Ignoré (pas de nom): ${JSON.stringify(dom)}\n`;
-            continue;
-          }
-          try {
-            const res = await fetch(base + 'api/modules', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                certification_id: certId,
-                name,
-                descr: descr || null
-              })
-            });
-            const j = await res.json();
-            if (res.ok) {
-              log.textContent += `✅ [${j.id}] ${j.name}\n`;
-            } else {
-              log.textContent += `⛔ Erreur: ${j.error}\n`;
+            if (!name) {
+              log.textContent += `⚠️ Ignoré (pas de nom): ${JSON.stringify(dom)}\n`;
+              continue;
             }
-          } catch (e) {
-            log.textContent += `⛔ Erreur réseau: ${e}\n`;
+            try {
+              const res = await fetch(base + 'api/modules', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  certification_id: certId,
+                  name,
+                  descr: descr || null
+                })
+              });
+              const j = await res.json();
+              if (res.ok) {
+                log.textContent += `✅ [${j.id}] ${j.name}\n`;
+              } else {
+                log.textContent += `⛔ Erreur: ${j.error}\n`;
+              }
+            } catch (e) {
+              log.textContent += `⛔ Erreur réseau: ${e}\n`;
+            }
+            bar.style.width = `${Math.round((i + 1) / total * 100)}%`;
           }
-          bar.style.width = `${Math.round((i + 1) / total * 100)}%`;
-        }
 
-        alert(`Import terminé : ${total} item(s) traité(s).`);
-        refreshModules(certId);
+          alert(`Import terminé : ${total} item(s) traité(s).`);
+          refreshModules(certId);
+        } finally {
+          setButtonLoading(importBtn, false);
+        }
       });
     }
   </script>
