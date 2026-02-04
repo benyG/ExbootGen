@@ -319,12 +319,16 @@
         meta.className = 'cert-meta';
         meta.textContent = `ID ${cert.id}${cert.code ? ` · Code ${cert.code}` : ''}`;
 
+        const questionCount = document.createElement('div');
+        questionCount.className = 'cert-meta';
+        questionCount.textContent = `${cert.total_questions ?? 0} question(s)`;
+
         const links = document.createElement('div');
         links.className = 'card-links';
         const baseParams = `provider_id=${providerSelect.value}&cert_id=${cert.id}`;
         links.innerHTML = `
           <a class="card-link" href="/blueprints?${baseParams}">Blueprint</a>
-          <a class="card-link" href="/edit-question?${baseParams}">Questions</a>
+          <a class="card-link" href="/edit-question?${baseParams}">Question</a>
           <a class="card-link" href="/articles?${baseParams}">Article</a>
         `;
         links.querySelectorAll('a').forEach(link => {
@@ -334,6 +338,7 @@
         card.appendChild(status);
         card.appendChild(title);
         card.appendChild(meta);
+        card.appendChild(questionCount);
         card.appendChild(links);
 
         card.addEventListener('click', async () => {

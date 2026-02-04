@@ -2052,8 +2052,6 @@ def reports():
     certification_id = request.args.get("cert_id", type=int)
     if certification_id and provider_cert_ids and certification_id not in provider_cert_ids:
         certification_id = None
-    if provider_id and not certification_id and certifications:
-        certification_id = certifications[0]["id"]
 
     futures = {
         "domain_counts": db.execute_async(
@@ -2258,8 +2256,14 @@ def planner_certifications(provider_id: int):
     """Return certifications with pub state for a provider."""
 
     certifications = [
-        {"id": cert_id, "name": name, "code": code, "pub": pub}
-        for cert_id, name, code, pub in db.get_certifications_by_provider_with_pub(provider_id)
+        {
+            "id": cert_id,
+            "name": name,
+            "code": code,
+            "pub": pub,
+            "total_questions": int(total_questions or 0),
+        }
+        for cert_id, name, code, pub, total_questions in db.get_certifications_by_provider_with_pub(provider_id)
     ]
     return jsonify({"certifications": certifications})
 

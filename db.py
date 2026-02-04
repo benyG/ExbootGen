@@ -379,7 +379,21 @@ def get_certifications_by_provider_with_code(provider_id):
 def get_certifications_by_provider_with_pub(provider_id):
     conn = get_connection()
     cursor = conn.cursor()
-    query = "SELECT id, name, code_cert_key, pub FROM courses WHERE prov = %s"
+    query = """
+        SELECT
+            c.id,
+            c.name,
+            c.code_cert_key,
+            c.pub,
+            (
+                SELECT COUNT(q.id)
+                FROM questions q
+                JOIN modules m ON m.id = q.module
+                WHERE m.course = c.id
+            ) AS total_questions
+        FROM courses c
+        WHERE c.prov = %s
+    """
     cursor.execute(query, (provider_id,))
     certifications = cursor.fetchall()
     cursor.close()
