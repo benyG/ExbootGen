@@ -27,6 +27,57 @@ def normalize_question_text(text: str) -> str:
     return normalized.strip()
 
 
+def normalize_answer_text(text: str) -> str:
+    if not text:
+        return ''
+    normalized = BR_TAG_RE.sub(' ', text)
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()
+
+
+def normalize_meta_value(value: object) -> object:
+    if isinstance(value, str):
+        return normalize_answer_text(value)
+    if isinstance(value, dict):
+        return {k: normalize_meta_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [normalize_meta_value(v) for v in value]
+    return value
+
+
+def parse_answer_payload(raw_text: str) -> tuple[str, dict]:
+    if not raw_text:
+        return '', {}
+    try:
+        parsed = json.loads(raw_text)
+        if isinstance(parsed, dict):
+            value = normalize_answer_text(str(parsed.get('value', '') or ''))
+            meta = {k: normalize_meta_value(v) for k, v in parsed.items() if k != 'value'}
+            return value, meta
+    except json.JSONDecodeError:
+        pass
+    return normalize_answer_text(raw_text), {}
+
+
+def build_answer_signature(answers: list[dict]) -> str:
+    normalized = []
+    for answer in answers:
+        value, meta = parse_answer_payload(answer.get('text') or '')
+        normalized.append({
+            'value': value,
+            'meta': meta,
+            'isok': 1 if answer.get('isok') else 0,
+        })
+    normalized.sort(
+        key=lambda item: (
+            item['value'],
+            json.dumps(item['meta'], ensure_ascii=False, sort_keys=True),
+            item['isok'],
+        )
+    )
+    return json.dumps(normalized, ensure_ascii=False, sort_keys=True)
+
+
 def extract_image_urls(text: str) -> list[str]:
     if not text:
         return []
@@ -290,6 +341,107 @@ def api_duplicate_list():
 
     results.sort(key=lambda item: (-item['duplicate_count'], item['id']), reverse=False)
     return jsonify({'results': results, 'total': len(results)})
+
+
+@edit_question_bp.route('/api/duplicates/verify')
+def api_duplicate_verify():
+    certification_id = request.args.get('certification_id')
+    if not certification_id:
+        return jsonify({'error': 'La certification est requise'}), 400
+
+    db = get_db()
+    cur = db.cursor(dictionary=True)
+    cur.execute(
+        """
+        SELECT q.id,
+               q.text,
+               q.src_file,
+               m.name AS module_name,
+               c.name AS certification_name,
+               p.name AS provider_name,
+               qa.isok AS answer_isok,
+               a.text AS answer_text
+          FROM questions q
+          JOIN modules m ON q.module = m.id
+          JOIN courses c ON m.course = c.id
+          JOIN provs p ON c.prov = p.id
+          LEFT JOIN quest_ans qa ON qa.question = q.id
+          LEFT JOIN answers a ON qa.answer = a.id
+         WHERE c.id = %s
+         ORDER BY q.id DESC
+        """,
+        (certification_id,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+
+    questions: dict[int, dict] = {}
+    for row in rows:
+        qid = row['id']
+        question = questions.setdefault(
+            qid,
+            {
+                'id': qid,
+                'text': row.get('text') or '',
+                'src_file': row.get('src_file'),
+                'module_name': row.get('module_name'),
+                'provider': row.get('provider_name'),
+                'certification': row.get('certification_name'),
+                'answers': [],
+            },
+        )
+        if row.get('answer_text') is not None:
+            question['answers'].append({
+                'text': row.get('answer_text') or '',
+                'isok': bool(row.get('answer_isok')),
+            })
+
+    grouped_by_text: dict[str, list[dict]] = {}
+    for question in questions.values():
+        normalized = normalize_question_text(question.get('text') or '')
+        if not normalized:
+            continue
+        question['normalized_text'] = normalized
+        grouped_by_text.setdefault(normalized, []).append(question)
+
+    candidate_groups: list[list[dict]] = []
+    for items in grouped_by_text.values():
+        if len(items) < 2:
+            continue
+        signature_map: dict[str, list[dict]] = {}
+        for item in items:
+            signature = build_answer_signature(item.get('answers', []))
+            signature_map.setdefault(signature, []).append(item)
+        for signature_items in signature_map.values():
+            if len(signature_items) < 2:
+                continue
+            signature_items.sort(key=lambda entry: entry['id'])
+            candidate_groups.append(signature_items)
+
+    candidate_groups.sort(key=lambda group: (-len(group), group[0]['id']))
+
+    results_groups = []
+    total_items = 0
+    for group_index, group_items in enumerate(candidate_groups, start=1):
+        items_payload = []
+        for item in group_items:
+            total_items += 1
+            items_payload.append({
+                'id': item['id'],
+                'text_preview': (item.get('normalized_text') or '')[:220],
+                'src_file': item.get('src_file'),
+                'module_name': item.get('module_name'),
+                'provider': item.get('provider'),
+                'certification': item.get('certification'),
+                'has_image': question_has_image(item.get('text') or ''),
+            })
+        results_groups.append({
+            'group_id': group_index,
+            'count': len(group_items),
+            'items': items_payload,
+        })
+
+    return jsonify({'groups': results_groups, 'total': total_items})
 
 
 @edit_question_bp.route('/api/questions', methods=['POST'])
