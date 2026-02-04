@@ -376,6 +376,17 @@ def get_certifications_by_provider_with_code(provider_id):
     return certifications
 
 
+def get_certifications_by_provider_with_pub(provider_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = "SELECT id, name, code_cert_key, pub FROM courses WHERE prov = %s"
+    cursor.execute(query, (provider_id,))
+    certifications = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return certifications
+
+
 def update_certification_pub(cert_id: int, pub_status: int) -> None:
     conn = get_connection()
     cursor = conn.cursor()
