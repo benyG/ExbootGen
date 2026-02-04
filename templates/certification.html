@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Certification · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 20% 20%, rgba(76,201,240,0.15), transparent 55%),
+                     radial-gradient(circle at 80% 30%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.22), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --glass-soft: rgba(15, 19, 32, 0.82);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb { position: fixed; width: 32rem; height: 32rem; border-radius: 50%; opacity: 0.45; pointer-events: none; mix-blend-mode: screen; background: radial-gradient(circle, rgba(71,245,192,0.32) 0%, rgba(4,7,17,0) 70%); animation: drift 22s ease-in-out infinite; z-index: 0; }
+    .orb-1 { top: -12rem; left: -6rem; }
+    .orb-2 { bottom: -10rem; right: -4rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.25) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift { 0%, 100% { transform: translate3d(0,0,0) scale(1); } 45% { transform: translate3d(40px, -30px, 0) scale(1.05); } 75% { transform: translate3d(-30px, 25px, 0) scale(0.95); } }
+
+    .stellar-header { position: sticky; top: 0; z-index: 20; background: rgba(4,7,17,0.72); backdrop-filter: saturate(180%) blur(18px); border-bottom: 1px solid rgba(148,163,184,0.18); }
+    .stellar-container { width: min(1200px, 92vw); margin: 0 auto; padding: 1.2rem 0 1.6rem; }
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 18px; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25)); border: 1px solid rgba(148, 163, 184, 0.2); color: var(--accent-strong); font-weight: 600; letter-spacing: 0.05em; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28); }
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .nav-toggle { display: none; width: 2.8rem; height: 2.8rem; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 19, 32, 0.68); color: var(--text-primary); align-items: center; justify-content: center; cursor: pointer; transition: transform 0.35s var(--transition), background 0.35s var(--transition); }
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+    .nav-toggle span, .nav-toggle span::before, .nav-toggle span::after { display: block; width: 18px; height: 2px; background: currentColor; border-radius: 999px; position: relative; transition: transform 0.35s ease, opacity 0.3s ease; }
+    .nav-toggle span::before, .nav-toggle span::after { content: ''; position: absolute; left: 0; }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.4rem; border-radius: var(--radius-lg); padding: 0.35rem; background: rgba(8, 12, 24, 0.55); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
+    .stellar-nav a { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.05rem; border-radius: 14px; text-decoration: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition); }
+    .stellar-nav a::after { content: ''; position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14)); opacity: 0; transition: opacity 0.35s var(--transition); z-index: -1; }
+    .stellar-nav a:hover { color: var(--text-primary); transform: translateY(-2px); }
+    .stellar-nav a:hover::after { opacity: 1; }
+    .stellar-nav a.active { color: var(--text-primary); }
+    .stellar-nav a.active::after { opacity: 1; box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18); }
+
+    .stellar-main { flex: 1; width: min(1200px, 92vw); margin: 0 auto; padding: 3.8rem 0 5.2rem; display: flex; flex-direction: column; gap: 2.6rem; position: relative; z-index: 1; }
+
+    .glass-card { background: var(--glass); border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-strong); padding: clamp(1.8rem, 3vw, 2.6rem); backdrop-filter: blur(26px); position: relative; overflow: hidden; }
+    .glass-card::before { content: ''; position: absolute; inset: 1px; border-radius: calc(var(--radius-xl) - 2px); border: 1px solid rgba(148, 163, 184, 0.12); pointer-events: none; }
+
+    h1 { margin: 0 0 1rem; font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.1rem, 3.6vw, 2.7rem); }
+    h2 { margin: 0 0 0.6rem; font-family: 'Space Grotesk', sans-serif; font-size: 1.35rem; }
+    p { margin: 0; color: var(--text-muted); line-height: 1.7; }
+
+    .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 1.2rem; }
+    .control-group { display: flex; flex-direction: column; gap: 0.45rem; }
+    label { font-size: 0.9rem; color: var(--text-muted); }
+    input[type="text"], input[type="search"], textarea, select {
+      width: 100%;
+      padding: 0.7rem 0.85rem;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(8, 12, 24, 0.8);
+      color: var(--text-primary);
+      font-size: 0.92rem;
+    }
+    textarea { resize: vertical; min-height: 120px; }
+
+    .panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.6rem; margin-top: 1.6rem; }
+    .form-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.8rem; }
+    .action-button {
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      padding: 0.45rem 1rem;
+      background: rgba(71,245,192,0.12);
+      color: var(--text-primary);
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition);
+    }
+    .action-button.secondary { background: rgba(124,247,255,0.12); }
+    .action-button.danger { background: rgba(248,113,113,0.15); border-color: rgba(248,113,113,0.4); }
+    .action-button:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(56, 189, 248, 0.18); }
+
+    .list-panel { background: rgba(8, 12, 24, 0.75); border-radius: 18px; border: 1px solid rgba(148, 163, 184, 0.16); padding: 1rem 1.1rem; }
+    .list-panel ul { list-style: none; padding: 0; margin: 0.6rem 0 0; display: grid; gap: 0.5rem; }
+    .list-panel li { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.5rem 0.7rem; border-radius: 12px; border: 1px solid rgba(148,163,184,0.16); background: rgba(15, 19, 32, 0.55); cursor: pointer; }
+    .list-panel li.active { border-color: rgba(124, 247, 255, 0.4); background: rgba(124, 247, 255, 0.15); }
+    .list-panel .meta { color: var(--text-muted); font-size: 0.8rem; }
+
+    .status-note { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.8rem; }
+    .empty-state { padding: 1.2rem; border-radius: 16px; background: rgba(8,12,24,0.65); border: 1px dashed rgba(148, 163, 184, 0.3); color: var(--text-muted); text-align: center; margin-top: 1rem; }
+
+    @media (max-width: 960px) {
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 1.2rem; }
+      .stellar-nav { flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <div class="brand-mark">EB</div>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Certification CRM</span>
+          </div>
+        </div>
+        <button class="nav-toggle" type="button" aria-label="Basculer la navigation">
+          <span></span>
+        </button>
+      </div>
+      {% set active_page = 'certification' %}
+      {% include "_nav.html" %}
+    </div>
+  </header>
+
+  <main class="stellar-main">
+    <section class="glass-card">
+      <h1>Certification</h1>
+      <p>Recherchez un provider, gérez ses certifications, puis pilotez les domaines associés à chaque certification.</p>
+
+      <div class="controls">
+        <div class="control-group">
+          <label for="providerSearch">Recherche provider</label>
+          <input type="search" id="providerSearch" placeholder="Tapez un nom de provider">
+        </div>
+        <div class="control-group">
+          <label for="providerSelect">Providers disponibles</label>
+          <select id="providerSelect">
+            <option value="">Sélectionner un provider</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="panel-grid">
+        <div class="list-panel">
+          <h2>Certifications</h2>
+          <div class="controls" style="margin-top:0.6rem;">
+            <div class="control-group">
+              <label for="certName">Nom</label>
+              <input type="text" id="certName" placeholder="Nom de certification">
+            </div>
+            <div class="control-group">
+              <label for="certCode">Code</label>
+              <input type="text" id="certCode" placeholder="Code certification">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="action-button" id="certCreate">Créer</button>
+            <button class="action-button secondary" id="certSave">Enregistrer</button>
+            <button class="action-button danger" id="certDelete">Supprimer</button>
+          </div>
+          <div class="status-note" id="certStatus">Sélectionnez un provider pour charger les certifications.</div>
+          <ul id="certList"></ul>
+          <div class="empty-state" id="certEmpty">Aucune certification chargée.</div>
+        </div>
+
+        <div class="list-panel">
+          <h2>Domaines</h2>
+          <div class="controls" style="margin-top:0.6rem;">
+            <div class="control-group">
+              <label for="domainName">Nom</label>
+              <input type="text" id="domainName" placeholder="Nom du domaine">
+            </div>
+            <div class="control-group">
+              <label for="domainDescr">Description</label>
+              <textarea id="domainDescr" placeholder="Description du domaine"></textarea>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="action-button" id="domainCreate">Créer</button>
+            <button class="action-button secondary" id="domainSave">Enregistrer</button>
+            <button class="action-button danger" id="domainDelete">Supprimer</button>
+          </div>
+          <div class="status-note" id="domainStatus">Sélectionnez une certification pour charger les domaines.</div>
+          <ul id="domainList"></ul>
+          <div class="empty-state" id="domainEmpty">Aucun domaine chargé.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>ExBoot Laboratory · Certification CRM</footer>
+
+  <script>
+    const navToggle = document.querySelector('.nav-toggle');
+    if (navToggle) {
+      navToggle.addEventListener('click', () => {
+        navToggle.classList.toggle('is-open');
+        document.body.classList.toggle('nav-open');
+      });
+    }
+
+    const providerSearch = document.getElementById('providerSearch');
+    const providerSelect = document.getElementById('providerSelect');
+    const certList = document.getElementById('certList');
+    const certEmpty = document.getElementById('certEmpty');
+    const certStatus = document.getElementById('certStatus');
+    const certName = document.getElementById('certName');
+    const certCode = document.getElementById('certCode');
+    const certCreate = document.getElementById('certCreate');
+    const certSave = document.getElementById('certSave');
+    const certDelete = document.getElementById('certDelete');
+
+    const domainList = document.getElementById('domainList');
+    const domainEmpty = document.getElementById('domainEmpty');
+    const domainStatus = document.getElementById('domainStatus');
+    const domainName = document.getElementById('domainName');
+    const domainDescr = document.getElementById('domainDescr');
+    const domainCreate = document.getElementById('domainCreate');
+    const domainSave = document.getElementById('domainSave');
+    const domainDelete = document.getElementById('domainDelete');
+
+    const params = new URLSearchParams(window.location.search);
+    const preProviderId = params.get('provider_id');
+    const preCertId = params.get('cert_id');
+
+    let providersCache = [];
+    let certificationsCache = [];
+    let domainsCache = [];
+    let selectedCertId = null;
+    let selectedDomainId = null;
+
+    const fetchJSON = async (url, options) => {
+      const response = await fetch(url, options);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || 'Erreur lors du chargement.');
+      }
+      return response.json();
+    };
+
+    const setCertEmpty = (message) => {
+      certEmpty.textContent = message;
+      certEmpty.style.display = 'block';
+    };
+
+    const setDomainEmpty = (message) => {
+      domainEmpty.textContent = message;
+      domainEmpty.style.display = 'block';
+    };
+
+    const clearCertForm = () => {
+      certName.value = '';
+      certCode.value = '';
+      selectedCertId = null;
+    };
+
+    const clearDomainForm = () => {
+      domainName.value = '';
+      domainDescr.value = '';
+      selectedDomainId = null;
+    };
+
+    const renderCertifications = () => {
+      certList.innerHTML = '';
+      if (!certificationsCache.length) {
+        setCertEmpty('Aucune certification trouvée.');
+        certStatus.textContent = 'Aucune certification disponible pour ce provider.';
+        return;
+      }
+      certEmpty.style.display = 'none';
+      certificationsCache.forEach(cert => {
+        const item = document.createElement('li');
+        item.dataset.certId = cert.id;
+        if (Number(cert.id) === Number(selectedCertId)) {
+          item.classList.add('active');
+        }
+        item.innerHTML = `
+          <div>
+            <div>${cert.name}</div>
+            <div class="meta">ID ${cert.id}${cert.code ? ` · Code ${cert.code}` : ''}</div>
+          </div>
+          <div class="meta">${Number(cert.pub ?? 0) ? 'Publié' : 'Hors ligne'}</div>
+        `;
+        item.addEventListener('click', () => {
+          selectedCertId = cert.id;
+          certName.value = cert.name || '';
+          certCode.value = cert.code || '';
+          renderCertifications();
+          loadDomains(cert.id);
+        });
+        certList.appendChild(item);
+      });
+    };
+
+    const renderDomains = () => {
+      domainList.innerHTML = '';
+      if (!domainsCache.length) {
+        setDomainEmpty('Aucun domaine trouvé.');
+        domainStatus.textContent = 'Aucun domaine disponible pour cette certification.';
+        return;
+      }
+      domainEmpty.style.display = 'none';
+      domainsCache.forEach(domain => {
+        const item = document.createElement('li');
+        item.dataset.domainId = domain.id;
+        if (Number(domain.id) === Number(selectedDomainId)) {
+          item.classList.add('active');
+        }
+        item.innerHTML = `
+          <div>
+            <div>${domain.name}</div>
+            <div class="meta">${domain.descr ? domain.descr : '—'}</div>
+          </div>
+          <div class="meta">ID ${domain.id}</div>
+        `;
+        item.addEventListener('click', () => {
+          selectedDomainId = domain.id;
+          domainName.value = domain.name || '';
+          domainDescr.value = domain.descr || '';
+          renderDomains();
+        });
+        domainList.appendChild(item);
+      });
+    };
+
+    const applyProviderFilter = () => {
+      const query = providerSearch.value.trim().toLowerCase();
+      const options = providersCache.filter(provider =>
+        provider.name.toLowerCase().includes(query)
+      );
+      providerSelect.innerHTML = '<option value="">Sélectionner un provider</option>';
+      options.forEach(provider => {
+        const option = document.createElement('option');
+        option.value = provider.id;
+        option.textContent = provider.name;
+        providerSelect.appendChild(option);
+      });
+      if (preProviderId && !providerSelect.value) {
+        providerSelect.value = preProviderId;
+      }
+    };
+
+    const loadProviders = async () => {
+      try {
+        const payload = await fetchJSON('/api/certification/providers');
+        providersCache = payload.providers || [];
+        applyProviderFilter();
+        if (providerSelect.value) {
+          await loadCertifications(providerSelect.value);
+        }
+      } catch (error) {
+        providerSelect.innerHTML = '<option value="">Erreur de chargement</option>';
+      }
+    };
+
+    const loadCertifications = async (providerId) => {
+      if (!providerId) {
+        certificationsCache = [];
+        domainsCache = [];
+        clearCertForm();
+        clearDomainForm();
+        renderCertifications();
+        renderDomains();
+        certStatus.textContent = 'Sélectionnez un provider pour charger les certifications.';
+        domainStatus.textContent = 'Sélectionnez une certification pour charger les domaines.';
+        return;
+      }
+      certStatus.textContent = 'Chargement des certifications...';
+      try {
+        const payload = await fetchJSON(`/api/certification/certifications/${providerId}`);
+        certificationsCache = payload.certifications || [];
+        selectedCertId = preCertId && certificationsCache.find(cert => String(cert.id) === String(preCertId))
+          ? Number(preCertId)
+          : (certificationsCache[0]?.id || null);
+        if (selectedCertId) {
+          const selected = certificationsCache.find(cert => Number(cert.id) === Number(selectedCertId));
+          certName.value = selected?.name || '';
+          certCode.value = selected?.code || '';
+        } else {
+          clearCertForm();
+        }
+        renderCertifications();
+        certStatus.textContent = `${certificationsCache.length} certification(s) chargée(s).`;
+        if (selectedCertId) {
+          await loadDomains(selectedCertId);
+        } else {
+          domainsCache = [];
+          renderDomains();
+          domainStatus.textContent = 'Sélectionnez une certification pour charger les domaines.';
+        }
+      } catch (error) {
+        certificationsCache = [];
+        renderCertifications();
+        certStatus.textContent = error.message || 'Erreur de chargement.';
+      }
+    };
+
+    const loadDomains = async (certId) => {
+      if (!certId) {
+        domainsCache = [];
+        renderDomains();
+        domainStatus.textContent = 'Sélectionnez une certification pour charger les domaines.';
+        return;
+      }
+      domainStatus.textContent = 'Chargement des domaines...';
+      try {
+        const payload = await fetchJSON(`/api/certification/certifications/${certId}/domains`);
+        domainsCache = payload.domains || [];
+        selectedDomainId = domainsCache[0]?.id || null;
+        if (selectedDomainId) {
+          const selected = domainsCache.find(domain => Number(domain.id) === Number(selectedDomainId));
+          domainName.value = selected?.name || '';
+          domainDescr.value = selected?.descr || '';
+        } else {
+          clearDomainForm();
+        }
+        renderDomains();
+        domainStatus.textContent = `${domainsCache.length} domaine(s) chargé(s).`;
+      } catch (error) {
+        domainsCache = [];
+        renderDomains();
+        domainStatus.textContent = error.message || 'Erreur de chargement.';
+      }
+    };
+
+    providerSearch.addEventListener('input', applyProviderFilter);
+    providerSelect.addEventListener('change', () => {
+      loadCertifications(providerSelect.value);
+    });
+
+    certCreate.addEventListener('click', async () => {
+      if (!providerSelect.value) {
+        certStatus.textContent = 'Sélectionnez un provider avant de créer une certification.';
+        return;
+      }
+      const name = certName.value.trim();
+      const code = certCode.value.trim();
+      if (!name) {
+        certStatus.textContent = 'Le nom de certification est requis.';
+        return;
+      }
+      try {
+        const payload = await fetchJSON('/api/certification/certifications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider_id: providerSelect.value, name, code })
+        });
+        certificationsCache.push({ id: payload.id, name: payload.name, code: payload.code, pub: 0 });
+        selectedCertId = payload.id;
+        renderCertifications();
+        certStatus.textContent = 'Certification créée.';
+        await loadDomains(payload.id);
+      } catch (error) {
+        certStatus.textContent = error.message || 'Impossible de créer la certification.';
+      }
+    });
+
+    certSave.addEventListener('click', async () => {
+      if (!selectedCertId) {
+        certStatus.textContent = 'Sélectionnez une certification à modifier.';
+        return;
+      }
+      const name = certName.value.trim();
+      const code = certCode.value.trim();
+      if (!name) {
+        certStatus.textContent = 'Le nom de certification est requis.';
+        return;
+      }
+      try {
+        await fetchJSON(`/api/certification/certifications/${selectedCertId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, code })
+        });
+        const match = certificationsCache.find(cert => Number(cert.id) === Number(selectedCertId));
+        if (match) {
+          match.name = name;
+          match.code = code || null;
+        }
+        renderCertifications();
+        certStatus.textContent = 'Certification mise à jour.';
+      } catch (error) {
+        certStatus.textContent = error.message || 'Impossible de mettre à jour la certification.';
+      }
+    });
+
+    certDelete.addEventListener('click', async () => {
+      if (!selectedCertId) {
+        certStatus.textContent = 'Sélectionnez une certification à supprimer.';
+        return;
+      }
+      if (!confirm('Supprimer cette certification et ses domaines ?')) {
+        return;
+      }
+      try {
+        await fetchJSON(`/api/certification/certifications/${selectedCertId}`, { method: 'DELETE' });
+        certificationsCache = certificationsCache.filter(cert => Number(cert.id) !== Number(selectedCertId));
+        clearCertForm();
+        renderCertifications();
+        domainsCache = [];
+        clearDomainForm();
+        renderDomains();
+        certStatus.textContent = 'Certification supprimée.';
+        domainStatus.textContent = 'Sélectionnez une certification pour charger les domaines.';
+      } catch (error) {
+        certStatus.textContent = error.message || 'Impossible de supprimer la certification.';
+      }
+    });
+
+    domainCreate.addEventListener('click', async () => {
+      if (!selectedCertId) {
+        domainStatus.textContent = 'Sélectionnez une certification avant de créer un domaine.';
+        return;
+      }
+      const name = domainName.value.trim();
+      const descr = domainDescr.value.trim();
+      if (!name) {
+        domainStatus.textContent = 'Le nom du domaine est requis.';
+        return;
+      }
+      try {
+        const payload = await fetchJSON('/api/certification/domains', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ certification_id: selectedCertId, name, descr })
+        });
+        domainsCache.push({ id: payload.id, name: payload.name, descr: payload.descr });
+        selectedDomainId = payload.id;
+        renderDomains();
+        domainStatus.textContent = 'Domaine créé.';
+      } catch (error) {
+        domainStatus.textContent = error.message || 'Impossible de créer le domaine.';
+      }
+    });
+
+    domainSave.addEventListener('click', async () => {
+      if (!selectedDomainId) {
+        domainStatus.textContent = 'Sélectionnez un domaine à modifier.';
+        return;
+      }
+      const name = domainName.value.trim();
+      const descr = domainDescr.value.trim();
+      if (!name) {
+        domainStatus.textContent = 'Le nom du domaine est requis.';
+        return;
+      }
+      try {
+        await fetchJSON(`/api/certification/domains/${selectedDomainId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, descr })
+        });
+        const match = domainsCache.find(domain => Number(domain.id) === Number(selectedDomainId));
+        if (match) {
+          match.name = name;
+          match.descr = descr || null;
+        }
+        renderDomains();
+        domainStatus.textContent = 'Domaine mis à jour.';
+      } catch (error) {
+        domainStatus.textContent = error.message || 'Impossible de mettre à jour le domaine.';
+      }
+    });
+
+    domainDelete.addEventListener('click', async () => {
+      if (!selectedDomainId) {
+        domainStatus.textContent = 'Sélectionnez un domaine à supprimer.';
+        return;
+      }
+      if (!confirm('Supprimer ce domaine ?')) {
+        return;
+      }
+      try {
+        await fetchJSON(`/api/certification/domains/${selectedDomainId}`, { method: 'DELETE' });
+        domainsCache = domainsCache.filter(domain => Number(domain.id) !== Number(selectedDomainId));
+        clearDomainForm();
+        renderDomains();
+        domainStatus.textContent = 'Domaine supprimé.';
+      } catch (error) {
+        domainStatus.textContent = error.message || 'Impossible de supprimer le domaine.';
+      }
+    });
+
+    loadProviders();
+  </script>
+</body>
+</html>

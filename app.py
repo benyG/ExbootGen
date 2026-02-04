@@ -2222,6 +2222,114 @@ def planner():
     return render_template("planner.html")
 
 
+@app.route("/certification")
+def certification():
+    return render_template("certification.html")
+
+
+@app.route("/api/certification/providers")
+def certification_providers():
+    providers = [
+        {"id": provider_id, "name": name}
+        for provider_id, name in db.get_providers()
+    ]
+    return jsonify({"providers": providers})
+
+
+@app.route("/api/certification/certifications/<int:provider_id>")
+def certification_certifications(provider_id: int):
+    certifications = [
+        {"id": cert_id, "name": name, "code": code, "pub": pub}
+        for cert_id, name, code, pub in db.get_certifications_by_provider_with_details(provider_id)
+    ]
+    return jsonify({"certifications": certifications})
+
+
+@app.route("/api/certification/certifications", methods=["POST"])
+def certification_create():
+    payload = request.get_json() or {}
+    provider_id = payload.get("provider_id")
+    name = (payload.get("name") or "").strip()
+    code = (payload.get("code") or "").strip() or None
+    if not provider_id or not name:
+        return jsonify({"error": "provider_id et name requis"}), 400
+    try:
+        new_id = db.create_certification(int(provider_id), name, code)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"id": new_id, "name": name, "code": code})
+
+
+@app.route("/api/certification/certifications/<int:cert_id>", methods=["PUT"])
+def certification_update(cert_id: int):
+    payload = request.get_json() or {}
+    name = (payload.get("name") or "").strip()
+    code = (payload.get("code") or "").strip() or None
+    if not name:
+        return jsonify({"error": "name requis"}), 400
+    try:
+        db.update_certification(cert_id, name, code)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"id": cert_id, "name": name, "code": code})
+
+
+@app.route("/api/certification/certifications/<int:cert_id>", methods=["DELETE"])
+def certification_delete(cert_id: int):
+    try:
+        db.delete_certification(cert_id)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"status": "deleted"})
+
+
+@app.route("/api/certification/certifications/<int:cert_id>/domains")
+def certification_domains(cert_id: int):
+    domains = [
+        {"id": domain_id, "name": name, "descr": descr}
+        for domain_id, name, descr in db.get_domains_with_details(cert_id)
+    ]
+    return jsonify({"domains": domains})
+
+
+@app.route("/api/certification/domains", methods=["POST"])
+def certification_domain_create():
+    payload = request.get_json() or {}
+    cert_id = payload.get("certification_id")
+    name = (payload.get("name") or "").strip()
+    descr = (payload.get("descr") or "").strip() or None
+    if not cert_id or not name:
+        return jsonify({"error": "certification_id et name requis"}), 400
+    try:
+        new_id = db.create_domain(int(cert_id), name, descr)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"id": new_id, "name": name, "descr": descr})
+
+
+@app.route("/api/certification/domains/<int:domain_id>", methods=["PUT"])
+def certification_domain_update(domain_id: int):
+    payload = request.get_json() or {}
+    name = (payload.get("name") or "").strip()
+    descr = (payload.get("descr") or "").strip() or None
+    if not name:
+        return jsonify({"error": "name requis"}), 400
+    try:
+        db.update_domain(domain_id, name, descr)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"id": domain_id, "name": name, "descr": descr})
+
+
+@app.route("/api/certification/domains/<int:domain_id>", methods=["DELETE"])
+def certification_domain_delete(domain_id: int):
+    try:
+        db.delete_domain(domain_id)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"status": "deleted"})
+
+
 @app.route("/api/mcp/unpublished-certifications")
 def mcp_unpublished_certifications():
     """Return unpublished certifications with default domain metrics for MCP."""

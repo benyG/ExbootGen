@@ -260,6 +260,7 @@
     const filterUpdate = document.getElementById('filterUpdate');
     const pdfBase = "{{ url_for('pdf.index') }}";
     const populateBase = "{{ url_for('populate_index') }}";
+    const certificationBase = "{{ url_for('certification') }}";
 
     let providersCache = [];
     let certificationsCache = [];
@@ -344,8 +345,9 @@
           <a class="card-link" href="/blueprints?${baseParams}">Blueprint</a>
           <a class="card-link" href="/edit-question?${baseParams}">Question</a>
           <a class="card-link" href="/articles?${baseParams}">Article</a>
-          <a class="card-link" href="${pdfBase}?${importParams}">Import PDF</a>
-          <a class="card-link" href="${populateBase}?${baseParams}">Populate (AI)</a>
+          <a class="card-link" href="${pdfBase}?${importParams}">import</a>
+          <a class="card-link" href="${populateBase}?${baseParams}">Populate</a>
+          <a class="card-link" href="${certificationBase}?${baseParams}">CRUD</a>
         `;
         links.querySelectorAll('a').forEach(link => {
           link.addEventListener('click', (event) => event.stopPropagation());
