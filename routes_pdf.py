@@ -808,6 +808,7 @@ def import_questions_route():
 
     NATURE_MAP = {"qcm": 1, "truefalse": 2, "matching": 4, "drag-n-drop": 5}
     q_imported = 0
+    q_skipped = 0
     a_imported = 0
 
     conn = db_conn()
@@ -828,15 +829,46 @@ def import_questions_route():
                 descr_parts.append(str(q["context"]))
             q_descr = "\n".join(descr_parts) if descr_parts else None
 
-            cur.execute(
-                """
-                INSERT INTO questions (text, level, descr, nature, maxr, module)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                """,
-                (q_text, q_level, q_descr, q_nature, maxr, data["module_id"]),
-            )
-            question_id = cur.lastrowid
-            q_imported += 1
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO questions (text, level, descr, nature, maxr, module, src_file, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                    """,
+                    (
+                        q_text,
+                        q_level,
+                        q_descr,
+                        q_nature,
+                        maxr,
+                        data["module_id"],
+                        source_filename,
+                    ),
+                )
+                question_id = cur.lastrowid
+                q_imported += 1
+            except mysql.connector.Error as err:
+                if err.errno != 1062:
+                    raise
+                q_skipped += 1
+                try:
+                    cur.execute(
+                        "SELECT id, module, src_file FROM questions WHERE text = %s LIMIT 1",
+                        (q_text,),
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        existing_id, existing_module, existing_src_file = row
+                        if (existing_module != data["module_id"]) or (
+                            existing_src_file != source_filename
+                        ):
+                            cur.execute(
+                                "UPDATE questions SET module = %s, src_file = %s WHERE id = %s",
+                                (data["module_id"], source_filename, existing_id),
+                            )
+                except Exception:
+                    pass
+                continue
 
             for ans in answers:
                 raw_val = (ans.get("value") or ans.get("text") or "").strip()
@@ -873,4 +905,11 @@ def import_questions_route():
             pass
         conn.close()
 
-    return jsonify({"status": "ok", "imported_questions": q_imported, "imported_answers": a_imported})
+    return jsonify(
+        {
+            "status": "ok",
+            "imported_questions": q_imported,
+            "skipped_questions": q_skipped,
+            "imported_answers": a_imported,
+        }
+    )
