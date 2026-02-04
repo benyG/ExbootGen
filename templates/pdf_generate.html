@@ -115,6 +115,18 @@
 
     .stellar-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 0.85rem 1.6rem; border-radius: 999px; background: linear-gradient(135deg, rgba(71,245,192,0.9), rgba(124,247,255,0.85)); color: #020617; font-weight: 600; text-decoration: none; border: none; cursor: pointer; box-shadow: 0 14px 35px rgba(71, 245, 192, 0.3); transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition); }
     .stellar-button:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 18px 42px rgba(71, 245, 192, 0.38); }
+    .stellar-button.is-loading { position: relative; padding-right: 2.6rem; opacity: 0.85; }
+    .stellar-button.is-loading::after {
+      content: '';
+      position: absolute;
+      right: 1.1rem;
+      width: 0.9rem;
+      height: 0.9rem;
+      border-radius: 50%;
+      border: 2px solid rgba(148, 163, 184, 0.4);
+      border-top-color: #38bdf8;
+      animation: spin 0.8s linear infinite;
+    }
 
     .panel { border-radius: var(--radius-lg); padding: 1.8rem; background: rgba(8, 12, 24, 0.72); border: 1px solid rgba(148, 163, 184, 0.16); display: flex; flex-direction: column; gap: 1.2rem; box-shadow: 0 18px 40px rgba(3, 7, 18, 0.55); position: relative; }
 
@@ -389,10 +401,18 @@
         }
     });
 
+    const setButtonLoading = (button, isLoading) => {
+        if (!button) return;
+        button.classList.toggle('is-loading', isLoading);
+        button.disabled = isLoading;
+    };
+
     document.getElementById("generateForm").addEventListener("submit", async function(e){
         e.preventDefault();
         const overlay = document.getElementById('loadingOverlay');
         overlay.classList.add('show');
+        const submitButton = this.querySelector('button[type="submit"]');
+        setButtonLoading(submitButton, true);
         const formData = new FormData(this);
         try {
             const res = await fetch(genUrl, {method:'POST', body:formData});
@@ -408,6 +428,7 @@
             alert('Erreur réseau');
         } finally {
             overlay.classList.remove('show');
+            setButtonLoading(submitButton, false);
         }
     });
 
@@ -415,9 +436,14 @@
         if(!currentSession) return;
         const form = new FormData();
         form.append('session_id', currentSession);
-        const res = await fetch(base + 'import-questions', {method:'POST', body:form});
-        const data = await res.json();
-        alert(data.status === 'ok' ? 'Import réussi' : ('Erreur: ' + (data.message || 'import échoué')));
+        setButtonLoading(this, true);
+        try {
+          const res = await fetch(base + 'import-questions', {method:'POST', body:form});
+          const data = await res.json();
+          alert(data.status === 'ok' ? 'Import réussi' : ('Erreur: ' + (data.message || 'import échoué')));
+        } finally {
+          setButtonLoading(this, false);
+        }
     });
   </script>
 </body>

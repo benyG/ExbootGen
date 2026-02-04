@@ -113,6 +113,19 @@
     label { font-weight: 500; font-size: 0.95rem; color: var(--text-primary); display: block; margin-bottom: 0.35rem; }
     select, button { width: 100%; border-radius: 14px; border: 1px solid rgba(148, 163, 184, 0.22); padding: 0.75rem 0.95rem; background: rgba(10, 15, 28, 0.85); color: var(--text-primary); font-family: inherit; font-size: 0.95rem; transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease; }
     select:focus, button:focus { outline: none; border-color: rgba(71, 245, 192, 0.6); box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.22); }
+    button.is-loading { position: relative; padding-right: 2.4rem; opacity: 0.85; }
+    button.is-loading::after {
+      content: '';
+      position: absolute;
+      right: 1rem;
+      width: 0.9rem;
+      height: 0.9rem;
+      border-radius: 50%;
+      border: 2px solid rgba(148, 163, 184, 0.4);
+      border-top-color: #38bdf8;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     .radio-chip {
       display: inline-flex;
@@ -370,33 +383,41 @@
       initPanel('dst');
 
       document.getElementById('move-btn').addEventListener('click', async () => {
+        const moveButton = document.getElementById('move-btn');
         const srcDomValue = document.getElementById('src-dom').value;
         const dstDomValue = document.getElementById('dst-dom').value;
         if (!dstDomValue) {
           return alert('Merci de sélectionner un domaine de destination.');
         }
 
-        let srcModuleIds;
-        if (srcDomValue === '__all__') {
-          const domains = await loadJSON(`${base}api/domains/${document.getElementById('src-cert').value}`);
-          srcModuleIds = domains.map(d => d.id);
-        } else {
-          srcModuleIds = [parseInt(srcDomValue)];
+        moveButton.classList.add('is-loading');
+        moveButton.disabled = true;
+        try {
+          let srcModuleIds;
+          if (srcDomValue === '__all__') {
+            const domains = await loadJSON(`${base}api/domains/${document.getElementById('src-cert').value}`);
+            srcModuleIds = domains.map(d => d.id);
+          } else {
+            srcModuleIds = [parseInt(srcDomValue)];
+          }
+
+          updateCounterBadge(srcModuleIds);
+
+          const resp = await fetch(base + 'api/move', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source_module_ids: srcModuleIds,
+              destination_module_id: parseInt(dstDomValue)
+            })
+          });
+          const { moved } = await resp.json();
+          alert(`${moved} question(s) déplacée(s) avec succès !`);
+          location.reload();
+        } finally {
+          moveButton.classList.remove('is-loading');
+          moveButton.disabled = false;
         }
-
-        updateCounterBadge(srcModuleIds);
-
-        const resp = await fetch(base + 'api/move', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source_module_ids: srcModuleIds,
-            destination_module_id: parseInt(dstDomValue)
-          })
-        });
-        const { moved } = await resp.json();
-        alert(`${moved} question(s) déplacée(s) avec succès !`);
-        location.reload();
       });
     });
   </script>

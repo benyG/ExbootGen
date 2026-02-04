@@ -2039,23 +2039,47 @@ def mcp_schedule_status(job_id: str):
 
 @app.route("/reports")
 def reports():
-    certification_id = 23
+    providers = [{"id": row[0], "name": row[1]} for row in db.get_providers()]
+    provider_id = request.args.get("provider_id", type=int)
+    certifications = []
+    provider_cert_ids = set()
+    if provider_id:
+        certifications = [
+            {"id": row[0], "name": row[1]}
+            for row in db.get_certifications_by_provider(provider_id)
+        ]
+        provider_cert_ids = {item["id"] for item in certifications}
+    certification_id = request.args.get("cert_id", type=int)
+    if certification_id and provider_cert_ids and certification_id not in provider_cert_ids:
+        certification_id = None
+    if provider_id and not certification_id and certifications:
+        certification_id = certifications[0]["id"]
 
     futures = {
-        "domain_counts": db.execute_async(db.get_domain_question_counts_for_cert, certification_id),
+        "domain_counts": db.execute_async(
+            db.get_domain_question_counts_for_cert, certification_id
+        )
+        if certification_id
+        else None,
         "missing_correct": db.execute_async(db.get_certifications_missing_correct_answers),
         "missing_correct_domains": db.execute_async(
             db.get_domains_missing_correct_answers, certification_id
-        ),
+        )
+        if certification_id
+        else None,
         "missing_answers": db.execute_async(db.get_domains_missing_answers_by_type),
         "missing_domains": db.execute_async(db.get_certifications_without_domains),
         "question_activity": db.execute_async(db.get_question_activity_by_day, 30),
         "unpublished_report": db.execute_async(db.get_unpublished_certifications_report, True),
     }
 
-    domain_counts = futures["domain_counts"].result()
+    domain_counts = futures["domain_counts"].result() if futures["domain_counts"] else []
     missing_correct = futures["missing_correct"].result()
-    missing_correct_domains = futures["missing_correct_domains"].result()
+    missing_correct_domains = (
+        futures["missing_correct_domains"].result()
+        if futures["missing_correct_domains"]
+        else []
+    )
     missing_answers = futures["missing_answers"].result()
     missing_domains = futures["missing_domains"].result()
     question_activity_rows = futures["question_activity"].result()
@@ -2066,6 +2090,10 @@ def reports():
     activity_by_day = {day.isoformat(): [] for day in last_days}
 
     for row in question_activity_rows:
+        if certification_id and row.get("certification_id") != certification_id:
+            continue
+        if provider_cert_ids and row.get("certification_id") not in provider_cert_ids:
+            continue
         raw_day = row.get("day")
         if isinstance(raw_day, (datetime, date)):
             day_key = raw_day.date().isoformat() if isinstance(raw_day, datetime) else raw_day.isoformat()
@@ -2091,6 +2119,10 @@ def reports():
 
     unpublished_by_provider = {}
     for row in unpublished_rows:
+        if provider_id and row["provider_id"] != provider_id:
+            continue
+        if certification_id and row["cert_id"] != certification_id:
+            continue
         provider_key = row["provider_id"]
         provider_entry = unpublished_by_provider.setdefault(
             provider_key,
@@ -2119,9 +2151,46 @@ def reports():
     for provider in unpublished_providers:
         provider["certifications"].sort(key=lambda item: (item["name"] or "").lower())
 
+    if provider_cert_ids:
+        missing_correct = [
+            item for item in missing_correct if item.get("id") in provider_cert_ids
+        ]
+        missing_domains = [
+            item for item in missing_domains if item.get("id") in provider_cert_ids
+        ]
+        missing_answers = [
+            item
+            for item in missing_answers
+            if item.get("certification_id") in provider_cert_ids
+        ]
+    if certification_id:
+        missing_correct = [
+            item for item in missing_correct if item.get("id") == certification_id
+        ]
+        missing_domains = [
+            item for item in missing_domains if item.get("id") == certification_id
+        ]
+        missing_answers = [
+            item
+            for item in missing_answers
+            if item.get("certification_id") == certification_id
+        ]
+
+    certification_label = "—"
+    if certification_id:
+        match = next(
+            (item for item in certifications if item["id"] == certification_id), None
+        )
+        certification_label = match["name"] if match else str(certification_id)
+
     return render_template(
         "reports.html",
         certification_id=certification_id,
+        certification_label=certification_label,
+        providers=providers,
+        certifications=certifications,
+        selected_provider_id=provider_id,
+        selected_cert_id=certification_id,
         domain_counts=domain_counts,
         missing_correct=missing_correct,
         missing_correct_domains=missing_correct_domains,
@@ -2129,6 +2198,14 @@ def reports():
         missing_domains=missing_domains,
         question_activity=question_activity,
         unpublished_providers=unpublished_providers,
+    )
+
+
+@app.route("/reports/api/certifications/<int:provider_id>")
+def reports_certifications(provider_id: int):
+    certifications = db.get_certifications_by_provider(provider_id)
+    return jsonify(
+        [{"id": row[0], "name": row[1]} for row in certifications]
     )
 
 

@@ -82,6 +82,46 @@
     .hero-intro h1 { margin: 0 0 1rem; font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.2rem, 4vw, 2.9rem); letter-spacing: -0.01em; }
     .hero-intro p { margin: 0; color: var(--text-muted); line-height: 1.7; }
 
+    .filter-panel {
+      background: rgba(8, 12, 24, 0.7);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: var(--radius-lg);
+      padding: 1.4rem 1.8rem;
+      box-shadow: 0 18px 40px rgba(3, 7, 18, 0.45);
+    }
+    .filter-form {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      align-items: end;
+    }
+    .filter-field label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .filter-field select {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      background: rgba(10, 15, 28, 0.85);
+      color: var(--text-primary);
+      padding: 0.7rem 0.85rem;
+      font-size: 0.95rem;
+    }
+    .filter-button {
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: rgba(56, 189, 248, 0.2);
+      color: var(--text-primary);
+      font-weight: 600;
+      padding: 0.75rem 1.2rem;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .filter-button:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(56, 189, 248, 0.18); }
+
     .report-grid { display: grid; gap: 1.6rem; }
 
     .report-panel { border-radius: var(--radius-lg); padding: 1.6rem 1.8rem; background: rgba(8, 12, 24, 0.75); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: 0 18px 40px rgba(3, 7, 18, 0.55); }
@@ -150,6 +190,30 @@
     <section class="glass-card hero-intro" data-animate>
       <h1>Rapports lumineux sur vos banques de questions</h1>
       <p>Explorez les métriques clés et dépliez chaque panneau pour accéder aux détails par certification, domaine et type de question.</p>
+    </section>
+
+    <section class="filter-panel" data-animate>
+      <form id="reportFilters" class="filter-form" method="get" action="{{ url_for('reports') }}">
+        <div class="filter-field">
+          <label for="reportProvider">Provider</label>
+          <select name="provider_id" id="reportProvider">
+            <option value="">Tous les providers</option>
+            {% for provider in providers %}
+            <option value="{{ provider.id }}" {% if provider.id == selected_provider_id %}selected{% endif %}>{{ provider.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="reportCertification">Certification</label>
+          <select name="cert_id" id="reportCertification" data-selected-cert="{{ selected_cert_id or '' }}" {% if not selected_provider_id %}disabled{% endif %}>
+            <option value="">Toutes les certifications</option>
+            {% for cert in certifications %}
+            <option value="{{ cert.id }}" {% if cert.id == selected_cert_id %}selected{% endif %}>{{ cert.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="filter-button" type="submit">Appliquer</button>
+      </form>
     </section>
 
     <section class="report-grid" data-animate>
@@ -242,12 +306,14 @@
         <div class="panel-header" role="button" aria-expanded="false">
           <div>
             <span>Vue globale</span>
-            <h2>Questions par domaine — Certification {{ certification_id }}</h2>
+            <h2>Questions par domaine — Certification {{ certification_label }}</h2>
           </div>
           <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
         </div>
         <div class="panel-content">
-          {% if domain_counts %}
+          {% if not certification_id %}
+          <p style="color: var(--text-muted);">Sélectionnez une certification pour afficher ce rapport.</p>
+          {% elif domain_counts %}
           <div class="table-wrapper">
             <table>
               <thead>
@@ -453,6 +519,40 @@
     }, { threshold: 0.2 });
 
     document.querySelectorAll('[data-animate]').forEach(el => observer.observe(el));
+
+    const reportProvider = document.getElementById('reportProvider');
+    const reportCertification = document.getElementById('reportCertification');
+    let initialCertId = reportCertification?.dataset.selectedCert || '';
+
+    reportProvider?.addEventListener('change', async () => {
+      const providerId = reportProvider.value;
+      if (!reportCertification) return;
+      reportCertification.innerHTML = '<option value="">Toutes les certifications</option>';
+      reportCertification.disabled = !providerId;
+      if (!providerId) {
+        initialCertId = '';
+        return;
+      }
+      try {
+        const res = await fetch(`/reports/api/certifications/${providerId}`);
+        const data = await res.json();
+        data.forEach(cert => {
+          const option = document.createElement('option');
+          option.value = cert.id;
+          option.textContent = cert.name;
+          reportCertification.appendChild(option);
+        });
+        if (initialCertId) {
+          const match = data.find(cert => String(cert.id) === String(initialCertId));
+          if (match) {
+            reportCertification.value = match.id;
+          }
+          initialCertId = '';
+        }
+      } catch (err) {
+        reportCertification.innerHTML = '<option value="">Certifications indisponibles</option>';
+      }
+    });
 
     document.querySelectorAll('[data-panel]').forEach(panel => {
       const header = panel.querySelector('.panel-header');
