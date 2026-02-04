@@ -459,6 +459,7 @@
     let isAddMode = false;
     let isCorrectionMode = false;
     let isDuplicateMode = false;
+    let isDuplicateVerifyMode = false;
     let correctionQuestions = [];
     let correctionIndex = -1;
     let duplicateQuestions = [];
@@ -662,6 +663,7 @@
       searchStatus.textContent = 'Recherche des duplicatas…';
       resultsContainer.innerHTML = '';
       resetResultsLayout();
+      isDuplicateVerifyMode = false;
       const res = await fetch(`/edit-question/api/duplicates?certification_id=${certId}`);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -688,6 +690,7 @@
         searchStatus.textContent = 'Sélectionnez une certification pour vérifier les duplicatas.';
         return;
       }
+      isDuplicateVerifyMode = true;
       setButtonLoading(verifyDuplicatesBtn, true);
       searchStatus.textContent = 'Vérification des duplicatas exacts…';
       resultsContainer.innerHTML = '';
@@ -899,6 +902,7 @@
         resultsCount.textContent = 'Aucun résultat pour le moment.';
         searchStatus.textContent = 'Saisissez au moins un mot-clé.';
         resetResultsLayout();
+        isDuplicateVerifyMode = false;
       }
     }
 
@@ -1051,7 +1055,11 @@
             if (isCorrectionMode) {
               loadCorrectionList();
             } else if (isDuplicateMode) {
-              loadDuplicateList();
+              if (isDuplicateVerifyMode) {
+                verifyExactDuplicates();
+              } else {
+                loadDuplicateList();
+              }
             } else {
               searchQuestions();
             }
@@ -1171,6 +1179,12 @@
           saveStatus.textContent = 'Question mise à jour avec succès.';
           if (isCorrectionMode) {
             loadCorrectionList(true);
+          } else if (isDuplicateMode) {
+            if (isDuplicateVerifyMode) {
+              verifyExactDuplicates();
+            } else {
+              loadDuplicateList();
+            }
           }
         } else {
           const err = await res.json().catch(() => ({}));
@@ -1207,7 +1221,11 @@
             loadCorrectionList();
           }
           if (isDuplicateMode) {
-            loadDuplicateList();
+            if (isDuplicateVerifyMode) {
+              verifyExactDuplicates();
+            } else {
+              loadDuplicateList();
+            }
           }
         } else {
           const err = await res.json().catch(() => ({}));
