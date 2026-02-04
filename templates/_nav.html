@@ -69,6 +69,7 @@
       <span class="chevron">▸</span>
     </button>
     <div class="nav-children is-collapsed" id="nav-publishing">
+      <a href="{{ url_for('certification') }}" data-route="{{ url_for('certification') }}"{% if active_page|default('') == 'certification' %} class="active"{% endif %}>Certification</a>
       <a href="{{ url_for('articles.index') }}" data-route="{{ url_for('articles.index') }}"{% if active_page|default('') == 'articles' %} class="active"{% endif %}>Article Builder(AI)</a>
       <a href="{{ url_for('schedule') }}" data-route="{{ url_for('schedule') }}"{% if active_page|default('') == 'schedule' %} class="active"{% endif %}>Schedule</a>
       <a href="{{ url_for('pdf.export_index') }}" data-route="{{ url_for('pdf.export_index') }}"{% if active_page|default('') == 'pdf_export' %} class="active"{% endif %}>PDF Export</a>

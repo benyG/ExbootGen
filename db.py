@@ -583,6 +583,141 @@ def get_domains_by_certification(cert_id):
     return domains
 
 
+def get_certifications_by_provider_with_details(provider_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT id, name, code_cert_key, pub
+        FROM courses
+        WHERE prov = %s
+        ORDER BY name
+    """
+    cursor.execute(query, (provider_id,))
+    certifications = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return certifications
+
+
+def create_certification(provider_id: int, name: str, code: str | None) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        query = """
+            INSERT INTO courses (name, prov, code_cert_key, descr2)
+            VALUES (%s, %s, %s, %s)
+        """
+        cursor.execute(query, (name, provider_id, code, code))
+        conn.commit()
+        return cursor.lastrowid
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def update_certification(cert_id: int, name: str, code: str | None) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        query = """
+            UPDATE courses
+            SET name = %s, code_cert_key = %s, descr2 = %s
+            WHERE id = %s
+        """
+        cursor.execute(query, (name, code, code, cert_id))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def delete_certification(cert_id: int) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        conn.start_transaction()
+        cursor.execute("DELETE FROM modules WHERE course = %s", (cert_id,))
+        cursor.execute("DELETE FROM courses WHERE id = %s", (cert_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_domains_with_details(cert_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT id, name, descr
+        FROM modules
+        WHERE course = %s
+        ORDER BY name
+    """
+    cursor.execute(query, (cert_id,))
+    domains = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return domains
+
+
+def create_domain(cert_id: int, name: str, descr: str | None) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO modules (name, descr, course) VALUES (%s, %s, %s)",
+            (name, descr, cert_id),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def update_domain(domain_id: int, name: str, descr: str | None) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE modules SET name = %s, descr = %s WHERE id = %s",
+            (name, descr, domain_id),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def delete_domain(domain_id: int) -> None:
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM modules WHERE id = %s", (domain_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def get_domain_question_counts_for_cert(cert_id):
     """Return question counts per domain for a certification."""
     conn = get_connection()
