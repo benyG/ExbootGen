@@ -2207,6 +2207,22 @@ def reports_certifications(provider_id: int):
     )
 
 
+@app.route("/stats/files")
+def stats_files():
+    search_query = (request.args.get("q") or "").strip()
+    rows = db.get_pdf_import_history(search=search_query or None, limit=1000)
+    return render_template("stats_files.html", rows=rows, search_query=search_query)
+
+
+@app.route("/stats/files/delete", methods=["POST"])
+def stats_files_delete():
+    row_id = request.form.get("row_id", type=int)
+    search_query = (request.form.get("q") or "").strip()
+    if row_id is not None:
+        db.delete_pdf_import_history_row(row_id)
+    return redirect(url_for("stats_files", q=search_query))
+
+
 @app.route("/mcp")
 def mcp_monitoring():
     return render_template("mcp.html")

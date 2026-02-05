@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fichiers importés · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; --bg:#040711; --card:rgba(10,14,24,.76); --border:rgba(148,163,184,.2); --text:#f8fafc; --muted:rgba(226,232,240,.72); --danger:#f87171; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); }
+    .stellar-header { position: sticky; top: 0; z-index: 20; background: rgba(4,7,17,.9); border-bottom:1px solid var(--border); }
+    .stellar-container { width:min(1200px,92vw); margin:0 auto; padding:1rem 0 1.4rem; }
+    .stellar-top { display:flex; justify-content:space-between; align-items:center; }
+    .stellar-brand { font-family:'Space Grotesk',sans-serif; font-weight:700; }
+    .main { width:min(1200px,92vw); margin:2rem auto 3rem; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:18px; padding:1.2rem; }
+    .toolbar { display:flex; gap:.8rem; align-items:center; margin-bottom:1rem; }
+    input[type="search"] { flex:1; border-radius:12px; border:1px solid var(--border); background:rgba(10,15,28,.85); color:var(--text); padding:.7rem .9rem; }
+    .btn { border-radius:10px; border:1px solid var(--border); background:rgba(56,189,248,.16); color:var(--text); padding:.6rem .85rem; cursor:pointer; }
+    table { width:100%; border-collapse: collapse; font-size:.92rem; }
+    th, td { padding:.7rem .5rem; border-bottom:1px solid rgba(148,163,184,.15); text-align:left; }
+    .muted { color:var(--muted); }
+    .delete-btn { border-radius:10px; border:1px solid rgba(248,113,113,.4); color:#fecaca; background:rgba(127,29,29,.25); padding:.4rem .65rem; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">📁 ExBoot Laboratory</div>
+      </div>
+      {% set active_page = 'stats_files' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="card">
+      <h2>Fichiers déjà traités (pdf_import_history)</h2>
+      <p class="muted">Rechercher rapidement un fichier et supprimer les entrées obsolètes.</p>
+      <form class="toolbar" method="get" action="{{ url_for('stats_files') }}">
+        <input type="search" name="q" value="{{ search_query }}" placeholder="Rechercher un nom de fichier..." />
+        <button class="btn" type="submit">Rechercher</button>
+      </form>
+
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Fichier</th>
+            <th>Module</th>
+            <th>Date</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.row_id }}</td>
+            <td>{{ row.filename }}</td>
+            <td>{{ row.module_id if row.module_id is not none else '—' }}</td>
+            <td>{{ row.created_at if row.created_at is defined and row.created_at else '—' }}</td>
+            <td>
+              <form method="post" action="{{ url_for('stats_files_delete') }}" onsubmit="return confirm('Supprimer cette ligne ?');">
+                <input type="hidden" name="row_id" value="{{ row.row_id }}" />
+                <input type="hidden" name="q" value="{{ search_query }}" />
+                <button class="delete-btn" type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="muted">Aucun fichier trouvé.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>
