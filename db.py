@@ -20,6 +20,7 @@ reverse_ty_mapping = {value: key for key, value in ty_mapping.items()}
 
 executor = ThreadPoolExecutor(max_workers=8)
 _SCHEDULE_COLUMNS: set[str] | None = None
+_PDF_IMPORT_HISTORY_COLUMNS: set[str] | None = None
 _ALLOWED_SCORE_COLUMNS = ("score", "result", "note")
 
 
@@ -178,6 +179,73 @@ def _resolve_score_column(columns: set[str]) -> str | None:
         if col in columns:
             return col
     return None
+
+
+def _load_pdf_import_history_columns() -> set[str]:
+    """Return available columns for ``pdf_import_history``."""
+
+    global _PDF_IMPORT_HISTORY_COLUMNS
+    if _PDF_IMPORT_HISTORY_COLUMNS is not None:
+        return _PDF_IMPORT_HISTORY_COLUMNS
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SHOW COLUMNS FROM pdf_import_history")
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    _PDF_IMPORT_HISTORY_COLUMNS = {row[0] for row in rows}
+    return _PDF_IMPORT_HISTORY_COLUMNS
+
+
+def get_pdf_import_history(search: str | None = None, limit: int = 500) -> list[dict]:
+    """List imported PDF files with optional filename filtering."""
+
+    columns = _load_pdf_import_history_columns()
+    order_column = "id" if "id" in columns else "filename"
+    has_created_at = "created_at" in columns
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = f"""
+            SELECT
+                {order_column} AS row_id,
+                filename,
+                module_id,
+                {'created_at,' if has_created_at else ''}
+                module_id IS NOT NULL AS has_module
+            FROM pdf_import_history
+        """
+        params: list[object] = []
+        if search:
+            query += " WHERE filename LIKE %s"
+            params.append(f"%{search.strip()}%")
+        query += f" ORDER BY {order_column} DESC LIMIT %s"
+        params.append(max(1, int(limit)))
+        cursor.execute(query, tuple(params))
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def delete_pdf_import_history_row(row_id: int) -> bool:
+    """Delete a single import-history row by identifier."""
+
+    columns = _load_pdf_import_history_columns()
+    if "id" not in columns:
+        return False
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM pdf_import_history WHERE id = %s", (row_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def get_schedule_entries():

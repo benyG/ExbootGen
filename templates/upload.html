@@ -801,6 +801,15 @@
             title.textContent = file.filename || "Fichier PDF";
             card.appendChild(title);
 
+            if (file?.status === "already_imported") {
+                const msg = document.createElement("div");
+                msg.textContent = "⏭️ Fichier ignoré : déjà traité précédemment (aucune extraction lancée).";
+                msg.className = "report-highlight";
+                card.appendChild(msg);
+                reportPreview.appendChild(card);
+                return;
+            }
+
             if (!analysis) {
                 const msg = document.createElement("div");
                 msg.textContent = "Aucune analyse détectée pour ce fichier.";
