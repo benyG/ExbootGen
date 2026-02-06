@@ -225,6 +225,7 @@
     .step-item { display: flex; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
     .step-item.is-current { color: #7dd3fc; }
     .step-item.is-done { color: #a7f3d0; }
+    .step-item.is-skipped { color: #fde68a; }
     .step-item.is-error { color: #fca5a5; }
     .step-diagnostic { width: 100%; margin-top: 0.1rem; font-size: 0.78rem; color: #fca5a5; }
 
@@ -913,18 +914,29 @@
         const diagnostic = normalizedDiagnostics[key];
         const item = document.createElement('div');
         item.className = 'step-item';
-        if (stepNumber <= completedStep) {
+        const isSkipped = diagnostic?.status === 'skipped';
+        if (stepNumber <= completedStep && !isSkipped) {
           item.classList.add('is-done');
         } else if (stepNumber === currentStep) {
           item.classList.add('is-current');
+        }
+        if (isSkipped) {
+          item.classList.add('is-skipped');
         }
         if (failedSteps.includes(stepNumber)) {
           item.classList.add('is-error');
         }
         let diagnosticLine = '';
         if (diagnostic?.reason) {
-          const prefix = diagnostic.status === 'blocked' ? 'Bloqué' : 'Échec';
+          let prefix = 'Échec';
+          if (diagnostic.status === 'blocked') {
+            prefix = 'Bloqué';
+          } else if (diagnostic.status === 'skipped') {
+            prefix = 'Sauté';
+          }
           diagnosticLine = `<div class="step-diagnostic">${prefix} · ${diagnostic.reason}</div>`;
+        } else if (diagnostic?.status === 'skipped') {
+          diagnosticLine = '<div class="step-diagnostic">Sauté</div>';
         }
         item.innerHTML = `
           <span>Étape ${step.step ?? stepNumber} · ${step.name || 'action'}</span>
@@ -969,7 +981,10 @@
         return diagnostics;
       }
       results.forEach((result, index) => {
-        if (!result || !result.diagnostic || !result.diagnostic.reason) {
+        if (!result || !result.diagnostic) {
+          return;
+        }
+        if (!result.diagnostic.reason && result.diagnostic.status !== 'skipped') {
           return;
         }
         const key = result.step ?? index + 1;
