@@ -487,7 +487,8 @@
       const exactGroupId = extra.exactGroupId || null;
       const imageBadge = r.has_image ? '<span class="image-badge">image</span>' : '';
       const exactBadge = exactGroupId ? `<span class="exact-badge">Duplicata ${exactGroupId}</span>` : '';
-      const srcLine = extra.srcLine || (r.src_file ? `src_file : ${escapeHtml(r.src_file)}` : 'src_file non renseigné');
+      const srcLine = r.src_file ? `src_file : ${escapeHtml(r.src_file)}` : 'src_file non renseigné';
+      const metaLine = extra.metaLine ? `<small class="src">${escapeHtml(extra.metaLine)}</small>` : '';
       return `
         <article class="result-card" data-id="${r.id}"${exactGroupId ? ` data-group="${exactGroupId}"` : ''}>
           <button type="button" class="card-delete" data-id="${r.id}" title="Supprimer la question" aria-label="Supprimer la question">🗑️</button>
@@ -496,6 +497,7 @@
           ${imageBadge}
           ${exactBadge}
           <small>${escapeHtml(r.provider || 'Provider ?')} · ${escapeHtml(r.certification || 'Certification ?')}</small>
+          ${metaLine}
           <small class="src">${srcLine}</small>
         </article>
       `;
@@ -624,7 +626,7 @@
         const issue = r.answer_count === 0
           ? 'Sans réponse'
           : 'Aucune bonne réponse';
-        return getResultCardHtml(r, { srcLine: issue });
+        return getResultCardHtml(r, { metaLine: issue });
       }).join('');
       setActiveResultCard(currentQuestionId);
       if (correctionQuestions.length) {
@@ -679,7 +681,7 @@
         ? 'Cliquez sur une carte pour ouvrir la question et supprimer les doublons.'
         : 'Aucun duplicata détecté pour cette certification.';
       resultsContainer.innerHTML = duplicateQuestions.map(r => getResultCardHtml(r, {
-        srcLine: `Duplicata (groupe ${r.duplicate_count})`,
+        metaLine: `Duplicata (groupe ${r.duplicate_count})`,
       })).join('');
       setActiveResultCard(currentQuestionId);
     }
@@ -722,7 +724,6 @@
             <div class="duplicate-group-grid">
               ${(group.items || []).map(item => getResultCardHtml(item, {
                 exactGroupId: group.group_id,
-                srcLine: item.src_file ? `src_file : ${escapeHtml(item.src_file)}` : 'src_file non renseigné',
               })).join('')}
             </div>
           </div>
