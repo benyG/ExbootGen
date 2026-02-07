@@ -21,6 +21,14 @@ DB_CONFIG = {
     "password": os.environ.get("DB_PASSWORD", ""),
     "database": os.environ.get("DB_NAME", ""),
 }
+DB_POOL_NAME = os.environ.get("DB_POOL_NAME", "examboot_pool")
+DB_POOL_SIZE = int(os.environ.get("DB_POOL_SIZE", "8"))
+DB_POOL_RESET_SESSION = os.environ.get("DB_POOL_RESET_SESSION", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+DB_EXECUTOR_MAX_WORKERS = int(os.environ.get("DB_EXECUTOR_MAX_WORKERS", "8"))
 
 # ---------------------------------------------------------------------------
 # OpenAI configuration

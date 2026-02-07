@@ -1,10 +1,18 @@
 import mysql.connector
+from mysql.connector import pooling
 import logging
 import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, date, time, timedelta
+from threading import Lock
 from typing import Iterable, Optional, Union
-from config import DB_CONFIG
+from config import (
+    DB_CONFIG,
+    DB_EXECUTOR_MAX_WORKERS,
+    DB_POOL_NAME,
+    DB_POOL_RESET_SESSION,
+    DB_POOL_SIZE,
+)
 
 # Valeurs de niveau : easy→0, medium→1, hard→2
 level_mapping = {"easy": 0, "medium": 1, "hard": 2}
@@ -18,10 +26,12 @@ reverse_level_mapping = {value: key for key, value in level_mapping.items()}
 reverse_nature_mapping = {value: key for key, value in nature_mapping.items()}
 reverse_ty_mapping = {value: key for key, value in ty_mapping.items()}
 
-executor = ThreadPoolExecutor(max_workers=8)
+executor = ThreadPoolExecutor(max_workers=DB_EXECUTOR_MAX_WORKERS)
 _SCHEDULE_COLUMNS: set[str] | None = None
 _PDF_IMPORT_HISTORY_COLUMNS: set[str] | None = None
 _ALLOWED_SCORE_COLUMNS = ("score", "result", "note")
+_POOL: pooling.MySQLConnectionPool | None = None
+_POOL_LOCK = Lock()
 
 
 def _safe_json_loads(raw, default=None):
@@ -68,12 +78,17 @@ def execute_async(func, *args, **kwargs):
 
 
 def get_connection():
-    return mysql.connector.connect(
-        host=DB_CONFIG["host"],
-        user=DB_CONFIG["user"],
-        password=DB_CONFIG["password"],
-        database=DB_CONFIG["database"],
-    )
+    global _POOL
+    if _POOL is None:
+        with _POOL_LOCK:
+            if _POOL is None:
+                _POOL = pooling.MySQLConnectionPool(
+                    pool_name=DB_POOL_NAME,
+                    pool_size=DB_POOL_SIZE,
+                    pool_reset_session=DB_POOL_RESET_SESSION,
+                    **DB_CONFIG,
+                )
+    return _POOL.get_connection()
 
 
 def _dict_from_schedule_row(row, columns):

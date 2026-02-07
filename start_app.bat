@@ -12,6 +12,10 @@ set "DB_HOST=127.0.0.1"
 set "DB_USER=exbootgen"
 set "DB_PASSWORD=mot-de-passe-a-remplacer"
 set "DB_NAME=exbootgen"
+set "DB_POOL_NAME=examboot_pool"
+set "DB_POOL_SIZE=8"
+set "DB_POOL_RESET_SESSION=true"
+set "DB_EXECUTOR_MAX_WORKERS=8"
 
 REM === Paramètres OpenAI ===
 set "OPENAI_API_KEY=sk-remplacez-moi"
