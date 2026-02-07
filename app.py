@@ -134,6 +134,11 @@ app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "exboot-secret-key")
 # Enforce a maximum duration of inactivity before sessions expire.
 app.permanent_session_lifetime = timedelta(minutes=SESSION_INACTIVITY_MINUTES)
 
+WEBHOOK_EVENTS: List[Dict[str, object]] = []
+WEBHOOK_EVENT_LOCK = Lock()
+WEBHOOK_EVENT_LIMIT = 200
+WEBHOOK_EVENT_COUNTER = 0
+
 
 def _ensure_login_template() -> None:
     """Guarantee that a login template exists even in truncated deployments."""
@@ -1953,7 +1958,7 @@ def _current_relative_url() -> str:
 def require_login():
     """Protect the application with a simple session-based login check."""
 
-    allowed_endpoints = {"login", "static"}
+    allowed_endpoints = {"login", "static", "webhook_receiver"}
     if request.endpoint in allowed_endpoints or request.endpoint is None:
         return None
 
@@ -2221,6 +2226,45 @@ def stats_files_delete():
     if row_id is not None:
         db.delete_pdf_import_history_row(row_id)
     return redirect(url_for("stats_files", q=search_query))
+
+
+@app.route("/stats/webhook")
+def stats_webhook():
+    with WEBHOOK_EVENT_LOCK:
+        events = list(WEBHOOK_EVENTS)[-50:]
+    return render_template("webhook.html", events=events)
+
+
+@app.route("/stats/webhook/events")
+def stats_webhook_events():
+    after_id = request.args.get("after", type=int) or 0
+    with WEBHOOK_EVENT_LOCK:
+        events = [event for event in WEBHOOK_EVENTS if event["id"] > after_id]
+    return jsonify({"events": events})
+
+
+@app.route("/webhook", methods=["POST"])
+def webhook_receiver():
+    global WEBHOOK_EVENT_COUNTER
+    data = request.get_json(silent=True)
+    if data is None:
+        raw_payload = request.data.decode("utf-8", errors="replace")
+        data = {"raw": raw_payload}
+
+    payload = {
+        "received_at": datetime.utcnow().isoformat() + "Z",
+        "source_ip": request.headers.get("X-Forwarded-For", request.remote_addr),
+        "data": data,
+    }
+
+    with WEBHOOK_EVENT_LOCK:
+        WEBHOOK_EVENT_COUNTER += 1
+        payload["id"] = WEBHOOK_EVENT_COUNTER
+        WEBHOOK_EVENTS.append(payload)
+        if len(WEBHOOK_EVENTS) > WEBHOOK_EVENT_LIMIT:
+            WEBHOOK_EVENTS[:] = WEBHOOK_EVENTS[-WEBHOOK_EVENT_LIMIT:]
+
+    return jsonify({"status": "ok"})
 
 
 @app.route("/mcp")

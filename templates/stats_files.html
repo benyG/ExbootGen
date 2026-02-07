@@ -8,13 +8,29 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root { color-scheme: dark; --bg:#040711; --card:rgba(10,14,24,.76); --border:rgba(148,163,184,.2); --text:#f8fafc; --muted:rgba(226,232,240,.72); --danger:#f87171; }
+    :root { color-scheme: dark; --bg:#050814; --card:rgba(10,14,24,.76); --border:rgba(255,255,255,0.08); --text:#f8fafc; --muted:rgba(226,232,240,.72); --danger:#f87171; --accent:#5cf1c7; --accent-strong:#7cf7ff; }
     * { box-sizing: border-box; }
-    body { margin:0; min-height:100vh; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); }
-    .stellar-header { position: sticky; top: 0; z-index: 20; background: rgba(4,7,17,.9); border-bottom:1px solid var(--border); }
-    .stellar-container { width:min(1200px,92vw); margin:0 auto; padding:1rem 0 1.4rem; }
+    body {
+      margin:0;
+      min-height:100vh;
+      font-family:'Inter',sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(92,241,199,0.18), transparent 40%),
+                  radial-gradient(circle at 75% 10%, rgba(124,247,255,0.18), transparent 45%),
+                  radial-gradient(circle at 50% 80%, rgba(244,114,182,0.14), transparent 55%),
+                  var(--bg);
+      color:var(--text);
+    }
+    .stellar-header { position: sticky; top: 0; z-index: 20; background: rgba(5,8,20,.8); backdrop-filter: blur(14px); border-bottom:1px solid var(--border); }
+    .stellar-container { width:min(1200px,94vw); margin:0 auto; padding:1rem 0 1.25rem; }
     .stellar-top { display:flex; justify-content:space-between; align-items:center; }
-    .stellar-brand { font-family:'Space Grotesk',sans-serif; font-weight:700; }
+    .stellar-brand { display:flex; align-items:center; gap:0.9rem; font-family:'Space Grotesk',sans-serif; font-weight:700; }
+    .brand-mark { width:2.75rem; height:2.75rem; display:grid; place-items:center; border-radius:16px; background:linear-gradient(135deg, rgba(92,241,199,0.16), rgba(124,247,255,0.18)); border:1px solid var(--border); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06); color:var(--accent-strong); letter-spacing:0.08em; font-weight:700; }
+    .brand-text strong { display:block; letter-spacing:0.02em; }
+    .brand-text span { color:var(--muted); font-size:0.9rem; }
+    .stellar-nav { display:flex; flex-wrap:wrap; gap:0.4rem; margin-top:1rem; }
+    .stellar-nav a { color:var(--muted); text-decoration:none; padding:0.55rem 0.9rem; border-radius:12px; border:1px solid transparent; transition:0.2s ease; }
+    .stellar-nav a:hover { color:var(--text); border-color:var(--border); background:rgba(255,255,255,0.04); }
+    .stellar-nav a.active { color:#0b172a; background:var(--accent); border-color:transparent; }
     .main { width:min(1200px,92vw); margin:2rem auto 3rem; }
     .card { background:var(--card); border:1px solid var(--border); border-radius:18px; padding:1.2rem; }
     .toolbar { display:flex; gap:.8rem; align-items:center; margin-bottom:1rem; }
@@ -30,7 +46,13 @@
   <header class="stellar-header">
     <div class="stellar-container">
       <div class="stellar-top">
-        <div class="stellar-brand">📁 ExBoot Laboratory</div>
+        <div class="stellar-brand">
+          <span class="brand-mark">EX</span>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Fichiers importés</span>
+          </div>
+        </div>
       </div>
       {% set active_page = 'stats_files' %}
       {% include '_nav.html' %}
