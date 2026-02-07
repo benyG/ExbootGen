@@ -94,6 +94,7 @@
       <a href="{{ url_for('dashboard') }}" data-route="{{ url_for('dashboard') }}"{% if active_page|default('') == 'dashboard' %} class="active"{% endif %}>Dashboard</a>
       <a href="{{ url_for('reports') }}" data-route="{{ url_for('reports') }}"{% if active_page|default('') == 'reports' %} class="active"{% endif %}>Reports</a>
       <a href="{{ url_for('stats_files') }}" data-route="{{ url_for('stats_files') }}"{% if active_page|default('') == 'stats_files' %} class="active"{% endif %}>Files</a>
+      <a href="{{ url_for('stats_webhook') }}" data-route="{{ url_for('stats_webhook') }}"{% if active_page|default('') == 'webhook' %} class="active"{% endif %}>Webhook</a>
       <a href="{{ url_for('planner') }}" data-route="{{ url_for('planner') }}"{% if active_page|default('') == 'planner' %} class="active"{% endif %}>Planner</a>
       <a href="{{ url_for('mcp_client') }}" data-route="{{ url_for('mcp_client') }}"{% if active_page|default('') == 'mcp_client' %} class="active"{% endif %}>Client MCP</a>
     </div>
