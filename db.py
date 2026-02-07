@@ -263,6 +263,73 @@ def delete_pdf_import_history_row(row_id: int) -> bool:
         conn.close()
 
 
+def insert_webhook_event(
+    received_at: datetime,
+    source_ip: str | None,
+    payload: dict,
+    *,
+    headers: dict | None = None,
+) -> int:
+    """Persist a webhook event and return the inserted id."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO webhook_events (received_at, source_ip, payload, headers)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (
+                received_at,
+                source_ip,
+                _json_dumps(payload),
+                _json_dumps(headers),
+            ),
+        )
+        conn.commit()
+        return int(cursor.lastrowid)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_webhook_events(after_id: int = 0, limit: int = 200) -> list[dict]:
+    """Fetch webhook events from the database."""
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT id, received_at, source_ip, payload, headers
+            FROM webhook_events
+            WHERE id > %s
+            ORDER BY id ASC
+            LIMIT %s
+            """,
+            (after_id, limit),
+        )
+        rows = cursor.fetchall() or []
+    finally:
+        cursor.close()
+        conn.close()
+
+    events = []
+    for row in rows:
+        received_at = row.get("received_at")
+        if isinstance(received_at, datetime):
+            received_at = received_at.isoformat() + "Z"
+        event = {
+            "id": row.get("id"),
+            "received_at": received_at,
+            "source_ip": row.get("source_ip"),
+            "data": _safe_json_loads(row.get("payload"), row.get("payload")),
+        }
+        events.append(event)
+    return events
+
+
 def get_schedule_entries():
     """Fetch all stored schedule entries."""
 

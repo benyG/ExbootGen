@@ -4,6 +4,7 @@ import json
 import time
 import threading
 import uuid
+from collections import deque
 from urllib.parse import urlparse
 from textwrap import dedent
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -134,10 +135,12 @@ app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "exboot-secret-key")
 # Enforce a maximum duration of inactivity before sessions expire.
 app.permanent_session_lifetime = timedelta(minutes=SESSION_INACTIVITY_MINUTES)
 
-WEBHOOK_EVENTS: List[Dict[str, object]] = []
-WEBHOOK_EVENT_LOCK = Lock()
 WEBHOOK_EVENT_LIMIT = 200
+WEBHOOK_EVENTS: deque[Dict[str, object]] = deque(maxlen=WEBHOOK_EVENT_LIMIT)
+WEBHOOK_EVENT_LOCK = Lock()
 WEBHOOK_EVENT_COUNTER = 0
+WEBHOOK_REDIS_KEY = os.getenv("WEBHOOK_REDIS_KEY", "exboot:webhook_events")
+WEBHOOK_REDIS_CLIENT = None
 
 
 def _ensure_login_template() -> None:
@@ -217,6 +220,98 @@ def _env_float(name: str) -> float | None:
         return float(raw_value)
     except ValueError as exc:
         raise ValueError(f"{name} doit être un nombre") from exc
+
+
+def _get_webhook_redis_url() -> str | None:
+    url = os.getenv("WEBHOOK_REDIS_URL") or os.getenv("REDIS_URL")
+    if url:
+        return url
+    broker_url = getattr(celery_app.conf, "broker_url", None)
+    if isinstance(broker_url, str) and broker_url.startswith("redis://"):
+        return broker_url
+    return None
+
+
+def _get_webhook_redis_client():
+    global WEBHOOK_REDIS_CLIENT
+    if WEBHOOK_REDIS_CLIENT is not None:
+        return WEBHOOK_REDIS_CLIENT
+
+    redis_url = _get_webhook_redis_url()
+    if not redis_url:
+        return None
+
+    try:
+        import redis
+    except ImportError:  # pragma: no cover - optional dependency
+        app.logger.debug("Redis client unavailable: package not installed.")
+        return None
+
+    socket_options = _redis_socket_options_from_env()
+    socket_options.setdefault("socket_keepalive", True)
+    socket_options.setdefault(
+        "health_check_interval",
+        _env_int("WEBHOOK_REDIS_HEALTHCHECK_INTERVAL", 30, minimum=0),
+    )
+    socket_timeout = _env_float("WEBHOOK_REDIS_SOCKET_TIMEOUT")
+    if socket_timeout is not None:
+        socket_options.setdefault("socket_timeout", socket_timeout)
+    socket_connect_timeout = _env_float("WEBHOOK_REDIS_SOCKET_CONNECT_TIMEOUT")
+    if socket_connect_timeout is not None:
+        socket_options.setdefault("socket_connect_timeout", socket_connect_timeout)
+
+    try:
+        WEBHOOK_REDIS_CLIENT = redis.Redis.from_url(
+            redis_url,
+            decode_responses=True,
+            **socket_options,
+        )
+        return WEBHOOK_REDIS_CLIENT
+    except redis.exceptions.RedisError as exc:  # pragma: no cover - runtime path
+        app.logger.warning("Redis webhook client unavailable: %s", exc)
+        WEBHOOK_REDIS_CLIENT = None
+        return None
+
+
+def _push_webhook_buffer(event: Dict[str, object]) -> None:
+    client = _get_webhook_redis_client()
+    if client is not None:
+        try:
+            client.lpush(WEBHOOK_REDIS_KEY, json.dumps(event, ensure_ascii=False))
+            client.ltrim(WEBHOOK_REDIS_KEY, 0, WEBHOOK_EVENT_LIMIT - 1)
+            return
+        except RedisError as exc:  # pragma: no cover - runtime path
+            app.logger.warning("Redis webhook buffer failed: %s", exc)
+
+    with WEBHOOK_EVENT_LOCK:
+        WEBHOOK_EVENTS.append(event)
+
+
+def _load_webhook_buffer(after_id: int = 0) -> List[Dict[str, object]]:
+    client = _get_webhook_redis_client()
+    if client is not None:
+        try:
+            raw_items = client.lrange(WEBHOOK_REDIS_KEY, 0, WEBHOOK_EVENT_LIMIT - 1)
+            events: List[Dict[str, object]] = []
+            for raw in reversed(raw_items):
+                try:
+                    event = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(event, dict):
+                    continue
+                events.append(event)
+            if after_id:
+                events = [event for event in events if event.get("id", 0) > after_id]
+            return events
+        except RedisError as exc:  # pragma: no cover - runtime path
+            app.logger.warning("Redis webhook buffer read failed: %s", exc)
+
+    with WEBHOOK_EVENT_LOCK:
+        events = list(WEBHOOK_EVENTS)
+    if after_id:
+        events = [event for event in events if event.get("id", 0) > after_id]
+    return events
 
 
 def _mcp_token_valid() -> bool:
@@ -2230,16 +2325,25 @@ def stats_files_delete():
 
 @app.route("/stats/webhook")
 def stats_webhook():
-    with WEBHOOK_EVENT_LOCK:
-        events = list(WEBHOOK_EVENTS)[-50:]
+    events = _load_webhook_buffer()
+    if not events:
+        try:
+            events = db.get_webhook_events(limit=50)
+        except Exception as exc:  # pragma: no cover - runtime path
+            app.logger.warning("Lecture webhook DB impossible: %s", exc)
     return render_template("webhook.html", events=events)
 
 
 @app.route("/stats/webhook/events")
 def stats_webhook_events():
     after_id = request.args.get("after", type=int) or 0
-    with WEBHOOK_EVENT_LOCK:
-        events = [event for event in WEBHOOK_EVENTS if event["id"] > after_id]
+    events = _load_webhook_buffer(after_id=after_id)
+    if not events:
+        try:
+            events = db.get_webhook_events(after_id=after_id, limit=WEBHOOK_EVENT_LIMIT)
+        except Exception as exc:  # pragma: no cover - runtime path
+            app.logger.warning("Lecture webhook DB impossible: %s", exc)
+            events = []
     return jsonify({"events": events})
 
 
@@ -2251,18 +2355,29 @@ def webhook_receiver():
         raw_payload = request.data.decode("utf-8", errors="replace")
         data = {"raw": raw_payload}
 
-    payload = {
-        "received_at": datetime.utcnow().isoformat() + "Z",
-        "source_ip": request.headers.get("X-Forwarded-For", request.remote_addr),
+    received_at = datetime.utcnow()
+    source_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    headers = dict(request.headers)
+
+    payload: Dict[str, object] = {
+        "received_at": received_at.isoformat() + "Z",
+        "source_ip": source_ip,
         "data": data,
     }
 
-    with WEBHOOK_EVENT_LOCK:
-        WEBHOOK_EVENT_COUNTER += 1
-        payload["id"] = WEBHOOK_EVENT_COUNTER
-        WEBHOOK_EVENTS.append(payload)
-        if len(WEBHOOK_EVENTS) > WEBHOOK_EVENT_LIMIT:
-            WEBHOOK_EVENTS[:] = WEBHOOK_EVENTS[-WEBHOOK_EVENT_LIMIT:]
+    event_id: int | None = None
+    try:
+        event_id = db.insert_webhook_event(received_at, source_ip, data, headers=headers)
+    except Exception as exc:  # pragma: no cover - runtime path
+        app.logger.warning("Insertion webhook DB impossible: %s", exc)
+
+    if event_id is None:
+        with WEBHOOK_EVENT_LOCK:
+            WEBHOOK_EVENT_COUNTER += 1
+            event_id = WEBHOOK_EVENT_COUNTER
+
+    payload["id"] = event_id
+    _push_webhook_buffer(payload)
 
     return jsonify({"status": "ok"})
 
