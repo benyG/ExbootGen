@@ -47,9 +47,14 @@
     .muted { color: var(--muted); }
     .url-box { margin-top: 0.8rem; padding: 0.75rem 1rem; border-radius: 12px; border: 1px solid rgba(94, 234, 212, 0.25); background: rgba(56, 189, 248, 0.12); font-family: 'Space Grotesk', sans-serif; font-size: 0.95rem; }
     .events { display: grid; gap: 0.9rem; }
-    .event-card { border-radius: 14px; border: 1px solid rgba(148, 163, 184, 0.2); background: rgba(12, 16, 28, 0.85); padding: 1rem; }
-    .event-meta { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-bottom: 0.6rem; font-size: 0.82rem; color: var(--muted); }
-    .event-meta strong { color: var(--text); font-weight: 600; }
+    .event-card { border-radius: 14px; border: 1px solid rgba(148, 163, 184, 0.2); background: rgba(12, 16, 28, 0.85); }
+    .event-card details { border-radius: 14px; overflow: hidden; }
+    .event-card summary { list-style: none; cursor: pointer; padding: 0.95rem 1rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.9rem; font-size: 0.85rem; color: var(--muted); }
+    .event-card summary::-webkit-details-marker { display: none; }
+    .event-card summary::after { content: '▾'; margin-left: auto; color: var(--accent-strong); transition: transform 0.2s ease; }
+    .event-card details[open] summary::after { transform: rotate(180deg); }
+    .event-card summary strong { color: var(--text); font-weight: 600; }
+    .event-body { padding: 0 1rem 1rem; }
     pre { margin: 0; white-space: pre-wrap; word-break: break-word; background: rgba(7, 10, 18, 0.9); border-radius: 12px; padding: 0.85rem; border: 1px solid rgba(148, 163, 184, 0.16); font-size: 0.85rem; }
     .empty { text-align: center; padding: 2rem; border: 1px dashed rgba(148, 163, 184, 0.3); border-radius: 16px; color: var(--muted); }
   </style>
@@ -101,10 +106,27 @@
     let lastId = 0;
 
     const formatPayload = (event) => ({
+      id: event.id,
       received_at: event.received_at,
       source_ip: event.source_ip,
       data: event.data,
     });
+
+    const pickEventName = (event) => {
+      const data = event?.data;
+      if (data && typeof data === 'object') {
+        const candidates = ['name', 'event', 'type', 'action', 'status'];
+        for (const key of candidates) {
+          if (typeof data[key] === 'string' && data[key].trim()) {
+            return data[key];
+          }
+        }
+        if (typeof data.event === 'object' && typeof data.event.name === 'string') {
+          return data.event.name;
+        }
+      }
+      return 'Évènement webhook';
+    };
 
     const updateCount = () => {
       const count = eventsContainer.children.length;
@@ -117,15 +139,20 @@
       wrapper.className = 'event-card';
       wrapper.dataset.eventId = event.id;
 
-      const meta = document.createElement('div');
-      meta.className = 'event-meta';
-      meta.innerHTML = `<strong>#${event.id}</strong> <span>${event.received_at}</span> <span>IP: ${event.source_ip || 'N/A'}</span>`;
+      const details = document.createElement('details');
+      const summary = document.createElement('summary');
+      const name = pickEventName(event);
+      summary.innerHTML = `<strong>#${event.id}</strong> <span>${name}</span> <span>${event.received_at}</span> <span>IP: ${event.source_ip || 'N/A'}</span>`;
 
+      const body = document.createElement('div');
+      body.className = 'event-body';
       const pre = document.createElement('pre');
       pre.textContent = JSON.stringify(formatPayload(event), null, 2);
 
-      wrapper.appendChild(meta);
-      wrapper.appendChild(pre);
+      body.appendChild(pre);
+      details.appendChild(summary);
+      details.appendChild(body);
+      wrapper.appendChild(details);
 
       if (prepend) {
         eventsContainer.prepend(wrapper);
