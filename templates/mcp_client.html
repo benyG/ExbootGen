@@ -337,7 +337,7 @@
         </div>
         <div>
           <label for="planSearchRoot">search_root</label>
-          <input id="planSearchRoot" type="text" placeholder="C:\dumps\dumps" value="C:\dumps\dumps">
+          <input id="planSearchRoot" type="text" placeholder="C:\dumps\dumps">
         </div>
       </div>
       <div class="progress-panel" id="planProgress" style="margin-top: 1.2rem;">
@@ -1097,7 +1097,7 @@
         workers: 4,
         fix_action: 'assign',
         blueprint_mode: 'missing',
-        search_root: document.getElementById('planSearchRoot').value.trim() || 'C:\\\\dumps\\\\dumps',
+        search_root: document.getElementById('planSearchRoot').value.trim() || null,
         file_paths: parseLineList(document.getElementById('planFilePaths').value || ''),
       };
 
