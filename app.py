@@ -4,6 +4,8 @@ import json
 import time
 import threading
 import uuid
+import hashlib
+import hmac
 from collections import deque
 from urllib.parse import urlparse
 from textwrap import dedent
@@ -2350,10 +2352,36 @@ def stats_webhook_events():
 @app.route("/webhook", methods=["POST"])
 def webhook_receiver():
     global WEBHOOK_EVENT_COUNTER
+    secret = os.getenv("EXAMBOOT_WEBHOOK_SECRET")
+    if not secret:
+        app.logger.error("Secret webhook manquant: EXAMBOOT_WEBHOOK_SECRET")
+        return jsonify({"status": "error", "error": "missing webhook secret"}), 500
+
+    raw_body = request.get_data()
+    signature_header = request.headers.get("X-Webhook-Signature", "")
+    signature_value = signature_header.split("=", 1)[-1].strip()
+    expected_signature = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    if not signature_value or not hmac.compare_digest(signature_value, expected_signature):
+        return jsonify({"status": "error", "error": "invalid signature"}), 401
+
     data = request.get_json(silent=True)
     if data is None:
-        raw_payload = request.data.decode("utf-8", errors="replace")
-        data = {"raw": raw_payload}
+        return jsonify({"status": "error", "error": "invalid json"}), 400
+
+    header_event_id = request.headers.get("X-Webhook-Event-Id")
+    header_sent_at = request.headers.get("X-Webhook-Sent-At")
+    payload_event_id = data.get("event_id") if isinstance(data, dict) else None
+
+    if not header_event_id or not header_sent_at or not payload_event_id:
+        return (
+            jsonify({"status": "error", "error": "missing webhook id or sent_at"}),
+            400,
+        )
+    if str(payload_event_id) != str(header_event_id):
+        return (
+            jsonify({"status": "error", "error": "event_id mismatch"}),
+            400,
+        )
 
     received_at = datetime.utcnow()
     source_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
@@ -2362,14 +2390,26 @@ def webhook_receiver():
     payload: Dict[str, object] = {
         "received_at": received_at.isoformat() + "Z",
         "source_ip": source_ip,
+        "event_id": header_event_id,
+        "sent_at": header_sent_at,
         "data": data,
     }
 
     event_id: int | None = None
     try:
-        event_id = db.insert_webhook_event(received_at, source_ip, data, headers=headers)
+        existing_event_id = db.get_webhook_event_by_event_id(str(header_event_id))
+        if existing_event_id is not None:
+            return jsonify({"status": "duplicate", "id": existing_event_id}), 200
+        event_id = db.insert_webhook_event(
+            received_at,
+            source_ip,
+            data,
+            event_id=str(header_event_id),
+            headers=headers,
+        )
     except Exception as exc:  # pragma: no cover - runtime path
         app.logger.warning("Insertion webhook DB impossible: %s", exc)
+        return jsonify({"status": "error", "error": "storage failure"}), 500
 
     if event_id is None:
         with WEBHOOK_EVENT_LOCK:

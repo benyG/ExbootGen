@@ -268,27 +268,68 @@ def insert_webhook_event(
     source_ip: str | None,
     payload: dict,
     *,
+    event_id: str | None = None,
     headers: dict | None = None,
 ) -> int:
     """Persist a webhook event and return the inserted id."""
 
     conn = get_connection()
     cursor = conn.cursor()
+    columns = ["received_at", "source_ip", "payload", "headers"]
+    values = [
+        received_at,
+        source_ip,
+        _json_dumps(payload),
+        _json_dumps(headers),
+    ]
+    if event_id and "event_id" in _get_table_columns("webhook_events"):
+        columns.append("event_id")
+        values.append(event_id)
     try:
         cursor.execute(
-            """
-            INSERT INTO webhook_events (received_at, source_ip, payload, headers)
-            VALUES (%s, %s, %s, %s)
+            f"""
+            INSERT INTO webhook_events ({', '.join(columns)})
+            VALUES ({', '.join(['%s'] * len(columns))})
             """,
-            (
-                received_at,
-                source_ip,
-                _json_dumps(payload),
-                _json_dumps(headers),
-            ),
+            tuple(values),
         )
         conn.commit()
         return int(cursor.lastrowid)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_webhook_event_by_event_id(event_id: str) -> int | None:
+    """Fetch the webhook event id for a given event_id if it exists."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        if "event_id" in _get_table_columns("webhook_events"):
+            cursor.execute(
+                """
+                SELECT id
+                FROM webhook_events
+                WHERE event_id = %s
+                LIMIT 1
+                """,
+                (event_id,),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT id
+                FROM webhook_events
+                WHERE JSON_UNQUOTE(JSON_EXTRACT(payload, '$.event_id')) = %s
+                LIMIT 1
+                """,
+                (event_id,),
+            )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return int(row[0])
     finally:
         cursor.close()
         conn.close()
