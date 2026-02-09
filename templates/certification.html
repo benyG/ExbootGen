@@ -179,8 +179,12 @@
               <input type="text" id="certName" placeholder="Nom de certification">
             </div>
             <div class="control-group">
-              <label for="certCode">Code</label>
-              <input type="text" id="certCode" placeholder="Code certification">
+              <label for="certCode">Code cert key</label>
+              <input type="text" id="certCode" placeholder="code_cert_key">
+            </div>
+            <div class="control-group">
+              <label for="certDescr2">Description interne</label>
+              <input type="text" id="certDescr2" placeholder="descr2">
             </div>
           </div>
           <div class="form-actions">
@@ -203,6 +207,10 @@
             <div class="control-group">
               <label for="domainDescr">Description</label>
               <textarea id="domainDescr" placeholder="Description du domaine"></textarea>
+            </div>
+            <div class="control-group">
+              <label for="domainCodeCert">Code certification</label>
+              <input type="text" id="domainCodeCert" placeholder="code_cert">
             </div>
           </div>
           <div class="form-actions">
@@ -236,6 +244,7 @@
     const certStatus = document.getElementById('certStatus');
     const certName = document.getElementById('certName');
     const certCode = document.getElementById('certCode');
+    const certDescr2 = document.getElementById('certDescr2');
     const certCreate = document.getElementById('certCreate');
     const certSave = document.getElementById('certSave');
     const certDelete = document.getElementById('certDelete');
@@ -245,6 +254,7 @@
     const domainStatus = document.getElementById('domainStatus');
     const domainName = document.getElementById('domainName');
     const domainDescr = document.getElementById('domainDescr');
+    const domainCodeCert = document.getElementById('domainCodeCert');
     const domainCreate = document.getElementById('domainCreate');
     const domainSave = document.getElementById('domainSave');
     const domainDelete = document.getElementById('domainDelete');
@@ -281,12 +291,14 @@
     const clearCertForm = () => {
       certName.value = '';
       certCode.value = '';
+      certDescr2.value = '';
       selectedCertId = null;
     };
 
     const clearDomainForm = () => {
       domainName.value = '';
       domainDescr.value = '';
+      domainCodeCert.value = '';
       selectedDomainId = null;
     };
 
@@ -307,7 +319,7 @@
         item.innerHTML = `
           <div>
             <div>${cert.name}</div>
-            <div class="meta">ID ${cert.id}${cert.code ? ` · Code ${cert.code}` : ''}</div>
+            <div class="meta">ID ${cert.id}${cert.code ? ` · Code ${cert.code}` : ''}${cert.descr2 ? ` · ${cert.descr2}` : ''}</div>
           </div>
           <div class="meta">${Number(cert.pub ?? 0) ? 'Publié' : 'Hors ligne'}</div>
         `;
@@ -315,6 +327,7 @@
           selectedCertId = cert.id;
           certName.value = cert.name || '';
           certCode.value = cert.code || '';
+          certDescr2.value = cert.descr2 || '';
           renderCertifications();
           loadDomains(cert.id);
         });
@@ -339,7 +352,7 @@
         item.innerHTML = `
           <div>
             <div>${domain.name}</div>
-            <div class="meta">${domain.descr ? domain.descr : '—'}</div>
+            <div class="meta">${domain.descr ? domain.descr : '—'}${domain.code_cert ? ` · ${domain.code_cert}` : ''}</div>
           </div>
           <div class="meta">ID ${domain.id}</div>
         `;
@@ -347,6 +360,7 @@
           selectedDomainId = domain.id;
           domainName.value = domain.name || '';
           domainDescr.value = domain.descr || '';
+          domainCodeCert.value = domain.code_cert || '';
           renderDomains();
         });
         domainList.appendChild(item);
@@ -406,6 +420,7 @@
           const selected = certificationsCache.find(cert => Number(cert.id) === Number(selectedCertId));
           certName.value = selected?.name || '';
           certCode.value = selected?.code || '';
+          certDescr2.value = selected?.descr2 || '';
         } else {
           clearCertForm();
         }
@@ -441,6 +456,7 @@
           const selected = domainsCache.find(domain => Number(domain.id) === Number(selectedDomainId));
           domainName.value = selected?.name || '';
           domainDescr.value = selected?.descr || '';
+          domainCodeCert.value = selected?.code_cert || '';
         } else {
           clearDomainForm();
         }
@@ -465,6 +481,7 @@
       }
       const name = certName.value.trim();
       const code = certCode.value.trim();
+      const descr2 = certDescr2.value.trim();
       if (!name) {
         certStatus.textContent = 'Le nom de certification est requis.';
         return;
@@ -473,9 +490,15 @@
         const payload = await fetchJSON('/api/certification/certifications', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider_id: providerSelect.value, name, code })
+          body: JSON.stringify({ provider_id: providerSelect.value, name, code, descr2 })
         });
-        certificationsCache.push({ id: payload.id, name: payload.name, code: payload.code, pub: 0 });
+        certificationsCache.push({
+          id: payload.id,
+          name: payload.name,
+          code: payload.code,
+          descr2: payload.descr2,
+          pub: 0
+        });
         selectedCertId = payload.id;
         renderCertifications();
         certStatus.textContent = 'Certification créée.';
@@ -492,6 +515,7 @@
       }
       const name = certName.value.trim();
       const code = certCode.value.trim();
+      const descr2 = certDescr2.value.trim();
       if (!name) {
         certStatus.textContent = 'Le nom de certification est requis.';
         return;
@@ -500,12 +524,13 @@
         await fetchJSON(`/api/certification/certifications/${selectedCertId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, code })
+          body: JSON.stringify({ name, code, descr2 })
         });
         const match = certificationsCache.find(cert => Number(cert.id) === Number(selectedCertId));
         if (match) {
           match.name = name;
           match.code = code || null;
+          match.descr2 = descr2 || null;
         }
         renderCertifications();
         certStatus.textContent = 'Certification mise à jour.';
@@ -544,6 +569,7 @@
       }
       const name = domainName.value.trim();
       const descr = domainDescr.value.trim();
+      const codeCert = domainCodeCert.value.trim();
       if (!name) {
         domainStatus.textContent = 'Le nom du domaine est requis.';
         return;
@@ -552,9 +578,14 @@
         const payload = await fetchJSON('/api/certification/domains', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ certification_id: selectedCertId, name, descr })
+          body: JSON.stringify({ certification_id: selectedCertId, name, descr, code_cert: codeCert })
         });
-        domainsCache.push({ id: payload.id, name: payload.name, descr: payload.descr });
+        domainsCache.push({
+          id: payload.id,
+          name: payload.name,
+          descr: payload.descr,
+          code_cert: payload.code_cert
+        });
         selectedDomainId = payload.id;
         renderDomains();
         domainStatus.textContent = 'Domaine créé.';
@@ -570,6 +601,7 @@
       }
       const name = domainName.value.trim();
       const descr = domainDescr.value.trim();
+      const codeCert = domainCodeCert.value.trim();
       if (!name) {
         domainStatus.textContent = 'Le nom du domaine est requis.';
         return;
@@ -578,12 +610,13 @@
         await fetchJSON(`/api/certification/domains/${selectedDomainId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, descr })
+          body: JSON.stringify({ name, descr, code_cert: codeCert })
         });
         const match = domainsCache.find(domain => Number(domain.id) === Number(selectedDomainId));
         if (match) {
           match.name = name;
           match.descr = descr || null;
+          match.code_cert = codeCert || null;
         }
         renderDomains();
         domainStatus.textContent = 'Domaine mis à jour.';

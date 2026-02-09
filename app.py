@@ -2414,8 +2414,8 @@ def certification_providers():
 @app.route("/api/certification/certifications/<int:provider_id>")
 def certification_certifications(provider_id: int):
     certifications = [
-        {"id": cert_id, "name": name, "code": code, "pub": pub}
-        for cert_id, name, code, pub in db.get_certifications_by_provider_with_details(provider_id)
+        {"id": cert_id, "name": name, "code": code, "descr2": descr2, "pub": pub}
+        for cert_id, name, code, descr2, pub in db.get_certifications_by_provider_with_details(provider_id)
     ]
     return jsonify({"certifications": certifications})
 
@@ -2426,13 +2426,14 @@ def certification_create():
     provider_id = payload.get("provider_id")
     name = (payload.get("name") or "").strip()
     code = (payload.get("code") or "").strip() or None
+    descr2 = (payload.get("descr2") or "").strip() or None
     if not provider_id or not name:
         return jsonify({"error": "provider_id et name requis"}), 400
     try:
-        new_id = db.create_certification(int(provider_id), name, code)
+        new_id = db.create_certification(int(provider_id), name, code, descr2)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
-    return jsonify({"id": new_id, "name": name, "code": code})
+    return jsonify({"id": new_id, "name": name, "code": code, "descr2": descr2})
 
 
 @app.route("/api/certification/certifications/<int:cert_id>", methods=["PUT"])
@@ -2440,13 +2441,14 @@ def certification_update(cert_id: int):
     payload = request.get_json() or {}
     name = (payload.get("name") or "").strip()
     code = (payload.get("code") or "").strip() or None
+    descr2 = (payload.get("descr2") or "").strip() or None
     if not name:
         return jsonify({"error": "name requis"}), 400
     try:
-        db.update_certification(cert_id, name, code)
+        db.update_certification(cert_id, name, code, descr2)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
-    return jsonify({"id": cert_id, "name": name, "code": code})
+    return jsonify({"id": cert_id, "name": name, "code": code, "descr2": descr2})
 
 
 @app.route("/api/certification/certifications/<int:cert_id>", methods=["DELETE"])
@@ -2461,8 +2463,8 @@ def certification_delete(cert_id: int):
 @app.route("/api/certification/certifications/<int:cert_id>/domains")
 def certification_domains(cert_id: int):
     domains = [
-        {"id": domain_id, "name": name, "descr": descr}
-        for domain_id, name, descr in db.get_domains_with_details(cert_id)
+        {"id": domain_id, "name": name, "descr": descr, "code_cert": code_cert}
+        for domain_id, name, descr, code_cert in db.get_domains_with_details(cert_id)
     ]
     return jsonify({"domains": domains})
 
@@ -2473,13 +2475,14 @@ def certification_domain_create():
     cert_id = payload.get("certification_id")
     name = (payload.get("name") or "").strip()
     descr = (payload.get("descr") or "").strip() or None
+    code_cert = (payload.get("code_cert") or "").strip() or None
     if not cert_id or not name:
         return jsonify({"error": "certification_id et name requis"}), 400
     try:
-        new_id = db.create_domain(int(cert_id), name, descr)
+        new_id = db.create_domain(int(cert_id), name, descr, code_cert)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
-    return jsonify({"id": new_id, "name": name, "descr": descr})
+    return jsonify({"id": new_id, "name": name, "descr": descr, "code_cert": code_cert})
 
 
 @app.route("/api/certification/domains/<int:domain_id>", methods=["PUT"])
@@ -2487,13 +2490,14 @@ def certification_domain_update(domain_id: int):
     payload = request.get_json() or {}
     name = (payload.get("name") or "").strip()
     descr = (payload.get("descr") or "").strip() or None
+    code_cert = (payload.get("code_cert") or "").strip() or None
     if not name:
         return jsonify({"error": "name requis"}), 400
     try:
-        db.update_domain(domain_id, name, descr)
+        db.update_domain(domain_id, name, descr, code_cert)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
-    return jsonify({"id": domain_id, "name": name, "descr": descr})
+    return jsonify({"id": domain_id, "name": name, "descr": descr, "code_cert": code_cert})
 
 
 @app.route("/api/certification/domains/<int:domain_id>", methods=["DELETE"])

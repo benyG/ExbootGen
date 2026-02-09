@@ -737,7 +737,7 @@ def get_certifications_by_provider_with_details(provider_id: int):
     conn = get_connection()
     cursor = conn.cursor()
     query = """
-        SELECT id, name, code_cert_key, pub
+        SELECT id, name, code_cert_key, descr2, pub
         FROM courses
         WHERE prov = %s
         ORDER BY name
@@ -749,7 +749,12 @@ def get_certifications_by_provider_with_details(provider_id: int):
     return certifications
 
 
-def create_certification(provider_id: int, name: str, code: str | None) -> int:
+def create_certification(
+    provider_id: int,
+    name: str,
+    code: str | None,
+    descr2: str | None,
+) -> int:
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -757,7 +762,7 @@ def create_certification(provider_id: int, name: str, code: str | None) -> int:
             INSERT INTO courses (name, prov, code_cert_key, descr2)
             VALUES (%s, %s, %s, %s)
         """
-        cursor.execute(query, (name, provider_id, code, code))
+        cursor.execute(query, (name, provider_id, code, descr2))
         conn.commit()
         return cursor.lastrowid
     except Exception:
@@ -768,7 +773,7 @@ def create_certification(provider_id: int, name: str, code: str | None) -> int:
         conn.close()
 
 
-def update_certification(cert_id: int, name: str, code: str | None) -> None:
+def update_certification(cert_id: int, name: str, code: str | None, descr2: str | None) -> None:
     conn = get_connection()
     cursor = conn.cursor()
     try:
@@ -777,7 +782,7 @@ def update_certification(cert_id: int, name: str, code: str | None) -> None:
             SET name = %s, code_cert_key = %s, descr2 = %s
             WHERE id = %s
         """
-        cursor.execute(query, (name, code, code, cert_id))
+        cursor.execute(query, (name, code, descr2, cert_id))
         conn.commit()
     except Exception:
         conn.rollback()
@@ -807,7 +812,7 @@ def get_domains_with_details(cert_id: int):
     conn = get_connection()
     cursor = conn.cursor()
     query = """
-        SELECT id, name, descr
+        SELECT id, name, descr, code_cert
         FROM modules
         WHERE course = %s
         ORDER BY name
@@ -819,13 +824,13 @@ def get_domains_with_details(cert_id: int):
     return domains
 
 
-def create_domain(cert_id: int, name: str, descr: str | None) -> int:
+def create_domain(cert_id: int, name: str, descr: str | None, code_cert: str | None) -> int:
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "INSERT INTO modules (name, descr, course) VALUES (%s, %s, %s)",
-            (name, descr, cert_id),
+            "INSERT INTO modules (name, descr, course, code_cert) VALUES (%s, %s, %s, %s)",
+            (name, descr, cert_id, code_cert),
         )
         conn.commit()
         return cursor.lastrowid
@@ -837,13 +842,13 @@ def create_domain(cert_id: int, name: str, descr: str | None) -> int:
         conn.close()
 
 
-def update_domain(domain_id: int, name: str, descr: str | None) -> None:
+def update_domain(domain_id: int, name: str, descr: str | None, code_cert: str | None) -> None:
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "UPDATE modules SET name = %s, descr = %s WHERE id = %s",
-            (name, descr, domain_id),
+            "UPDATE modules SET name = %s, descr = %s, code_cert = %s WHERE id = %s",
+            (name, descr, code_cert, domain_id),
         )
         conn.commit()
     except Exception:
