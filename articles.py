@@ -106,10 +106,30 @@ BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 CAROUSEL_TEMPLATE_PATH = BASE_DIR / "docs" / "Caroussel-Template-ExamBoot.pdf"
-CAROUSEL_TEXT_PADDING = 32
-CAROUSEL_HEADLINE_RATIO = 0.28
-CAROUSEL_SUBTEXT_RATIO = 0.34
-CAROUSEL_KEY_MESSAGE_RATIO = 0.38
+CAROUSEL_FRAME_X_PADDING_RATIO = 0.07
+CAROUSEL_HEADLINE_Y_START_RATIO = 0.23
+CAROUSEL_HEADLINE_Y_END_RATIO = 0.59
+CAROUSEL_SUBTEXT_Y_START_RATIO = 0.59
+CAROUSEL_SUBTEXT_Y_END_RATIO = 0.69
+CAROUSEL_KEY_MESSAGE_Y_OFFSET_RATIO = 0.025
+CAROUSEL_KEY_MESSAGE_HEIGHT_RATIO = 0.05
+CAROUSEL_KEY_MESSAGE_X_INSET_RATIO = 0.2
+CAROUSEL_LINE_HEIGHT = 1.12
+CAROUSEL_TITLE_COLOR = (0.13, 0.77, 0.37)
+CAROUSEL_SUBTEXT_COLOR = (0.22, 0.22, 0.22)
+CAROUSEL_CTA_COLOR = (0.22, 0.22, 0.22)
+CAROUSEL_FONT_CANDIDATES = (
+    ("Poppins", "Poppins-Regular.ttf", "Poppins-Bold.ttf"),
+    ("Montserrat", "Montserrat-Regular.ttf", "Montserrat-Bold.ttf"),
+    ("DejaVu Sans", "DejaVuSans.ttf", "DejaVuSans-Bold.ttf"),
+)
+CAROUSEL_FONT_SEARCH_PATHS = (
+    BASE_DIR / "fonts",
+    Path("/usr/share/fonts"),
+    Path("/usr/local/share/fonts"),
+    Path("/usr/share/fonts/truetype"),
+    Path("/usr/share/fonts/truetype/dejavu"),
+)
 
 
 class SocialImageError(RuntimeError):
@@ -403,12 +423,41 @@ def _find_carousel_frame_rect(page: fitz.Page) -> fitz.Rect:
     return max(frame_candidates, key=lambda r: r.get_area())
 
 
+def _find_font_file(filename: str) -> Optional[Path]:
+    for base in CAROUSEL_FONT_SEARCH_PATHS:
+        if not base.exists():
+            continue
+        candidate = base / filename
+        if candidate.exists():
+            return candidate
+        for match in base.rglob(filename):
+            return match
+    return None
+
+
+def _resolve_carousel_fonts() -> tuple[str, Optional[Path], str, Optional[Path]]:
+    """Return (regular_fontname, regular_fontfile, bold_fontname, bold_fontfile)."""
+
+    for fontname, regular_name, bold_name in CAROUSEL_FONT_CANDIDATES:
+        regular_path = _find_font_file(regular_name)
+        bold_path = _find_font_file(bold_name)
+        if regular_path and bold_path:
+            return fontname, regular_path, f"{fontname} Bold", bold_path
+        if regular_path:
+            return fontname, regular_path, fontname, regular_path
+
+    return "helvetica", None, "helvetica-bold", None
+
+
 def _fit_font_size(
     text: str,
     target_rect: fitz.Rect,
     fontname: str,
+    fontfile: Optional[Path],
     max_size: int,
     min_size: int,
+    line_height: float,
+    align: int,
 ) -> int:
     """Return the largest font size that fits within the target rectangle."""
 
@@ -425,7 +474,9 @@ def _fit_font_size(
             clean_text,
             fontsize=size,
             fontname=fontname,
-            align=0,
+            fontfile=str(fontfile) if fontfile else None,
+            align=align,
+            lineheight=line_height,
         )
         temp_doc.close()
         if result >= 0:
@@ -439,8 +490,12 @@ def _insert_text_block(
     rect: fitz.Rect,
     text: str,
     fontname: str,
+    fontfile: Optional[Path],
     max_size: int,
     min_size: int,
+    line_height: float,
+    align: int,
+    color: tuple[float, float, float],
 ) -> None:
     """Insert text into the page ensuring it fits within the rectangle."""
 
@@ -448,14 +503,25 @@ def _insert_text_block(
     if not clean_text:
         return
 
-    font_size = _fit_font_size(clean_text, rect, fontname, max_size, min_size)
+    font_size = _fit_font_size(
+        clean_text,
+        rect,
+        fontname,
+        fontfile,
+        max_size,
+        min_size,
+        line_height,
+        align,
+    )
     page.insert_textbox(
         rect,
         clean_text,
         fontsize=font_size,
         fontname=fontname,
-        align=0,
-        color=(0, 0, 0),
+        fontfile=str(fontfile) if fontfile else None,
+        align=align,
+        color=color,
+        lineheight=line_height,
     )
 
 
@@ -474,35 +540,43 @@ def _build_carousel_pdf(pages: list[dict]) -> Path:
         output.close()
         raise ValueError("Le template du carrousel ne contient pas assez de pages.")
 
-    frame_rect = _find_carousel_frame_rect(template.load_page(1))
-    content_rect = fitz.Rect(
-        frame_rect.x0 + CAROUSEL_TEXT_PADDING,
-        frame_rect.y0 + CAROUSEL_TEXT_PADDING,
-        frame_rect.x1 - CAROUSEL_TEXT_PADDING,
-        frame_rect.y1 - CAROUSEL_TEXT_PADDING,
-    )
+    (
+        regular_fontname,
+        regular_fontfile,
+        bold_fontname,
+        bold_fontfile,
+    ) = _resolve_carousel_fonts()
 
-    total_height = content_rect.height
-    headline_height = total_height * CAROUSEL_HEADLINE_RATIO
-    subtext_height = total_height * CAROUSEL_SUBTEXT_RATIO
+    frame_rect = _find_carousel_frame_rect(template.load_page(1))
+    page_rect = template.load_page(1).rect
+
+    content_rect = fitz.Rect(
+        frame_rect.x0 + frame_rect.width * CAROUSEL_FRAME_X_PADDING_RATIO,
+        frame_rect.y0,
+        frame_rect.x1 - frame_rect.width * CAROUSEL_FRAME_X_PADDING_RATIO,
+        frame_rect.y1,
+    )
 
     headline_rect = fitz.Rect(
         content_rect.x0,
-        content_rect.y0,
+        frame_rect.y0 + frame_rect.height * CAROUSEL_HEADLINE_Y_START_RATIO,
         content_rect.x1,
-        content_rect.y0 + headline_height,
+        frame_rect.y0 + frame_rect.height * CAROUSEL_HEADLINE_Y_END_RATIO,
     )
     subtext_rect = fitz.Rect(
         content_rect.x0,
-        headline_rect.y1,
+        frame_rect.y0 + frame_rect.height * CAROUSEL_SUBTEXT_Y_START_RATIO,
         content_rect.x1,
-        headline_rect.y1 + subtext_height,
+        frame_rect.y0 + frame_rect.height * CAROUSEL_SUBTEXT_Y_END_RATIO,
     )
+
+    key_message_top = frame_rect.y1 - frame_rect.height * CAROUSEL_KEY_MESSAGE_Y_OFFSET_RATIO
+    key_message_bottom = key_message_top + frame_rect.height * CAROUSEL_KEY_MESSAGE_HEIGHT_RATIO
     key_message_rect = fitz.Rect(
-        content_rect.x0,
-        subtext_rect.y1,
-        content_rect.x1,
-        content_rect.y1,
+        frame_rect.x0 + frame_rect.width * CAROUSEL_KEY_MESSAGE_X_INSET_RATIO,
+        key_message_top,
+        frame_rect.x1 - frame_rect.width * CAROUSEL_KEY_MESSAGE_X_INSET_RATIO,
+        min(key_message_bottom, page_rect.y1 - 8),
     )
 
     for idx, page_payload in enumerate(pages, start=1):
@@ -513,25 +587,37 @@ def _build_carousel_pdf(pages: list[dict]) -> Path:
             page,
             headline_rect,
             page_payload.get("headline", ""),
-            fontname="helvetica-bold",
-            max_size=36,
-            min_size=18,
+            fontname=bold_fontname,
+            fontfile=bold_fontfile,
+            max_size=52,
+            min_size=34,
+            line_height=CAROUSEL_LINE_HEIGHT,
+            align=1,
+            color=CAROUSEL_TITLE_COLOR,
         )
         _insert_text_block(
             page,
             subtext_rect,
             page_payload.get("subtext", ""),
-            fontname="helvetica",
-            max_size=24,
-            min_size=14,
+            fontname=regular_fontname,
+            fontfile=regular_fontfile,
+            max_size=32,
+            min_size=20,
+            line_height=CAROUSEL_LINE_HEIGHT,
+            align=1,
+            color=CAROUSEL_SUBTEXT_COLOR,
         )
         _insert_text_block(
             page,
             key_message_rect,
             page_payload.get("key_message", ""),
-            fontname="helvetica",
-            max_size=22,
-            min_size=12,
+            fontname=bold_fontname,
+            fontfile=bold_fontfile,
+            max_size=24,
+            min_size=16,
+            line_height=CAROUSEL_LINE_HEIGHT,
+            align=1,
+            color=CAROUSEL_CTA_COLOR,
         )
 
     filename = f"carousel_{uuid.uuid4().hex}.pdf"
