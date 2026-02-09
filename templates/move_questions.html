@@ -111,8 +111,9 @@
     .panel h2 { margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 1.35rem; letter-spacing: 0.04em; }
 
     label { font-weight: 500; font-size: 0.95rem; color: var(--text-primary); display: block; margin-bottom: 0.35rem; }
-    select, button { width: 100%; border-radius: 14px; border: 1px solid rgba(148, 163, 184, 0.22); padding: 0.75rem 0.95rem; background: rgba(10, 15, 28, 0.85); color: var(--text-primary); font-family: inherit; font-size: 0.95rem; transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease; }
-    select:focus, button:focus { outline: none; border-color: rgba(71, 245, 192, 0.6); box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.22); }
+    select, button, input[type="text"] { width: 100%; border-radius: 14px; border: 1px solid rgba(148, 163, 184, 0.22); padding: 0.75rem 0.95rem; background: rgba(10, 15, 28, 0.85); color: var(--text-primary); font-family: inherit; font-size: 0.95rem; transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease; }
+    select:focus, button:focus, input[type="text"]:focus { outline: none; border-color: rgba(71, 245, 192, 0.6); box-shadow: 0 0 0 3px rgba(71, 245, 192, 0.22); }
+    input[type="checkbox"] { accent-color: var(--accent); }
     button.is-loading { position: relative; padding-right: 2.4rem; opacity: 0.85; }
     button.is-loading::after {
       content: '';
@@ -139,6 +140,34 @@
       text-transform: uppercase;
       letter-spacing: 0.18em;
       color: rgba(226, 232, 240, 0.72);
+    }
+
+    .source-file-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.45rem 0.85rem;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(10, 15, 28, 0.5);
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .source-file-fields {
+      display: none;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .source-file-fields.is-active {
+      display: flex;
+    }
+
+    .field-hint {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin: 0.1rem 0 0;
     }
 
     .action-bar { display: flex; justify-content: center; }
@@ -199,6 +228,15 @@
     <section class="panel-grid" data-animate>
       <div class="panel" data-label="source">
         <h2>Source</h2>
+        <label class="source-file-toggle" for="src-file-mode">
+          <input type="checkbox" id="src-file-mode">
+          Mode source file
+        </label>
+        <div class="source-file-fields" id="source-file-fields">
+          <label for="src-file-name">Nom exact du fichier</label>
+          <input type="text" id="src-file-name" placeholder="ex : questions_appliquées.json">
+          <p class="field-hint">Les questions dont le champ <strong>src_file</strong> correspond seront déplacées.</p>
+        </div>
         <div>
           <label for="src-prov">Provider</label>
           <select id="src-prov"></select>
@@ -354,15 +392,23 @@
       const dstCert = document.getElementById('dst-cert');
       const dstDom = document.getElementById('dst-dom');
       const summaryText = document.getElementById('summaryText');
+      const sourceFileMode = document.getElementById('src-file-mode');
+      const sourceFileName = document.getElementById('src-file-name');
 
-      const srcText = `${srcProv.options[srcProv.selectedIndex]?.text || ''} → ${srcCert.options[srcCert.selectedIndex]?.text || ''} → ${srcDom.options[srcDom.selectedIndex]?.text || ''}`;
+      const srcText = sourceFileMode?.checked
+        ? `Fichier source : ${sourceFileName?.value || '—'}`
+        : `${srcProv.options[srcProv.selectedIndex]?.text || ''} → ${srcCert.options[srcCert.selectedIndex]?.text || ''} → ${srcDom.options[srcDom.selectedIndex]?.text || ''}`;
       const dstText = `${dstProv.options[dstProv.selectedIndex]?.text || ''} → ${dstCert.options[dstCert.selectedIndex]?.text || ''} → ${dstDom.options[dstDom.selectedIndex]?.text || ''}`;
 
       summaryText.textContent = `De ${srcText} vers ${dstText}`;
     }
 
-    async function updateCounterBadge(moduleIds) {
+    async function updateCounterBadge({ moduleIds = [], sourceFileMode = false } = {}) {
       const badge = document.getElementById('counterBadge');
+      if (sourceFileMode) {
+        badge.textContent = 'Filtrage par fichier source';
+        return;
+      }
       if (!moduleIds.length) {
         badge.textContent = '0 question(s) prévues';
         return;
@@ -381,35 +427,68 @@
     document.addEventListener('DOMContentLoaded', () => {
       initPanel('src');
       initPanel('dst');
+      const sourceFileToggle = document.getElementById('src-file-mode');
+      const sourceFileFields = document.getElementById('source-file-fields');
+      const sourceFileInput = document.getElementById('src-file-name');
+      const srcProv = document.getElementById('src-prov');
+      const srcCert = document.getElementById('src-cert');
+      const srcDom = document.getElementById('src-dom');
+
+      const setSourceFileMode = (enabled) => {
+        sourceFileFields.classList.toggle('is-active', enabled);
+        [srcProv, srcCert, srcDom].forEach(el => {
+          if (el) {
+            el.disabled = enabled;
+          }
+        });
+        updateSummary();
+        updateCounterBadge({ moduleIds: [], sourceFileMode: enabled });
+      };
+
+      sourceFileToggle.addEventListener('change', (event) => {
+        setSourceFileMode(event.target.checked);
+      });
+
+      sourceFileInput.addEventListener('input', updateSummary);
+      setSourceFileMode(sourceFileToggle.checked);
 
       document.getElementById('move-btn').addEventListener('click', async () => {
         const moveButton = document.getElementById('move-btn');
         const srcDomValue = document.getElementById('src-dom').value;
         const dstDomValue = document.getElementById('dst-dom').value;
+        const sourceFileMode = document.getElementById('src-file-mode').checked;
+        const sourceFileName = document.getElementById('src-file-name').value.trim();
         if (!dstDomValue) {
           return alert('Merci de sélectionner un domaine de destination.');
+        }
+        if (sourceFileMode && !sourceFileName) {
+          return alert('Merci de saisir le nom exact du fichier source.');
         }
 
         moveButton.classList.add('is-loading');
         moveButton.disabled = true;
         try {
-          let srcModuleIds;
-          if (srcDomValue === '__all__') {
-            const domains = await loadJSON(`${base}api/domains/${document.getElementById('src-cert').value}`);
-            srcModuleIds = domains.map(d => d.id);
+          let payload = { destination_module_id: parseInt(dstDomValue) };
+          if (sourceFileMode) {
+            payload.source_file_mode = true;
+            payload.source_file_name = sourceFileName;
+            updateCounterBadge({ moduleIds: [], sourceFileMode: true });
           } else {
-            srcModuleIds = [parseInt(srcDomValue)];
+            let srcModuleIds;
+            if (srcDomValue === '__all__') {
+              const domains = await loadJSON(`${base}api/domains/${document.getElementById('src-cert').value}`);
+              srcModuleIds = domains.map(d => d.id);
+            } else {
+              srcModuleIds = [parseInt(srcDomValue)];
+            }
+            payload.source_module_ids = srcModuleIds;
+            updateCounterBadge({ moduleIds: srcModuleIds, sourceFileMode: false });
           }
-
-          updateCounterBadge(srcModuleIds);
 
           const resp = await fetch(base + 'api/move', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              source_module_ids: srcModuleIds,
-              destination_module_id: parseInt(dstDomValue)
-            })
+            body: JSON.stringify(payload)
           });
           const { moved } = await resp.json();
           alert(`${moved} question(s) déplacée(s) avec succès !`);
