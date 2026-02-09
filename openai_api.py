@@ -232,104 +232,77 @@ Add a link  {{exam_url}} to the shareable test and encourage users to share thei
 }
 
 LINKEDIN_CAROUSEL_PROMPT_TEMPLATE = """
-You are an expert in LinkedIn marketing, B2B copywriting, and personal branding.
+You are a LinkedIn expert (B2B, personal branding, copywriting).
 
 Objective:
-Create a 5-page LinkedIn carousel with high engagement (hook, value, clarity, call to action).
+Create a 5-page LinkedIn carousel that is highly engaging, clear, and easy to read on mobile.
 
 User input:
 
 [QUESTION_TO_ADDRESS]
 
 General constraints:
-
-- Target audience: professionals, executives, decision-makers, tech/business profiles
+- Audience: professionals, decision-makers, tech/business profiles
 - Tone: clear, engaging, credible, value-oriented
-- Style: short, impactful sentences, easy to read on mobile
-- No excessive emojis (0 to 2 max per page)
-- Each page must encourage users to swipe to the next
+- Style: short sentences, strong visual impact, fast to read
+- 0 to 2 emojis max per page
+- Each page must encourage the reader to swipe
+- Respond in English
+
+Layout constraints (to fit a precise visual template):
+- headline: 4 to 9 words, ≤ 55 characters, no lists, no line breaks.
+- subtext: 1 to 2 short sentences, ≤ 120 characters, no lists, no line breaks.
+- key_message: micro-CTA (3 to 6 words), ≤ 32 characters, start with an action verb.
 
 Required structure:
-You must ONLY answer with a valid JSON object (no text before or after).
+You MUST respond only with valid JSON (no text before/after).
 
-Expected JSON output format:
-
-{
-
-"pages": [
-{
-"page_number": 1,
-"role": "Highly catchy hook (question, promise, or statistic)",
-
-"headline": "",
-
-"subtext": "",
-
-"key_message": ""
-
-},
+Expected JSON format:
 
 {
-"page_number": 2,
-
-"role": "Main problem or tension/context, Key insight",
-
-"headline": "",
-
-"subtext": "",
-
-"key_message": ""
-
-},
-
-{
-"page_number": 3,
-
-"role": "Solution / Revelation",
-
-"headline": "",
-
-"subtext": "",
-
-"key_message": ""
-
-},
-
-{
-"page_number": 4,
-
-"role": "Solution / Revelation",
-
-"headline": "",
-
-"subtext": "",
-
-"key_message": ""
-
-},
-{
-"page_number": 5,
-
-"role": "Proof / Differentiation",
-
-"headline": "",
-
-"subtext": "",
-
-"key_message": ""
-
+  "pages": [
+    {
+      "page_number": 1,
+      "role": "Ultra-captivating hook (question, promise, or stat)",
+      "headline": "",
+      "subtext": "",
+      "key_message": ""
+    },
+    {
+      "page_number": 2,
+      "role": "Problem / tension + key insight",
+      "headline": "",
+      "subtext": "",
+      "key_message": ""
+    },
+    {
+      "page_number": 3,
+      "role": "Solution / revelation",
+      "headline": "",
+      "subtext": "",
+      "key_message": ""
+    },
+    {
+      "page_number": 4,
+      "role": "Solution / revelation (continued)",
+      "headline": "",
+      "subtext": "",
+      "key_message": ""
+    },
+    {
+      "page_number": 5,
+      "role": "Proof / differentiation + CTA",
+      "headline": "",
+      "subtext": "",
+      "key_message": ""
+    }
+  ]
 }
 
-]
-
-}
-
-Quality Guidelines:
-
-- Page 1: Strong hook, scroll-stopping
-- Pages 2 to 5: Provide real value (no fluff)
-
-- Content must be actionable or thought-provoking
+Quality rules:
+- Page 1: strong hook, stop-scrolling
+- Pages 2 to 5: concrete value, zero fluff
+- Each page must be actionable or thought-provoking
 - JSON must be strictly valid
 """
 
