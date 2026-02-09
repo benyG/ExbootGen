@@ -1,3 +1,4 @@
+import os
 from flask import Blueprint, render_template, jsonify, request, g
 import mysql.connector
 from config import DB_CONFIG
@@ -25,7 +26,8 @@ def close_db(exc):
 
 @move_bp.route('/')
 def index():
-    return render_template('move_questions.html')
+    default_pdf_dir = os.environ.get("DEFAULT_PDF_DIR", r"C:\\dumps\\dumps")
+    return render_template('move_questions.html', default_pdf_dir=default_pdf_dir)
 
 @move_bp.route('/api/providers')
 def api_providers():
@@ -84,9 +86,9 @@ def api_move():
             """
             UPDATE questions
                SET module = %s
-             WHERE src_file = %s
+             WHERE src_file LIKE %s
             """,
-            (dst_module, source_file_name)
+            (dst_module, f"{source_file_name}%")
         )
     else:
         placeholders = ','.join(['%s'] * len(src_modules))

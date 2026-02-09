@@ -170,6 +170,26 @@
       margin: 0.1rem 0 0;
     }
 
+    .file-results {
+      margin: 0;
+      padding: 0.4rem 0 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      max-height: 160px;
+      overflow-y: auto;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+    }
+
+    .file-results li {
+      padding: 0.35rem 0.6rem;
+      border-radius: 10px;
+      background: rgba(10, 15, 28, 0.55);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
     .action-bar { display: flex; justify-content: center; }
     #move-btn { width: auto; padding: 0.95rem 2.4rem; background: linear-gradient(135deg, rgba(71,245,192,0.9), rgba(124,247,255,0.85)); color: #020617; font-weight: 600; cursor: pointer; border: none; border-radius: 999px; box-shadow: 0 14px 35px rgba(71, 245, 192, 0.28); transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition); }
     #move-btn:hover { transform: translateY(-3px); box-shadow: 0 18px 42px rgba(71,245,192,0.38); }
@@ -234,8 +254,11 @@
         </label>
         <div class="source-file-fields" id="source-file-fields">
           <label for="src-file-name">Nom exact du fichier</label>
-          <input type="text" id="src-file-name" placeholder="ex : questions_appliquées.json">
-          <p class="field-hint">Les questions dont le champ <strong>src_file</strong> correspond seront déplacées.</p>
+          <input type="text" id="src-file-name" placeholder="ex : questions_appliquées.json" list="source-file-list">
+          <datalist id="source-file-list"></datalist>
+          <p class="field-hint">Recherche dans <strong>{{ default_pdf_dir }}</strong> (même répertoire que l'import PDF).</p>
+          <ul class="file-results" id="source-file-results"></ul>
+          <p class="field-hint">Les questions dont le champ <strong>src_file</strong> commence par votre saisie seront déplacées.</p>
         </div>
         <div>
           <label for="src-prov">Provider</label>
@@ -344,6 +367,8 @@
     }
 
     const base = '{{ url_for('move.index') }}';
+    const pdfBase = '{{ url_for('pdf.index') }}';
+    const defaultPdfDir = {{ default_pdf_dir|tojson }};
 
     async function initPanel(prefix) {
       const prov = document.getElementById(prefix + '-prov');
@@ -353,6 +378,7 @@
 
       const provSearch = window.makeSelectSearchable ? window.makeSelectSearchable(prov, { placeholder: 'Rechercher un provider…' }) : null;
       const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(cert, { placeholder: 'Rechercher une certification…' }) : null;
+      const domSearch = window.makeSelectSearchable ? window.makeSelectSearchable(dom, { placeholder: 'Rechercher un domaine…' }) : null;
 
       const provs = await loadJSON(base + 'api/providers');
       fillSelect(prov, provs);
@@ -375,6 +401,7 @@
       cert.addEventListener('change', async () => {
         const ds = await loadJSON(`${base}api/domains/${cert.value}`);
         fillSelect(dom, ds, isSource);
+        domSearch && domSearch.setSearchTerm('');
         if (!isSource && ds.length) {
           dom.value = ds[0].id;
         }
@@ -430,6 +457,8 @@
       const sourceFileToggle = document.getElementById('src-file-mode');
       const sourceFileFields = document.getElementById('source-file-fields');
       const sourceFileInput = document.getElementById('src-file-name');
+      const sourceFileList = document.getElementById('source-file-list');
+      const sourceFileResults = document.getElementById('source-file-results');
       const srcProv = document.getElementById('src-prov');
       const srcCert = document.getElementById('src-cert');
       const srcDom = document.getElementById('src-dom');
@@ -445,11 +474,59 @@
         updateCounterBadge({ moduleIds: [], sourceFileMode: enabled });
       };
 
+      let sourceFileSearchTimer;
+
+      const renderSourceFileResults = (files = []) => {
+        sourceFileResults.innerHTML = '';
+        if (!files.length) {
+          return;
+        }
+        const fragment = document.createDocumentFragment();
+        files.forEach(file => {
+          const item = document.createElement('li');
+          item.textContent = file;
+          item.addEventListener('click', () => {
+            sourceFileInput.value = file;
+            updateSummary();
+          });
+          fragment.appendChild(item);
+        });
+        sourceFileResults.appendChild(fragment);
+      };
+
+      const updateSourceFileSuggestions = async (query) => {
+        const trimmed = query.trim();
+        sourceFileList.innerHTML = '';
+        renderSourceFileResults([]);
+        if (!trimmed) {
+          return;
+        }
+        try {
+          const results = await loadJSON(
+            `${pdfBase}api/search-pdfs?root=${encodeURIComponent(defaultPdfDir)}&q=${encodeURIComponent(trimmed)}`
+          );
+          (results || []).forEach(file => {
+            const opt = document.createElement('option');
+            opt.value = file;
+            sourceFileList.appendChild(opt);
+          });
+          renderSourceFileResults(results || []);
+        } catch (error) {
+          renderSourceFileResults([]);
+        }
+      };
+
       sourceFileToggle.addEventListener('change', (event) => {
         setSourceFileMode(event.target.checked);
       });
 
-      sourceFileInput.addEventListener('input', updateSummary);
+      sourceFileInput.addEventListener('input', () => {
+        updateSummary();
+        clearTimeout(sourceFileSearchTimer);
+        sourceFileSearchTimer = setTimeout(() => {
+          updateSourceFileSuggestions(sourceFileInput.value);
+        }, 250);
+      });
       setSourceFileMode(sourceFileToggle.checked);
 
       document.getElementById('move-btn').addEventListener('click', async () => {
