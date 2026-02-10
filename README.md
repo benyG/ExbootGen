@@ -35,4 +35,4 @@ Celery programme désormais une tâche de beat `tasks.redis_healthcheck` (toutes
 ## Démarrage rapide
 
 - **Windows** : utilisez `start_app.bat` pour configurer les variables d'environnement, lancer le worker Celery dans une nouvelle fenêtre et démarrer le serveur WSGI (Waitress par défaut, Gunicorn via WSL en option).
-- **Linux (Ubuntu)** : exécutez `./start_app.sh` après avoir configuré vos variables dans le fichier. Le script active `.venv`, démarre Celery en arrière-plan (logs dans `/tmp/celery_worker.log`) puis lance Gunicorn si disponible, sinon Waitress.
+- **Linux (Ubuntu)** : exécutez `./start_app.sh` après avoir configuré vos variables dans le fichier. Le script active `.venv`, démarre Celery en arrière-plan (logs dans `/tmp/celery_worker.log`) puis lance Gunicorn si disponible, sinon Waitress
