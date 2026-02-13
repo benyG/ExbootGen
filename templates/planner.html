@@ -269,6 +269,8 @@
     const populateBase = "{{ url_for('populate_index') }}";
     const certificationBase = "{{ url_for('certification') }}";
 
+    const selectedProviderId = () => String(providerSelect.value || '').trim();
+
     let providersCache = [];
     let certificationsCache = [];
 
@@ -281,6 +283,7 @@
     };
 
     const applyProviderFilter = () => {
+      const selectedBefore = String(providerSelect.value || '').trim();
       const query = providerSearch.value.trim().toLowerCase();
       const options = providersCache.filter(provider =>
         provider.name.toLowerCase().includes(query)
@@ -292,6 +295,9 @@
         option.textContent = provider.name;
         providerSelect.appendChild(option);
       });
+      if (selectedBefore && options.some(provider => String(provider.id) === selectedBefore)) {
+        providerSelect.value = selectedBefore;
+      }
     };
 
     const renderCertifications = () => {
@@ -394,17 +400,17 @@
     };
 
     const loadCertifications = async (providerId) => {
-      const selectedProviderId = String(providerId || '').trim();
-      filterStatus.textContent = selectedProviderId
+      const effectiveProviderId = String(providerId || '').trim();
+      filterStatus.textContent = effectiveProviderId
         ? 'Chargement des certifications...'
         : 'Aucun provider sélectionné : recherche sur tous les providers.';
       try {
-        const endpoint = selectedProviderId
-          ? `/api/planner/certifications/${selectedProviderId}`
+        const endpoint = effectiveProviderId
+          ? `/api/planner/certifications/${effectiveProviderId}`
           : '/api/planner/certifications';
         const payload = await fetchJSON(endpoint);
         certificationsCache = payload.certifications || [];
-        filterStatus.textContent = selectedProviderId
+        filterStatus.textContent = effectiveProviderId
           ? `${certificationsCache.length} certification(s) chargée(s).`
           : `${certificationsCache.length} certification(s) chargée(s) sur tous les providers.`;
         renderCertifications();
@@ -430,35 +436,24 @@
       loadCertifications(providerSelect.value);
     });
     pubFilter.addEventListener('change', () => {
-      if (!providerSelect.value && pubFilter.value !== 'all') {
-        loadCertifications('');
+      const providerId = selectedProviderId();
+      if (!providerId && pubFilter.value === 'all') {
+        renderCertifications();
         return;
       }
-      renderCertifications();
+      loadCertifications(providerId);
     });
     filterAutorun.addEventListener('click', () => {
       pubFilter.value = '2';
-      if (!providerSelect.value) {
-        loadCertifications('');
-      } else {
-        renderCertifications();
-      }
+      loadCertifications(selectedProviderId());
     });
     filterUpdate.addEventListener('click', () => {
       pubFilter.value = '3';
-      if (!providerSelect.value) {
-        loadCertifications('');
-      } else {
-        renderCertifications();
-      }
+      loadCertifications(selectedProviderId());
     });
     filterRetired.addEventListener('click', () => {
       pubFilter.value = '5';
-      if (!providerSelect.value) {
-        loadCertifications('');
-      } else {
-        renderCertifications();
-      }
+      loadCertifications(selectedProviderId());
     });
 
     loadProviders();
