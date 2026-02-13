@@ -4894,62 +4894,62 @@ def process_domain_by_difficulty(
             else:
                 domain_arg = domain_name
 
-                try:
-                    desc = domain_descriptions.get(domain_id, "")
-                    questions_data = generate_questions(
-                        provider_name=provider_name,
-                        certification=cert_name,
-                        domain=domain_arg,
-                        domain_descr=desc,
-                        level=difficulty,
-                        q_type=qtype,
-                        practical=practical_val,
-                        scenario_illustration_type=scenario_illu_val,
-                        num_questions=needed,
-                    )
-                    time.sleep(API_REQUEST_DELAY)
-                except Exception as exc:
-                    context.log(
-                        f"[{domain_name} - {difficulty.upper()}] Generation error for {qtype} "
-                        f"with scenario '{scenario_type}': {exc}"
-                    )
-                    continue
+            try:
+                desc = domain_descriptions.get(domain_id, "")
+                questions_data = generate_questions(
+                    provider_name=provider_name,
+                    certification=cert_name,
+                    domain=domain_arg,
+                    domain_descr=desc,
+                    level=difficulty,
+                    q_type=qtype,
+                    practical=practical_val,
+                    scenario_illustration_type=scenario_illu_val,
+                    num_questions=needed,
+                )
+                time.sleep(API_REQUEST_DELAY)
+            except Exception as exc:
+                context.log(
+                    f"[{domain_name} - {difficulty.upper()}] Generation error for {qtype} "
+                    f"with scenario '{scenario_type}': {exc}"
+                )
+                continue
 
-                for question in questions_data.get("questions", []):
-                    if practical_val == "scenario-illustrated" and question.get("diagram_descr"):
-                        diagram_description = question.get("diagram_descr", "").strip()
-                        try:
-                            diag_type = question.get("diagram_type", "")
-                            # diagram_data_str = render_diagram(provider_name, diagram_description, diag_type)
-                            # diag_dict = json.loads(diagram_data_str)
-                            # question["image"] = (
-                            #     f'<img src="{diag_dict["imageUrl"]}" alt="Generated Diagram" '
-                            #     f'width="75%" height="auto"><!-- {diag_dict["createEraserFileUrl"]} -->'
-                            # )
-                        except Exception as exc:  # pragma: no cover - log only
-                            context.log(
-                                f"[{domain_name} - {difficulty.upper()}] Diagram error for {qtype} "
-                                f"with scenario '{scenario_type}' (desc: {diagram_description}, type: {diag_type}): {exc}"
-                            )
-                            question["image"] = ""
+            for question in questions_data.get("questions", []):
+                if practical_val == "scenario-illustrated" and question.get("diagram_descr"):
+                    diagram_description = question.get("diagram_descr", "").strip()
+                    try:
+                        diag_type = question.get("diagram_type", "")
+                        # diagram_data_str = render_diagram(provider_name, diagram_description, diag_type)
+                        # diag_dict = json.loads(diagram_data_str)
+                        # question["image"] = (
+                        #     f'<img src="{diag_dict["imageUrl"]}" alt="Generated Diagram" '
+                        #     f'width="75%" height="auto"><!-- {diag_dict["createEraserFileUrl"]} -->'
+                        # )
+                    except Exception as exc:  # pragma: no cover - log only
+                        context.log(
+                            f"[{domain_name} - {difficulty.upper()}] Diagram error for {qtype} "
+                            f"with scenario '{scenario_type}' (desc: {diagram_description}, type: {diag_type}): {exc}"
+                        )
+                        question["image"] = ""
 
-                try:
-                    stats = db.insert_questions(domain_id, questions_data, scenario_type)
-                    context.log(
-                        f"[{domain_name} - {difficulty.upper()}] {needed} questions inserted for "
-                        f"{qtype} with scenario '{scenario_type}'."
-                    )
-                    imported = 0
-                    if isinstance(stats, dict):
-                        imported = int(stats.get("imported_questions", 0) or 0)
-                    if progress is not None and imported:
-                        progress.record_insertion(difficulty, qtype, scenario_type, imported)
-                    total_inserted += imported
-                except Exception as exc:
-                    context.log(
-                        f"[{domain_name} - {difficulty.upper()}] Insert error for {qtype} "
-                        f"with scenario '{scenario_type}': {exc}"
-                    )
+            try:
+                stats = db.insert_questions(domain_id, questions_data, scenario_type)
+                context.log(
+                    f"[{domain_name} - {difficulty.upper()}] {needed} questions inserted for "
+                    f"{qtype} with scenario '{scenario_type}'."
+                )
+                imported = 0
+                if isinstance(stats, dict):
+                    imported = int(stats.get("imported_questions", 0) or 0)
+                if progress is not None and imported:
+                    progress.record_insertion(difficulty, qtype, scenario_type, imported)
+                total_inserted += imported
+            except Exception as exc:
+                context.log(
+                    f"[{domain_name} - {difficulty.upper()}] Insert error for {qtype} "
+                    f"with scenario '{scenario_type}': {exc}"
+                )
 
     return total_inserted
 
