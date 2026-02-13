@@ -137,6 +137,8 @@
     .status-autorun .status-dot { background: #f87171; box-shadow: 0 0 0 4px rgba(248,113,113,0.2); }
     .status-update { border-color: rgba(251,146,60,0.55); color: #fb923c; }
     .status-update .status-dot { background: #fb923c; box-shadow: 0 0 0 4px rgba(251,146,60,0.22); }
+    .status-retired { border-color: rgba(168,85,247,0.55); color: #a855f7; }
+    .status-retired .status-dot { background: #a855f7; box-shadow: 0 0 0 4px rgba(168,85,247,0.24); }
 
     .card-links { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.2rem; }
     .card-link {
@@ -209,6 +211,7 @@
             <option value="1">Online</option>
             <option value="2">Autorun</option>
             <option value="3">Update</option>
+            <option value="5">Retired</option>
           </select>
         </div>
       </div>
@@ -216,6 +219,7 @@
       <div class="filter-actions">
         <button class="filter-button" id="filterAutorun">Voir la pile Autorun</button>
         <button class="filter-button" id="filterUpdate">Voir les statuts Update</button>
+        <button class="filter-button" id="filterRetired">Voir les statuts Retired</button>
         <span class="status-note" id="filterStatus">Aucun provider sélectionné.</span>
       </div>
 
@@ -224,6 +228,7 @@
         <span class="legend-item"><span class="legend-dot" style="background:#22c55e;border-color:rgba(34,197,94,0.5);"></span> Online</span>
         <span class="legend-item"><span class="legend-dot" style="background:#f87171;border-color:rgba(248,113,113,0.5);"></span> Autorun</span>
         <span class="legend-item"><span class="legend-dot" style="background:#fb923c;border-color:rgba(251,146,60,0.55);"></span> Update</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#a855f7;border-color:rgba(168,85,247,0.55);"></span> Retired</span>
       </div>
 
       <div class="cards-grid" id="certGrid">
@@ -247,9 +252,10 @@
       0: { label: 'Offline', className: 'status-offline' },
       1: { label: 'Online', className: 'status-online' },
       2: { label: 'Autorun', className: 'status-autorun' },
-      3: { label: 'Update', className: 'status-update' }
+      3: { label: 'Update', className: 'status-update' },
+      5: { label: 'Retired', className: 'status-retired' }
     };
-    const pubOrder = [0, 1, 2, 3];
+    const pubOrder = [0, 1, 2, 3, 5];
 
     const providerSearch = document.getElementById('providerSearch');
     const providerSelect = document.getElementById('providerSelect');
@@ -258,6 +264,7 @@
     const filterStatus = document.getElementById('filterStatus');
     const filterAutorun = document.getElementById('filterAutorun');
     const filterUpdate = document.getElementById('filterUpdate');
+    const filterRetired = document.getElementById('filterRetired');
     const pdfBase = "{{ url_for('pdf.index') }}";
     const populateBase = "{{ url_for('populate_index') }}";
     const certificationBase = "{{ url_for('certification') }}";
@@ -387,17 +394,19 @@
     };
 
     const loadCertifications = async (providerId) => {
-      if (!providerId) {
-        certificationsCache = [];
-        certGrid.innerHTML = '<div class="empty-state">Sélectionnez un provider pour afficher les certifications.</div>';
-        filterStatus.textContent = 'Aucun provider sélectionné.';
-        return;
-      }
-      filterStatus.textContent = 'Chargement des certifications...';
+      const selectedProviderId = String(providerId || '').trim();
+      filterStatus.textContent = selectedProviderId
+        ? 'Chargement des certifications...'
+        : 'Aucun provider sélectionné : recherche sur tous les providers.';
       try {
-        const payload = await fetchJSON(`/api/planner/certifications/${providerId}`);
+        const endpoint = selectedProviderId
+          ? `/api/planner/certifications/${selectedProviderId}`
+          : '/api/planner/certifications';
+        const payload = await fetchJSON(endpoint);
         certificationsCache = payload.certifications || [];
-        filterStatus.textContent = `${certificationsCache.length} certification(s) chargée(s).`;
+        filterStatus.textContent = selectedProviderId
+          ? `${certificationsCache.length} certification(s) chargée(s).`
+          : `${certificationsCache.length} certification(s) chargée(s) sur tous les providers.`;
         renderCertifications();
       } catch (error) {
         certGrid.innerHTML = '<div class="empty-state">Erreur lors du chargement des certifications.</div>';
@@ -420,14 +429,36 @@
       pubFilter.value = 'all';
       loadCertifications(providerSelect.value);
     });
-    pubFilter.addEventListener('change', renderCertifications);
+    pubFilter.addEventListener('change', () => {
+      if (!providerSelect.value && pubFilter.value !== 'all') {
+        loadCertifications('');
+        return;
+      }
+      renderCertifications();
+    });
     filterAutorun.addEventListener('click', () => {
       pubFilter.value = '2';
-      renderCertifications();
+      if (!providerSelect.value) {
+        loadCertifications('');
+      } else {
+        renderCertifications();
+      }
     });
     filterUpdate.addEventListener('click', () => {
       pubFilter.value = '3';
-      renderCertifications();
+      if (!providerSelect.value) {
+        loadCertifications('');
+      } else {
+        renderCertifications();
+      }
+    });
+    filterRetired.addEventListener('click', () => {
+      pubFilter.value = '5';
+      if (!providerSelect.value) {
+        loadCertifications('');
+      } else {
+        renderCertifications();
+      }
     });
 
     loadProviders();

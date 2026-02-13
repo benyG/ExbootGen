@@ -78,6 +78,31 @@ def build_answer_signature(answers: list[dict]) -> str:
     return json.dumps(normalized, ensure_ascii=False, sort_keys=True)
 
 
+def build_payload_answer_signature(answers: list[dict]) -> str:
+    normalized = []
+    for answer in answers:
+        value = normalize_answer_text(str(answer.get('value', '') or ''))
+        if not value:
+            continue
+        meta = answer.get('meta') or {}
+        if not isinstance(meta, dict):
+            meta = {}
+        clean_meta = {k: normalize_meta_value(v) for k, v in meta.items() if k != 'value'}
+        normalized.append({
+            'value': value,
+            'meta': clean_meta,
+            'isok': 1 if int(answer.get('isok') or 0) == 1 else 0,
+        })
+    normalized.sort(
+        key=lambda item: (
+            item['value'],
+            json.dumps(item['meta'], ensure_ascii=False, sort_keys=True),
+            item['isok'],
+        )
+    )
+    return json.dumps(normalized, ensure_ascii=False, sort_keys=True)
+
+
 def extract_image_urls(text: str) -> list[str]:
     if not text:
         return []
@@ -647,6 +672,7 @@ def api_update_question(question_id: int):
     current_nature, course_id = row
 
     normalized_text = normalize_question_text(text)
+    new_answers_signature = build_payload_answer_signature(answers)
     if course_id:
         cur.execute(
             """
@@ -657,13 +683,41 @@ def api_update_question(question_id: int):
             """,
             (course_id, question_id),
         )
+        candidate_ids = []
         for existing_id, existing_text in cur.fetchall():
             if normalize_question_text(existing_text) == normalized_text:
-                cur.close()
-                return jsonify({
-                    'error': 'Une question similaire existe déjà',
-                    'existing_id': existing_id,
-                }), 409
+                candidate_ids.append(existing_id)
+
+        if candidate_ids:
+            placeholders = ','.join(['%s'] * len(candidate_ids))
+            cur.execute(
+                f"""
+                SELECT qa.question AS question_id,
+                       qa.isok AS answer_isok,
+                       a.text AS answer_text
+                  FROM quest_ans qa
+                  JOIN answers a ON a.id = qa.answer
+                 WHERE qa.question IN ({placeholders})
+                """,
+                tuple(candidate_ids),
+            )
+            answers_rows = cur.fetchall()
+
+            candidate_answers_map: dict[int, list[dict]] = {qid: [] for qid in candidate_ids}
+            for candidate_id, answer_isok, answer_text in answers_rows:
+                candidate_answers_map.setdefault(candidate_id, []).append({
+                    'text': answer_text or '',
+                    'isok': bool(answer_isok),
+                })
+
+            for existing_id in candidate_ids:
+                existing_signature = build_answer_signature(candidate_answers_map.get(existing_id, []))
+                if existing_signature == new_answers_signature:
+                    cur.close()
+                    return jsonify({
+                        'error': 'Une question identique (texte + réponses) existe déjà',
+                        'existing_id': existing_id,
+                    }), 409
 
     if nature is None:
         nature = current_nature
