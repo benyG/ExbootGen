@@ -580,7 +580,7 @@ LAB_RESPONSE_SCHEMA = {
                 "steps": {
                     "type": "array",
                     "items": {
-                        "oneOf": [
+                        "anyOf": [
                             {
                                 "type": "object",
                                 "additionalProperties": False,
