@@ -580,7 +580,7 @@ LAB_RESPONSE_SCHEMA = {
                 "steps": {
                     "type": "array",
                     "items": {
-                        "oneOf": [
+                        "anyOf": [
                             {
                                 "type": "object",
                                 "additionalProperties": False,
@@ -598,7 +598,7 @@ LAB_RESPONSE_SCHEMA = {
                                 ],
                                 "properties": {
                                     "id": {"type": "string"},
-                                    "type": {"const": "terminal"},
+                                    "type": {"type": "string", "const": "terminal"},
                                     "title": {"type": "string"},
                                     "instructions_md": {"type": "string"},
                                     "points": {"type": "integer"},
@@ -940,7 +940,7 @@ LAB_RESPONSE_SCHEMA = {
                                 ],
                                 "properties": {
                                     "id": {"type": "string"},
-                                    "type": {"const": "console_form"},
+                                    "type": {"type": "string", "const": "console_form"},
                                     "title": {"type": "string"},
                                     "instructions_md": {"type": "string"},
                                     "points": {"type": "integer"},
@@ -1093,7 +1093,7 @@ LAB_RESPONSE_SCHEMA = {
                                 ],
                                 "properties": {
                                     "id": {"type": "string"},
-                                    "type": {"const": "inspect_file"},
+                                    "type": {"type": "string", "const": "inspect_file"},
                                     "title": {"type": "string"},
                                     "instructions_md": {"type": "string"},
                                     "points": {"type": "integer"},
@@ -1203,7 +1203,7 @@ LAB_RESPONSE_SCHEMA = {
                                 ],
                                 "properties": {
                                     "id": {"type": "string"},
-                                    "type": {"const": "architecture"},
+                                    "type": {"type": "string", "const": "architecture"},
                                     "title": {"type": "string"},
                                     "instructions_md": {"type": "string"},
                                     "points": {"type": "integer"},
@@ -1473,7 +1473,7 @@ LAB_RESPONSE_SCHEMA = {
                                 ],
                                 "properties": {
                                     "id": {"type": "string"},
-                                    "type": {"const": "quiz"},
+                                    "type": {"type": "string", "const": "quiz"},
                                     "title": {"type": "string"},
                                     "instructions_md": {"type": "string"},
                                     "points": {"type": "integer"},
@@ -1579,7 +1579,7 @@ LAB_RESPONSE_SCHEMA = {
                                 ],
                                 "properties": {
                                     "id": {"type": "string"},
-                                    "type": {"const": "anticipation"},
+                                    "type": {"type": "string", "const": "anticipation"},
                                     "title": {"type": "string"},
                                     "instructions_md": {"type": "string"},
                                     "points": {"type": "integer"},
