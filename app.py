@@ -2578,10 +2578,14 @@ def planner_providers():
     return jsonify({"providers": providers})
 
 
-@app.route("/api/planner/certifications/<int:provider_id>")
-def planner_certifications(provider_id: int):
-    """Return certifications with pub state for a provider."""
-
+def _planner_certifications_payload(provider_id: int | None = None):
+    if provider_id is None:
+        rows = []
+        for provider_row in db.get_providers():
+            pid = provider_row[0]
+            rows.extend(db.get_certifications_by_provider_with_pub(pid))
+    else:
+        rows = db.get_certifications_by_provider_with_pub(provider_id)
     certifications = [
         {
             "id": cert_id,
@@ -2602,9 +2606,23 @@ def planner_certifications(provider_id: int):
             default_module_id,
             default_cert_id,
             default_provider_id,
-        ) in db.get_certifications_by_provider_with_pub(provider_id)
+        ) in rows
     ]
     return jsonify({"certifications": certifications})
+
+
+@app.route("/api/planner/certifications")
+def planner_certifications_all():
+    """Return certifications with pub state across all providers."""
+
+    return _planner_certifications_payload(None)
+
+
+@app.route("/api/planner/certifications/<int:provider_id>")
+def planner_certifications(provider_id: int):
+    """Return certifications with pub state for a provider."""
+
+    return _planner_certifications_payload(provider_id)
 
 
 @app.route("/api/mcp/client/certifications/<int:provider_id>")
