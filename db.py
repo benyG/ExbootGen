@@ -686,10 +686,11 @@ def update_certification_code_cert_key(
     try:
         cursor = conn.cursor()
         conn.start_transaction()
-        cursor.execute(
-            "UPDATE courses SET code_cert_key = %s, descr2 = %s WHERE id = %s",
-            (new_code, new_code, cert_id),
-        )
+        if cert_id != 23:
+            cursor.execute(
+                "UPDATE courses SET code_cert_key = %s, descr2 = %s WHERE id = %s",
+                (new_code, new_code, cert_id),
+            )
         if old_code:
             cursor.execute(
                 "UPDATE modules SET code_cert = %s WHERE course = 23 AND code_cert = %s",
@@ -818,12 +819,20 @@ def update_certification(cert_id: int, name: str, code: str | None, descr2: str 
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        query = """
-            UPDATE courses
-            SET name = %s, code_cert_key = %s, descr2 = %s
-            WHERE id = %s
-        """
-        cursor.execute(query, (name, code, descr2, cert_id))
+        if cert_id == 23:
+            query = """
+                UPDATE courses
+                SET name = %s
+                WHERE id = %s
+            """
+            cursor.execute(query, (name, cert_id))
+        else:
+            query = """
+                UPDATE courses
+                SET name = %s, code_cert_key = %s, descr2 = %s
+                WHERE id = %s
+            """
+            cursor.execute(query, (name, code, descr2, cert_id))
         conn.commit()
     except Exception:
         conn.rollback()

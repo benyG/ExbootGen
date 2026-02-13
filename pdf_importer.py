@@ -420,10 +420,11 @@ def api_update_code_cert():
             target_cert_id = module_course_id or cert_id
             if not target_cert_id:
                 return jsonify({"status": "error", "message": "Certification introuvable pour ce module."}), 404
-            cur.execute(
-                "UPDATE courses SET code_cert_key = %s WHERE id = %s",
-                (code_cert, target_cert_id),
-            )
+            if int(target_cert_id) != 23:
+                cur.execute(
+                    "UPDATE courses SET code_cert_key = %s WHERE id = %s",
+                    (code_cert, target_cert_id),
+                )
             cur.execute("UPDATE modules SET code_cert = %s WHERE id = %s", (code_cert, module_id))
             conn.commit()
         except Exception as exc:
