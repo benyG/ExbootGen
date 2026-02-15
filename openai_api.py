@@ -114,7 +114,6 @@ writing_rules_tweet = """
 - CTA must feel optional and light, not salesy.
 """
 
-
 ARTICLE_PROMPT_TEMPLATES = {
     "certification_presentation": f"""
 Retrieve official information about exam certification: {{certification}} from vendor {{vendor}}.
@@ -389,7 +388,7 @@ Expected JSON format:
 CAROUSEL_TOPIC_IDEAS_PROMPT_TEMPLATE = """
 Research the internet for 20 trending questions, real-world problems, common mistakes, and current trends related to certifications.
 Identify specific topics that can be transformed into an educational or informational LinkedIn PDF carousel
-(format: Question (problem) → common mistake → explanation → expert advice).
+(format: Question/problem → common mistake → explanation → expert advice).
 
 The goal is to provide significant educational value to certification candidates while subtly highlighting the benefits
 of an AI coach and an exam simulator like ExamBoot.net.
@@ -2021,14 +2020,12 @@ def generate_carousel_linkedin_post(subject: str, question: str, exam_url: str) 
         raise ValueError("Le sujet et la question sont requis pour générer le post LinkedIn du carrousel.")
 
     prompt = (
-        "Write a concise and high-value LinkedIn post in English to introduce a certification-focused PDF carousel.\n"
+        "Write a concise and high-value LinkedIn post in English to introduce a PDF carousel.\n"
         f"Carousel topic: {subject_clean}\n"
         f"Question to address: {question_clean}\n"
-        f"Exam simulation URL: {exam_url_clean or 'http://examboot.net'}\n"
         "Requirements:\n"
         "- 120 to 220 words.\n"
         "- Hook + practical value + short CTA.\n"
-        "- Mention ExamBoot.net naturally as AI coach + exam simulator.\n"
         "- Do not use hashtags spam (max 4).\n"
         "- Keep a professional, educational tone.\n"
     )
@@ -2041,7 +2038,6 @@ def generate_linkedin_carousel(subject: str, question: str) -> dict:
         raise Exception(
             "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un carrousel LinkedIn."
         )
-
     subject_clean = (subject or "").strip()
     question_clean = (question or "").strip()
     if not subject_clean or not question_clean:
@@ -2069,7 +2065,6 @@ def generate_module_blueprint_excerpt(
         raise Exception(
             "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un blueprint."
         )
-
     certification = (certification_name or "").strip()
     domain = (domain_name or "").strip()
     code_cert_clean = (code_cert or "").strip()
@@ -2126,7 +2121,6 @@ def generate_certification_course_art(certification: str, vendor: str) -> dict:
         raise Exception(
             "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer la fiche certification."
         )
-
     prompt = _build_course_art_prompt(certification, vendor)
     raw_content = _run_completion(
         prompt,
