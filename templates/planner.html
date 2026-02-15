@@ -268,6 +268,7 @@
     const pdfBase = "{{ url_for('pdf.index') }}";
     const populateBase = "{{ url_for('populate_index') }}";
     const certificationBase = "{{ url_for('certification') }}";
+    const moveBase = "{{ url_for('move.index') }}";
 
     const selectedProviderId = () => String(providerSelect.value || '').trim();
 
@@ -354,12 +355,22 @@
         if (cert.default_module_id) {
           importParams.set('module_id', cert.default_module_id);
         }
+        const moveParams = new URLSearchParams({
+          src_provider_id: providerSelect.value,
+          src_cert_id: cert.id,
+          dst_provider_id: defaultProviderId,
+          dst_cert_id: defaultCertId,
+        });
+        if (cert.default_module_id) {
+          moveParams.set('dst_module_id', cert.default_module_id);
+        }
         links.innerHTML = `
           <a class="card-link" href="/blueprints?${baseParams}">Blueprint</a>
           <a class="card-link" href="/edit-question?${baseParams}">Question</a>
           <a class="card-link" href="/articles?${baseParams}">Article</a>
           <a class="card-link" href="${pdfBase}?${importParams}">import</a>
           <a class="card-link" href="${populateBase}?${baseParams}">Populate</a>
+          <a class="card-link" href="${moveBase}?${moveParams}">Move</a>
           <a class="card-link" href="${certificationBase}?${baseParams}">Edit</a>
         `;
         links.querySelectorAll('a').forEach(link => {

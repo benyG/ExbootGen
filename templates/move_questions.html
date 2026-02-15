@@ -369,8 +369,9 @@
     const base = '{{ url_for('move.index') }}';
     const pdfBase = '{{ url_for('pdf.index') }}';
     const defaultPdfDir = {{ default_pdf_dir|tojson }};
+    const urlParams = new URLSearchParams(window.location.search);
 
-    async function initPanel(prefix) {
+    async function initPanel(prefix, preselect = {}) {
       const prov = document.getElementById(prefix + '-prov');
       const cert = document.getElementById(prefix + '-cert');
       const dom = document.getElementById(prefix + '-dom');
@@ -380,34 +381,60 @@
       const certSearch = window.makeSelectSearchable ? window.makeSelectSearchable(cert, { placeholder: 'Rechercher une certification…' }) : null;
       const domSearch = window.makeSelectSearchable ? window.makeSelectSearchable(dom, { placeholder: 'Rechercher un domaine…' }) : null;
 
-      const provs = await loadJSON(base + 'api/providers');
-      fillSelect(prov, provs);
-      provSearch && provSearch.setSearchTerm('');
-      if (provs.length) {
-        prov.value = provs[0].id;
-        prov.dispatchEvent(new Event('change'));
-      }
+      let pendingProviderId = preselect.providerId ? String(preselect.providerId) : '';
+      let pendingCertId = preselect.certId ? String(preselect.certId) : '';
+      let pendingDomainId = preselect.domainId ? String(preselect.domainId) : '';
 
-      prov.addEventListener('change', async () => {
-        const cs = await loadJSON(`${base}api/certifications/${prov.value}`);
-        fillSelect(cert, cs);
-        certSearch && certSearch.setSearchTerm('');
-        if (cs.length) {
-          cert.value = cs[0].id;
-          cert.dispatchEvent(new Event('change'));
+      const loadDomainsForCertification = async () => {
+        if (!cert.value) {
+          fillSelect(dom, [], isSource);
+          updateSummary();
+          return;
         }
-      });
-
-      cert.addEventListener('change', async () => {
         const ds = await loadJSON(`${base}api/domains/${cert.value}`);
         fillSelect(dom, ds, isSource);
         domSearch && domSearch.setSearchTerm('');
         if (!isSource && ds.length) {
-          dom.value = ds[0].id;
+          const preferred = pendingDomainId && ds.find(item => String(item.id) === pendingDomainId);
+          dom.value = preferred ? preferred.id : ds[0].id;
+          pendingDomainId = '';
         }
         updateSummary();
-      });
+      };
 
+      const loadCertificationsForProvider = async () => {
+        if (!prov.value) {
+          fillSelect(cert, []);
+          fillSelect(dom, [], isSource);
+          updateSummary();
+          return;
+        }
+        const cs = await loadJSON(`${base}api/certifications/${prov.value}`);
+        fillSelect(cert, cs);
+        certSearch && certSearch.setSearchTerm('');
+        if (cs.length) {
+          const preferred = pendingCertId && cs.find(item => String(item.id) === pendingCertId);
+          cert.value = preferred ? preferred.id : cs[0].id;
+          pendingCertId = '';
+          await loadDomainsForCertification();
+        } else {
+          fillSelect(dom, [], isSource);
+          updateSummary();
+        }
+      };
+
+      const provs = await loadJSON(base + 'api/providers');
+      fillSelect(prov, provs);
+      provSearch && provSearch.setSearchTerm('');
+      if (provs.length) {
+        const preferred = pendingProviderId && provs.find(item => String(item.id) === pendingProviderId);
+        prov.value = preferred ? preferred.id : provs[0].id;
+        pendingProviderId = '';
+        await loadCertificationsForProvider();
+      }
+
+      prov.addEventListener('change', loadCertificationsForProvider);
+      cert.addEventListener('change', loadDomainsForCertification);
       dom.addEventListener('change', updateSummary);
     }
 
@@ -451,9 +478,16 @@
       }
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      initPanel('src');
-      initPanel('dst');
+    document.addEventListener('DOMContentLoaded', async () => {
+      await initPanel('src', {
+        providerId: urlParams.get('src_provider_id'),
+        certId: urlParams.get('src_cert_id'),
+      });
+      await initPanel('dst', {
+        providerId: urlParams.get('dst_provider_id'),
+        certId: urlParams.get('dst_cert_id'),
+        domainId: urlParams.get('dst_module_id'),
+      });
       const sourceFileToggle = document.getElementById('src-file-mode');
       const sourceFileFields = document.getElementById('source-file-fields');
       const sourceFileInput = document.getElementById('src-file-name');
