@@ -17,6 +17,7 @@ class DispatchDueSchedulesTest(unittest.TestCase):
             {"id": "done-1", "day": past_day, "time": past_time, "status": "succeeded"},
             {"id": "failed-1", "day": past_day, "time": past_time, "status": "failed"},
             {"id": "running-1", "day": past_day, "time": past_time, "status": "running"},
+            {"id": "partial-1", "day": past_day, "time": past_time, "status": "partial"},
             {"id": "future-queued", "day": future_day, "time": past_time, "status": "queued"},
         ]
 
