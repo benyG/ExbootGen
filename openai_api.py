@@ -50,48 +50,70 @@ DOMAIN_PROMPT_TEMPLATE = (
     "}"
 )
 
-writing_rules = """ 
+writing_rules = """
 - Format the response in clean, basic HTML (h1–h3, p, ul, ol, strong).
-- Provide one clear, SEO-optimized H1 title (short and impactful).
-- Identify and consistently target one primary keyword and several
-  semantically related keywords.
-- Match the article to clear search intent (informational or educational).
-- Write a compelling introduction that clearly states the problem and what the reader will learn.
-- Use a logical structure with scannable H2/H3 headings.
-- Target length: 1,000–1,500 words.
-- Tone: factual, motivating, confident, without unexplained jargon.
-- Use concrete examples, explanations, or reasoning (avoid generic advice).
-- Write complete, natural, non-robotic sentences.
-- End with a concise conclusion summarizing key takeaways.
-- Do NOT use hashtags.
-- Use emojis only if explicitly relevant and sparingly (preferably in the introduction only).
+- Provide one strong, SEO-optimized H1 title (clear, concise, compelling).
+- Define ONE primary keyword and integrate it naturally throughout.
+- Include semantically related keywords organically (no keyword stuffing).
+- Match clear search intent (informational, strategic, or decision-making).
+- The introduction must:
+  • Identify a real problem or misconception.
+  • Explain why it matters.
+  • Preview what the reader will gain.
+- Structure the article logically with clear H2/H3 sections.
+- Each section must add real value (no filler paragraphs).
+- Include specific examples, industry insights, or realistic scenarios.
+- Include one contrarian insight or unexpected perspective.
+- Use transition sentences that create logical flow between sections.
+- Avoid repeating ideas in different wording.
+- Avoid generic advice like “study consistently” or “practice regularly” without depth.
+- Provide actionable insights or frameworks where relevant.
+- Target length: 1,000–1,400 words.
+- Tone: authoritative, practical, credible — not academic, not robotic.
+- Write in natural, fluid sentences.
+- Avoid overused marketing phrases.
+- If mentioning ExamBoot, integrate it naturally as part of a strategic solution — not as a forced promotion.
+- End with a concise, insight-driven conclusion summarizing strategic takeaways.
+- No hashtags.
+- Emojis: avoid unless strongly relevant (max 1 in intro).
 """
 
-writing_rules_linkedin = """ 
-- First sentence must be a strong hook that challenges an assumption, highlights a surprising fact, or creates tension.
-- Target audience: Professionals preparing for certifications, Students, recent graduates, HR professionals, Recruiters, Training & Development managers, Educators, trainers, Engineers, Project managers, Consultants, Technical specialists, Career advancement seekers, Learning & Development executives, Educational program directors
-- Target length: 180–400 words.
-- Use short paragraphs (1–3 lines) for mobile readability.
-- Tone: motivating, factual, confident, without unexplained jargon.
-- Use concrete examples or observations (not generic advice).
-- Emojis: optional, relevant, no more than 1 per 1–2 paragraphs,
-  placed only at paragraph starts or line breaks (never mid-sentence).
-- Include 5–8 relevant hashtags at the end, not embedded in the text.
-- always put @ before the name of the vendor to tag him.
-- End with a light engagement prompt (question or reflection).
+writing_rules_linkedin = """
+- First 1–2 lines must create curiosity, tension, or challenge a common belief.
+- Write like a human expert sharing an insight — not like a marketing brochure. However, avoid using the first person, as you are writing on behalf of an organization.
+- Before writing, internally ask: "Would a senior professional actually write this?"
+- Target audience: certification candidates, professionals, decision-makers, tech/business profiles, recruiters, L&D leaders.
+- Target length: 120–220 words (concise and punchy).
+- Use short paragraphs (1–2 lines max) for mobile readability.
+- Avoid long bullet lists (max 3 bullets if absolutely necessary).
+- Avoid stacking statistics. Use at most 1 strong data point if relevant.
+- Prefer observations, recruiter insights, or real-world scenarios over generic claims.
+- Tone: confident, natural, credible, not corporate.
+- No buzzword overload.
+- Emojis: optional, max 3 total, placed at line breaks only.
+- Hashtags: 3–5 relevant ones at the end.
+- Always tag vendor as @VendorName.
+- End with a question that sparks discussion (not a sales push).
+- Soft transition to ExamBoot (subtle positioning, not aggressive promotion).
+- Remove anything that sounds like corporate filler.
 - Return only the LinkedIn post body, with no commentary or metadata.
 """
 
-writing_rules_tweet = """ 
-- Return only the tweet content without additional commentary.
-- Max 280 characters.
-- First line must contain a strong hook (bold claim, insight, or contrast).
-- Focus on a single clear idea (no multi-topic tweets).
-- Tone: concise, confident, human (no corporate or robotic phrasing).
-- always put @ before the name of the vendor to tag him.
-- Add relevant emojis sparingly (0–2 max), never mid-sentence.
-- Include exactly 2–3 relevant hashtags at the end of the tweet.
+writing_rules_tweet = """
+- Return only the tweet content (no commentary).
+- Max 220–260 characters preferred (do not force 280).
+- First line must create tension, contrast, or a bold insight.
+- Focus on ONE sharp idea only.
+- Write like a human expert, not a marketing account.
+- No corporate filler.
+- No stacked claims.
+- Avoid mechanical structures (no obvious template feel).
+- If tagging vendor, use @VendorName naturally in the sentence (not forced).
+- Emojis: 0–2 max, placed at line breaks only (never mid-sentence).
+- Hashtags: exactly 2 relevant hashtags at the end.
+- CTA must feel optional and light, not salesy.
 """
+
 
 ARTICLE_PROMPT_TEMPLATES = {
     "certification_presentation": f"""
@@ -168,98 +190,161 @@ Guidelines:
 
 TWEET_PROMPT_TEMPLATES = {
     "certification_presentation": f"""
-Compose a short, punchy tweet introducing the certification: {{certification}} from vendor {{vendor}}.
-Highlight 1 key benefit, 1 career outcome, and mention ExamBoot.net as the platform to prepare.
-Include a link to the free practice test:  {{exam_url}}.
+Write a sharp, insight-driven tweet about {{certification}} from @{{vendor}}.
+Do NOT list multiple benefits.
+Highlight one overlooked advantage and one career implication.
+Naturally reference ExamBoot.net as a smart way to prepare.
+Add the free practice link: {{exam_url}}
 {writing_rules_tweet}
 """,
     "preparation_methodology": f"""
-Tweet actionable exam prep tips for certification exam: {{certification}} from vendor {{vendor}}.
-Follow with 3 quick bullet points, then “💡Train smarter with ExamBoot free test:  {{exam_url}}”.
+Write a concise tweet about preparing for {{certification}} from @{{vendor}}.
+Start with a bold preparation mistake most candidates make.
+Then give one sharp corrective insight.
+Mention ExamBoot.net naturally as a smarter way to train.
+Add the link: {{exam_url}}
 {writing_rules_tweet}
 """,
     "experience_testimony": f"""
-Tweet a motivational cote on how to pass the certification exam: {{certification}} from vendor {{vendor}} after specified weeks of focused prep.
-Try ExamBoot.net for your journey with a link to start a free test: 👉 {{exam_url}}
+Write a realistic, motivational tweet about passing {{certification}} from @{{vendor}} after focused preparation.
+Avoid clichés.
+Focus on the turning point in preparation.
+Mention ExamBoot.net as part of the journey.
+Add the link: {{exam_url}}
 {writing_rules_tweet}
 """,
     "career_impact": f"""
-Tweet key value insight from certification exam: {{certification}} from vendor {{vendor}}.
-Include a link to the free practice test:  {{exam_url}}.
+Write a bold career insight tweet about the impact of {{certification}} from @{{vendor}}.
+Use one strong salary or hiring insight max.
+No lists.
+Position ExamBoot.net as a strategic preparation advantage.
+Add the link: {{exam_url}}
 {writing_rules_tweet}
 """,
     "engagement_community": f"""
-Tweet an engaging challenge post inviting readers to take a quick quiz related to the certification exam: {{certification}} from vendor {{vendor}} 
-Try the free practice test now on ExamBoot.net and share your score!
-👉  {{exam_url}}
+Write a challenge-style tweet about {{certification}} from @{{vendor}}.
+Start with a direct question that tests confidence.
+Keep it punchy.
+Invite readers to test themselves on ExamBoot.net.
+Add the link: {{exam_url}}
 {writing_rules_tweet}
 """,
 }
 
 LINKEDIN_POST_PROMPT_TEMPLATES = {
     "certification_presentation": f"""
-Create an engaging LinkedIn post announcing a guide about the certification: {{certification}} from vendor {{vendor}}.
-Explain why professionals should consider it, what career paths it opens, and how they can start preparing using ExamBoot.net.
+Write a natural, insight-driven LinkedIn post about the certification {{certification}} from {{vendor}}.
+Do NOT announce a guide.
+Instead:
+- Start with a misconception or overlooked truth about this certification.
+- Explain why it actually matters in today’s market.
+- Mention 2 career paths it influences.
+- Add one recruiter or industry insight.
+Subtly position ExamBoot.net as a smarter way to prepare (do not oversell).
 {writing_rules_linkedin}
-End with a call to action to “Start your free practice test today: {{exam_url}}.”
+Optional closing line:
+"Explore a realistic practice test here: {{exam_url}}"
 """,
     "preparation_methodology": f"""
-Write a LinkedIn post giving practical study tips for passing the certification exam: {{certification}} from vendor {{vendor}}.
-Start with a question like “Getting ready for {{certification}} from @{{vendor}}? Here’s how to study smarter.”,
-give 3 concise preparation tips. 
+Write a LinkedIn post for professionals preparing for {{certification}} from {{vendor}}.
+Start with a tension-based hook (example: "Most candidates fail {{certification}} for the same reason.")
+Provide 3 sharp, practical insights (not generic advice).
+Avoid textbook-style explanations.
+Position ExamBoot.net as a tool that supports structured, strategic preparation — naturally integrated into the narrative.
 {writing_rules_linkedin}
-End with a link to try a free ExamBoot test simulation: {{exam_url}}.
+Optional soft CTA:
+"Try a realistic simulation here: {{exam_url}}"
 """,
     "experience_testimony": f"""
-Using a realistic, third-person fictional character, write a clear, actionable, storytelling-style blog post in the form of a testimonial, testifying to how the character passed with the help of ExamBoot the certification exam: {{certification}} from vendor {{vendor}}.
-Make it inspiring and motivating (Context, motivation, challenges, strategy, results).
-Use a storytelling tone, mention ExamBoot.net as part of the preparation journey, and end with encouragement for others to start.
+Write a realistic LinkedIn-style story about a professional who passed {{certification}} from {{vendor}}.
+Avoid exaggerated success clichés.
+Focus on:
+- The doubt phase
+- The preparation shift
+- The strategic change that made the difference
+- The outcome
+Mention ExamBoot.net as part of the preparation process in a natural way.
+Keep it authentic, grounded, and concise.
 {writing_rules_linkedin}
-A call to action with a link to start a free test: {{exam_url}}.
+Optional closing:
+"Start practicing here: {{exam_url}}"
 """,
     "career_impact": f"""
-Draft a professional LinkedIn post highlighting the career benefits of the certification exam: {{certification}} from vendor {{vendor}}.
-Include statistics (average salaries, job titles, demand trends), examples of companies hiring certified professionals, and how ExamBoot.net helps candidates stand out.
-Use clear bullet points and finish with “Start your certification journey with ExamBoot.net.”.
+Write a thought-leadership style LinkedIn post about the real career impact of {{certification}} from {{vendor}}.
+Do NOT overload with statistics.
+Use:
+- 1 strong salary or demand insight max
+- 2 job role examples
+- 1 recruiter or hiring observation
+Avoid long bullet lists.
+Avoid sounding like a market report.
+Explain why this certification changes positioning in the job market.
+Naturally mention how ExamBoot.net helps candidates prepare more strategically.
 {writing_rules_linkedin}
-A call to action with a link to start a free test: {{exam_url}}.
+Optional soft CTA:
+"Explore a practice simulation here: {{exam_url}}"
 """,
     "engagement_community": f"""
-Create an engaging LinkedIn post inviting readers to take a quick quiz for the certification exam: {{certification}} from vendor {{vendor}}.
-Example intro: “Think you know [field topic]? Test yourself with our simulated test for {{certification}} from vendor {{vendor}}!”.
+Write an engaging LinkedIn post inviting professionals to test their knowledge for {{certification}} from {{vendor}}.
+Start with a challenge question.
+Keep tone playful but professional.
+Explain briefly why self-testing reveals blind spots.
+Mention ExamBoot.net as a realistic simulation environment.
+Keep it concise and engaging.
 {writing_rules_linkedin}
-Add a link  {{exam_url}} to the shareable test and encourage users to share their results.
+Add the link {{exam_url}} at the begining.
 """,
 }
 
 LINKEDIN_CAROUSEL_PROMPT_TEMPLATE = """
-You are a LinkedIn expert (B2B, personal branding, copywriting).
-
+You are a LinkedIn growth strategist specialized in B2B education and certification markets.
 Objective:
-Create a 5-page LinkedIn carousel that is highly engaging, clear, and easy to read on mobile.
+Create a 5-page LinkedIn carousel that feels sharp, modern, insightful — not generic, not corporate.
 
 User input:
-
 [QUESTION_TO_ADDRESS]
 
-General constraints:
-- Audience: professionals, decision-makers, tech/business profiles
-- Tone: clear, engaging, credible, value-oriented
-- Style: short sentences, strong visual impact, fast to read
-- 0 to 2 emojis max per page
-- Each page must encourage the reader to swipe
-- Respond in English
+Audience:
+Certification candidates, professionals, decision-makers, tech/business profiles, hiring managers, L&D leaders.
 
-Layout constraints (to fit a precise visual template):
-- headline: 4 to 9 words, ≤ 55 characters, no lists, no line breaks.
-- subtext: 1 to 2 short sentences, ≤ 120 characters, no lists, no line breaks.
-- key_message: micro-CTA (3 to 6 words), ≤ 32 characters, start with an action verb.
+Core principles:
+- Each page must contain ONE strong idea only.
+- Avoid generic advice.
+- Avoid corporate buzzwords.
+- Write like an expert sharing a strategic insight. However, avoid using the first person, as you are writing on behalf of an organization.
+- Every page must create curiosity for the next one.
+- Make the reader feel smarter after reading.
+- Mobile-first clarity.
+
+Tone:
+Confident. Human. Insight-driven. Not promotional.
+
+Emojis:
+0–1 max per page (only if it reinforces meaning).
+
+Layout constraints:
+- headline: 4 to 9 words, ≤ 55 characters, no line breaks.
+- subtext: 1 to 2 sharp sentences, ≤ 120 characters, no lists.
+- key_message: micro-CTA (3 to 6 words) to push to the next page, ≤ 32 characters, start with an action verb.
+
+Strategic flow:
+Page 1 → Ultra-captivating hook (question, promise, fun fact or stat), stop-scrolling.
+Page 2 → Problem / tension: Challenge a belief or expose a hidden truth.
+Page 3 → Solution / revelation: Reveal the real problem most people ignore.
+Page 4 → Solution / revelation (continued): Reframe how the problem should be approached.
+Page 5 → Introduce the smarter method or mindset.
+
+Important:
+- No fluff.
+- No repetition across pages.
+- No long explanations.
+- Each page must feel punchy and scroll-stopping.
+- Avoid sounding like marketing copy.
 
 Required structure:
 You MUST respond only with valid JSON (no text before/after).
 
 Expected JSON format:
-
 {
   "pages": [
     {
@@ -292,19 +377,13 @@ Expected JSON format:
     },
     {
       "page_number": 5,
-      "role": "Proof / differentiation + CTA",
+      "role": "Introduce the smarter method or mindset: Proof / differentiation",
       "headline": "",
       "subtext": "",
       "key_message": ""
     }
   ]
 }
-
-Quality rules:
-- Page 1: strong hook, stop-scrolling
-- Pages 2 to 5: concrete value, zero fluff
-- Each page must be actionable or thought-provoking
-- JSON must be strictly valid
 """
 
 CODE_CERT_RESPONSE_SCHEMA = {
