@@ -112,6 +112,9 @@
     .action-button.danger { background: rgba(248,113,113,0.15); border-color: rgba(248,113,113,0.4); }
     .action-button:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(56, 189, 248, 0.18); }
 
+    .action-link { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--accent-strong); font-size: 0.88rem; font-weight: 600; text-decoration: none; margin-top: 0.75rem; }
+    .action-link.disabled { color: var(--text-muted); pointer-events: none; }
+
     .list-panel { background: rgba(8, 12, 24, 0.75); border-radius: 18px; border: 1px solid rgba(148, 163, 184, 0.16); padding: 1rem 1.1rem; }
     .list-panel ul { list-style: none; padding: 0; margin: 0.6rem 0 0; display: grid; gap: 0.5rem; }
     .list-panel li { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.5rem 0.7rem; border-radius: 12px; border: 1px solid rgba(148,163,184,0.16); background: rgba(15, 19, 32, 0.55); cursor: pointer; }
@@ -193,6 +196,7 @@
             <button class="action-button danger" id="certDelete">Supprimer</button>
           </div>
           <div class="status-note" id="certStatus">Sélectionnez un provider pour charger les certifications.</div>
+          <a id="domainGeneratorLink" class="action-link disabled" href="#" aria-disabled="true">Go to domain generator</a>
           <ul id="certList"></ul>
           <div class="empty-state" id="certEmpty">Aucune certification chargée.</div>
         </div>
@@ -248,6 +252,7 @@
     const certCreate = document.getElementById('certCreate');
     const certSave = document.getElementById('certSave');
     const certDelete = document.getElementById('certDelete');
+    const domainGeneratorLink = document.getElementById('domainGeneratorLink');
 
     const domainList = document.getElementById('domainList');
     const domainEmpty = document.getElementById('domainEmpty');
@@ -302,6 +307,24 @@
       selectedDomainId = null;
     };
 
+    const domainGeneratorBase = '{{ url_for('dom.index') }}';
+
+    const updateDomainGeneratorLink = () => {
+      if (!domainGeneratorLink) {
+        return;
+      }
+      const providerId = providerSelect.value;
+      if (!providerId || !selectedCertId) {
+        domainGeneratorLink.href = '#';
+        domainGeneratorLink.classList.add('disabled');
+        domainGeneratorLink.setAttribute('aria-disabled', 'true');
+        return;
+      }
+      domainGeneratorLink.href = `${domainGeneratorBase}?provider_id=${encodeURIComponent(providerId)}&cert_id=${encodeURIComponent(selectedCertId)}`;
+      domainGeneratorLink.classList.remove('disabled');
+      domainGeneratorLink.setAttribute('aria-disabled', 'false');
+    };
+
     const renderCertifications = () => {
       certList.innerHTML = '';
       if (!certificationsCache.length) {
@@ -330,6 +353,7 @@
           certDescr2.value = cert.descr2 || '';
           renderCertifications();
           loadDomains(cert.id);
+          updateDomainGeneratorLink();
         });
         certList.appendChild(item);
       });
@@ -426,6 +450,7 @@
         }
         renderCertifications();
         certStatus.textContent = `${certificationsCache.length} certification(s) chargée(s).`;
+        updateDomainGeneratorLink();
         if (selectedCertId) {
           await loadDomains(selectedCertId);
         } else {
@@ -437,6 +462,7 @@
         certificationsCache = [];
         renderCertifications();
         certStatus.textContent = error.message || 'Erreur de chargement.';
+        updateDomainGeneratorLink();
       }
     };
 
@@ -471,6 +497,7 @@
 
     providerSearch.addEventListener('input', applyProviderFilter);
     providerSelect.addEventListener('change', () => {
+      updateDomainGeneratorLink();
       loadCertifications(providerSelect.value);
     });
 
@@ -503,6 +530,7 @@
         renderCertifications();
         certStatus.textContent = 'Certification créée.';
         await loadDomains(payload.id);
+        updateDomainGeneratorLink();
       } catch (error) {
         certStatus.textContent = error.message || 'Impossible de créer la certification.';
       }
@@ -556,6 +584,7 @@
         clearDomainForm();
         renderDomains();
         certStatus.textContent = 'Certification supprimée.';
+        updateDomainGeneratorLink();
         domainStatus.textContent = 'Sélectionnez une certification pour charger les domaines.';
       } catch (error) {
         certStatus.textContent = error.message || 'Impossible de supprimer la certification.';
@@ -644,6 +673,7 @@
       }
     });
 
+    updateDomainGeneratorLink();
     loadProviders();
   </script>
 </body>

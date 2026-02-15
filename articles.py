@@ -295,6 +295,43 @@ def _save_course_art_json(certification_id: int, course_art_payload: dict) -> No
         conn.close()
 
 
+def _get_existing_course_art_json(certification_id: int) -> Optional[dict]:
+    """Return the stored course art JSON for the certification when available."""
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT art FROM courses WHERE id = %s", (certification_id,))
+        row = cursor.fetchone()
+    finally:
+        cursor.close()
+        conn.close()
+
+    if not row or row[0] is None:
+        return None
+
+    raw_payload = row[0]
+    if isinstance(raw_payload, (bytes, bytearray)):
+        raw_payload = raw_payload.decode("utf-8", errors="ignore")
+
+    if isinstance(raw_payload, dict):
+        return raw_payload
+
+    if isinstance(raw_payload, str):
+        cleaned = raw_payload.strip()
+        if not cleaned:
+            return None
+        try:
+            parsed = json.loads(cleaned)
+        except json.JSONDecodeError as exc:
+            raise ValueError("La fiche certification enregistrée est invalide.") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("La fiche certification enregistrée n'est pas un objet JSON.")
+        return parsed
+
+    raise ValueError("Format de fiche certification non supporté dans la base.")
+
+
 def _percent_encode(value: str) -> str:
     """Return a string percent-encoded according to RFC 3986."""
 
@@ -2119,6 +2156,26 @@ def generate_course_art():
         )
     except Exception as exc:  # pragma: no cover - propagated for visibility
         return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"course_art": course_art})
+
+
+@articles_bp.route("/existing-course-art")
+def get_existing_course_art():
+    """Return the existing course art JSON for the current certification."""
+
+    try:
+        provider_id, certification_id = _extract_provider_certification(request.args)
+        _fetch_selection(provider_id, certification_id)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    try:
+        course_art = _get_existing_course_art_json(certification_id)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 500
+    except mysql.connector.Error as exc:
+        return jsonify({"error": f"Erreur lors de la lecture de la fiche: {exc}"}), 500
 
     return jsonify({"course_art": course_art})
 

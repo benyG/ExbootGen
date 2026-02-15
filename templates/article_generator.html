@@ -919,6 +919,38 @@
       updateActionAvailability();
     }
 
+
+    async function loadExistingCourseArt() {
+      const identifiers = getSelectionIdentifiers();
+      if (!identifiers) {
+        currentCourseArt = null;
+        courseArtOutput.textContent = DEFAULT_COURSE_ART_TEXT;
+        updateActionAvailability();
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/articles/existing-course-art?provider_id=${encodeURIComponent(identifiers.provider_id)}&certification_id=${encodeURIComponent(identifiers.certification_id)}`
+        );
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur lors du chargement de la fiche certification');
+        }
+        if (payload && payload.course_art && typeof payload.course_art === 'object') {
+          currentCourseArt = payload.course_art;
+          courseArtOutput.textContent = JSON.stringify(payload.course_art, null, 2);
+        } else {
+          currentCourseArt = null;
+          courseArtOutput.textContent = DEFAULT_COURSE_ART_TEXT;
+        }
+      } catch (error) {
+        currentCourseArt = null;
+        courseArtOutput.textContent = DEFAULT_COURSE_ART_TEXT;
+      }
+      updateActionAvailability();
+    }
+
     providerSearch.addEventListener('input', () => {
       const query = providerSearch.value.toLowerCase();
       const filtered = providers.filter(provider => provider.name.toLowerCase().includes(query));
@@ -945,6 +977,7 @@
         if (certId) {
           certSelect.value = certId;
         }
+        await loadExistingCourseArt();
         setStatus('');
       } catch (error) {
         setStatus(error.message, true);
@@ -963,8 +996,9 @@
       renderCertifications(filtered);
     });
 
-    certSelect.addEventListener('change', () => {
+    certSelect.addEventListener('change', async () => {
       resetGeneratedContent();
+      await loadExistingCourseArt();
       updateActionAvailability();
     });
     examUrlInput.addEventListener('input', updateActionAvailability);
