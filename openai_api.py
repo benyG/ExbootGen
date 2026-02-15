@@ -6,6 +6,7 @@ import re
 import json
 import time
 import random
+from pathlib import Path
 from typing import Optional
 from config import (
     OPENAI_API_KEY,
@@ -2054,6 +2055,55 @@ def _post_with_retry(payload: dict) -> requests.Response:
             )
             time.sleep(delay)
 
+
+def _openai_base_url() -> str:
+    base = (OPENAI_API_URL or "").rstrip("/")
+    if base.endswith("/responses"):
+        return base[: -len("/responses")]
+    return base
+
+
+def upload_pdf_bytes_to_openai(file_bytes: bytes, filename: str) -> str:
+    """Upload a PDF to OpenAI Files API and return the file identifier."""
+
+    if not file_bytes:
+        raise ValueError("Le contenu du PDF est vide.")
+
+    safe_name = Path(filename or "document.pdf").name
+    url = f"{_openai_base_url()}/files"
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    response = requests.post(
+        url,
+        headers=headers,
+        data={"purpose": "user_data"},
+        files={"file": (safe_name, file_bytes, "application/pdf")},
+        timeout=OPENAI_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    file_id = payload.get("id", "")
+    if not file_id:
+        raise Exception("Réponse OpenAI invalide: file_id manquant.")
+    return file_id
+
+
+def delete_openai_file(file_id: str) -> None:
+    """Delete a PDF previously uploaded to OpenAI Files API."""
+
+    if not file_id:
+        return
+    url = f"{_openai_base_url()}/files/{file_id}"
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    try:
+        response = requests.delete(url, headers=headers, timeout=OPENAI_TIMEOUT_SECONDS)
+        if response.status_code not in (200, 404):
+            response.raise_for_status()
+    except Exception as exc:  # pragma: no cover - best effort cleanup
+        logging.warning("Suppression du fichier OpenAI impossible (%s): %s", file_id, exc)
+
 def generate_domains_outline(certification: str) -> dict:
     """Retrieve official domains for a certification via the OpenAI API."""
 
@@ -2117,7 +2167,8 @@ def generate_questions(
     scenario_illustration_type: str,
     num_questions: int,
     batch_size: int = 5,
-    use_text: bool = False
+    use_text: bool = False,
+    source_file_id: str = "",
  ) -> dict:
     """
     Interroge l'API OpenAI pour générer des questions,
@@ -2140,7 +2191,10 @@ def generate_questions(
     logging.debug(f"domain: {domain}")
     logging.debug(f"description: {domain_descr}")
     logging.debug(f"level: {level}")
+    use_uploaded_file = bool(source_file_id)
     scope_phrase = "from the text provided" if use_text else "from the identified domains"
+    if use_uploaded_file:
+        scope_phrase = "from the uploaded reference file"
     
    # Always initialize text_for_diagram_type to ensure it's defined.
     text_for_diagram_type = ""
@@ -2352,7 +2406,41 @@ def generate_questions(
         current = min(batch_size, remaining)
 
         # Construction du prompt pour ce batch
-        if use_text:
+        if use_uploaded_file:
+            content_prompt = f"""
+TASK: Use the uploaded reference file to generate {current} questions on the {domain} topic of the {certification} course.
+Questions: {question_type_text}
+Difficulty level: {level}: {level_explained}
+Practice: {practical}
+{scenario_illustration_type}
+Reference: uploaded file.
+
+{specific_question_quality}
+
+Format your response as a decodable single-line JSON object.
+RESPONSE FORMAT (JSON only, no additional text):
+{response_format}
+
+RULES:
+1. If you want to present a line of code in your response, surround that portion with '[code]...[/code]'. This will help in formatting it.
+2. If you want to present a console command or result in your response, surround that portion with '[console]...[/console]'. This will help in formatting it.
+3. Strictly align questions to the content of the selected domain and the uploaded reference file.
+4. Questions must be self-contained and cannot rely on the reader having direct access to the reference file.
+"""
+            payload = {
+                "model": OPENAI_MODEL,
+                "input": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": content_prompt},
+                            {"type": "input_file", "file_id": source_file_id},
+                        ],
+                    }
+                ],
+                "text": {"format": _json_schema_format(QUESTIONS_RESPONSE_SCHEMA, "questions")},
+            }
+        elif use_text:
             content_prompt = f"""
 TASK: Use the provided text to generate {current} questions on the {domain} topic of the {certification} course.
 Provided text: {domain_descr}
@@ -2428,10 +2516,10 @@ RULES:
 12. Ensure every correct answer can be inferred directly from the content you include in the question.
 """
 
-        payload = _build_response_payload(
-            content_prompt,
-            text_format=_json_schema_format(QUESTIONS_RESPONSE_SCHEMA, "questions"),
-        )
+            payload = _build_response_payload(
+                content_prompt,
+                text_format=_json_schema_format(QUESTIONS_RESPONSE_SCHEMA, "questions"),
+            )
 
         response = _post_with_retry(payload)
         content = _extract_response_text(response.json())
