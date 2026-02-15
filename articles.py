@@ -118,6 +118,7 @@ CAROUSEL_LINE_HEIGHT = 1.12
 CAROUSEL_TITLE_COLOR = (0.13, 0.77, 0.37)
 CAROUSEL_SUBTEXT_COLOR = (0.22, 0.22, 0.22)
 CAROUSEL_CTA_COLOR = (0.22, 0.22, 0.22)
+CAROUSEL_FOOTER_WHITE_COLOR = (1.0, 1.0, 1.0)
 CAROUSEL_FONT_CANDIDATES = (
     ("Poppins", "Poppins-Regular.ttf", "Poppins-Bold.ttf"),
     ("Montserrat", "Montserrat-Regular.ttf", "Montserrat-Bold.ttf"),
@@ -579,10 +580,11 @@ def _build_carousel_pdf(pages: list[dict]) -> Path:
         min(key_message_bottom, page_rect.y1 - 8),
     )
 
-    for idx, page_payload in enumerate(pages, start=1):
-        if idx >= output.page_count:
+    for idx, page_payload in enumerate(pages):
+        if idx >= output.page_count - 1:
             break
         page = output.load_page(idx)
+        footer_color = CAROUSEL_FOOTER_WHITE_COLOR if 1 <= idx <= 4 else CAROUSEL_CTA_COLOR
         _insert_text_block(
             page,
             headline_rect,
@@ -617,7 +619,7 @@ def _build_carousel_pdf(pages: list[dict]) -> Path:
             min_size=16,
             line_height=CAROUSEL_LINE_HEIGHT,
             align=1,
-            color=CAROUSEL_CTA_COLOR,
+            color=footer_color,
         )
 
     filename = f"carousel_{uuid.uuid4().hex}.pdf"
