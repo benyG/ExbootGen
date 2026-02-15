@@ -1742,23 +1742,16 @@ def _generate_and_publish_tweet_task(
             error=str(exc),
         )
 
-    try:
-        tweet_result = _run_tweet_workflow(
-            selection,
-            exam_url,
-            topic_type,
-            attach_image=attach_image,
-            tweet_text=tweet_text,
-        )
-    except Exception as exc:  # pragma: no cover - defensive fallback
-        return tweet_text, SocialPostResult(
-            text=tweet_text,
-            published=False,
-            status_code=500,
-            error=str(exc),
-        )
-
-    return tweet_text, tweet_result
+    return tweet_text, _retry_social_publish_once(
+        workflow=_run_tweet_workflow,
+        selection=selection,
+        exam_url=exam_url,
+        topic_type=topic_type,
+        attach_image=attach_image,
+        text=tweet_text,
+        channel_label="Tweet",
+        text_kwarg="tweet_text",
+    )
 
 
 def _generate_and_publish_linkedin_task(
@@ -1784,23 +1777,74 @@ def _generate_and_publish_linkedin_task(
             error=str(exc),
         )
 
-    try:
-        linkedin_result = _run_linkedin_workflow(
-            selection,
-            exam_url,
-            topic_type,
-            attach_image=attach_image,
-            linkedin_post=linkedin_post,
-        )
-    except Exception as exc:  # pragma: no cover - defensive fallback
-        return linkedin_post, SocialPostResult(
-            text=linkedin_post,
-            published=False,
-            status_code=500,
-            error=str(exc),
-        )
+    return linkedin_post, _retry_social_publish_once(
+        workflow=_run_linkedin_workflow,
+        selection=selection,
+        exam_url=exam_url,
+        topic_type=topic_type,
+        attach_image=attach_image,
+        text=linkedin_post,
+        channel_label="LinkedIn",
+        text_kwarg="linkedin_post",
+    )
 
-    return linkedin_post, linkedin_result
+
+def _retry_social_publish_once(
+    *,
+    workflow,
+    selection: Selection,
+    exam_url: str,
+    topic_type: str,
+    attach_image: bool,
+    text: str,
+    channel_label: str,
+    text_kwarg: str,
+) -> SocialPostResult:
+    """Try one social publish operation, then retry exactly once on failure."""
+
+    workflow_args = {
+        "selection": selection,
+        "exam_url": exam_url,
+        "topic_type": topic_type,
+        "attach_image": attach_image,
+    }
+    workflow_args[text_kwarg] = text
+
+    first_result: Optional[SocialPostResult] = None
+    for attempt in range(2):
+        try:
+            result = workflow(**workflow_args)
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            result = SocialPostResult(
+                text=text,
+                published=False,
+                status_code=500,
+                error=str(exc),
+            )
+
+        if result.published:
+            return result
+
+        first_result = first_result or result
+
+    error_parts = []
+    if first_result and first_result.error:
+        error_parts.append(f"Tentative 1: {first_result.error}")
+    if first_result and first_result.media_filename:
+        media_filename = first_result.media_filename
+    else:
+        media_filename = None
+    final_error = (
+        f"{channel_label} non publié après 2 tentatives. "
+        + " ".join(error_parts)
+    ).strip()
+    return SocialPostResult(
+        text=text,
+        published=False,
+        status_code=(first_result.status_code if first_result else 500),
+        error=final_error,
+        media_filename=media_filename,
+    )
 
 
 def _generate_and_store_course_art_task(
