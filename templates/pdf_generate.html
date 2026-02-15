@@ -206,6 +206,9 @@
         <div>
           <label class="font-bold block mb-1">Fichier PDF</label>
           <input type="file" name="pdf_file" id="pdfFile" accept="application/pdf" required>
+          <input type="hidden" name="document_ref" id="documentRef">
+          <div class="note" id="documentState" style="margin-top:0.6rem; letter-spacing: normal; text-transform:none;"></div>
+          <button type="button" id="clearDocumentBtn" class="stellar-button" style="display:none; margin-top:0.6rem; width:max-content;">Supprimer le document (OpenAI)</button>
         </div>
         <div>
           <label class="font-bold block mb-1">Nombre de questions</label>
@@ -307,6 +310,57 @@
     const base = '{{ url_for('pdf.index') }}';
     const genUrl = '{{ url_for('pdf.generate_questions_from_pdf') }}';
     let currentSession = null;
+    let currentDocumentRef = null;
+    let currentDocumentExpiresAt = null;
+
+    const pdfFileInput = document.getElementById('pdfFile');
+    const documentRefInput = document.getElementById('documentRef');
+    const documentState = document.getElementById('documentState');
+    const clearDocumentBtn = document.getElementById('clearDocumentBtn');
+
+    const formatExpiry = ts => {
+      if (!ts) return '';
+      try {
+        return new Date(ts * 1000).toLocaleString();
+      } catch (e) {
+        return '';
+      }
+    };
+
+    const refreshDocumentState = () => {
+      if (currentDocumentRef && currentDocumentExpiresAt) {
+        documentState.textContent = `Document temporaire actif (${currentDocumentRef.slice(0, 8)}…) · expiration: ${formatExpiry(currentDocumentExpiresAt)}.`;
+        clearDocumentBtn.style.display = 'inline-flex';
+        pdfFileInput.required = false;
+      } else {
+        documentState.textContent = '';
+        clearDocumentBtn.style.display = 'none';
+        pdfFileInput.required = true;
+      }
+    };
+
+    pdfFileInput.addEventListener('change', () => {
+      if (pdfFileInput.files && pdfFileInput.files.length > 0) {
+        currentDocumentRef = null;
+        currentDocumentExpiresAt = null;
+        documentRefInput.value = '';
+      }
+      refreshDocumentState();
+    });
+
+    clearDocumentBtn.addEventListener('click', async () => {
+      if (!currentDocumentRef) return;
+      try {
+        await fetch(`${base}api/document/${currentDocumentRef}`, { method: 'DELETE' });
+      } catch (e) {
+        // ignore cleanup errors in UI
+      }
+      currentDocumentRef = null;
+      currentDocumentExpiresAt = null;
+      documentRefInput.value = '';
+      pdfFileInput.value = '';
+      refreshDocumentState();
+    });
 
     const providerSelect = document.getElementById("providerSelect");
     const certSelect = document.getElementById("certSelect");
@@ -413,12 +467,18 @@
         overlay.classList.add('show');
         const submitButton = this.querySelector('button[type="submit"]');
         setButtonLoading(submitButton, true);
+        documentRefInput.value = currentDocumentRef || '';
         const formData = new FormData(this);
         try {
             const res = await fetch(genUrl, {method:'POST', body:formData});
             const data = await res.json();
             if (data.status === 'ok') {
                 currentSession = data.session_id;
+                currentDocumentRef = data.document_ref || null;
+                currentDocumentExpiresAt = data.document_expires_at || null;
+                documentRefInput.value = currentDocumentRef || '';
+                pdfFileInput.value = '';
+                refreshDocumentState();
                 document.getElementById('jsonPreview').value = JSON.stringify(data.json_data, null, 4);
                 document.getElementById('jsonContainer').classList.add('active');
             } else {
@@ -445,6 +505,8 @@
           setButtonLoading(this, false);
         }
     });
+
+    refreshDocumentState();
   </script>
 </body>
 </html>
