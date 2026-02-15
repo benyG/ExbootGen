@@ -476,6 +476,7 @@
     .chip.x { background: linear-gradient(135deg, #38bdf8, #0ea5e9); color: #041221; border: 1px solid rgba(14,165,233,0.45); box-shadow: 0 8px 25px rgba(14,165,233,0.16); }
     .chip.linkedin { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #e2e8f0; }
     .chip.article { background: linear-gradient(135deg, #a855f7, #7c3aed); color: #f8fafc; }
+    .chip.carousel { background: linear-gradient(135deg, #22c55e, #16a34a); color: #052e16; border: 1px solid rgba(34,197,94,0.45); box-shadow: 0 8px 25px rgba(34,197,94,0.16); }
 
     .count {
       position: absolute;
@@ -1033,6 +1034,7 @@
             <option value="article_long">Article long</option>
             <option value="teasing">Teasing certification</option>
             <option value="ressource">Partage de ressource/test</option>
+            <option value="carousel_pdf">Carousel PDF (LinkedIn)</option>
           </select>
         </div>
         <div>
@@ -1051,92 +1053,14 @@
           <label class="checkbox-pill"><input type="checkbox" value="linkedin" class="channel-checkbox"> LinkedIn</label>
           <label class="checkbox-pill"><input type="checkbox" value="x" class="channel-checkbox"> Twitter</label>
           <label class="checkbox-pill"><input type="checkbox" value="article" class="channel-checkbox"> Article long</label>
-        </div>
-        <div class="option-row">
-          <label class="image-toggle">
-            <input type="checkbox" id="addImageToggle" checked>
-            <span>Ajouter une image à la publication</span>
-          </label>
+          <label class="checkbox-pill"><input type="checkbox" value="carousel" class="channel-checkbox"> Carousel</label>
         </div>
         <div>
-          <label for="noteInput">Notes internes (optionnel)</label>
-          <input type="search" id="noteInput" placeholder="CTA, angle éditorial, visuel attendu…">
-        </div>
-        <div style="grid-column: 1 / -1;">
-          <button type="submit" class="primary">Planifier pour la date sélectionnée</button>
-          <div id="formStatus" class="status" role="status"></div>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <div class="modal-backdrop" id="scheduleModal" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="scheduleModalTitle">
-      <div class="modal-header">
-        <div>
-          <p class="pill" style="margin:0;">Planifier une action</p>
-          <h3 id="scheduleModalTitle" style="margin:0.2rem 0 0;">Configurer la publication pour la date sélectionnée</h3>
-          <p class="subtle" id="modalDateLabel" style="margin:0;">Date sélectionnée : <strong id="modalDateValue"></strong></p>
-        </div>
-        <button type="button" class="ghost" id="closeScheduleModal" aria-label="Fermer la fenêtre">✕</button>
-      </div>
-      <form id="scheduleForm" class="grid-two">
-        <div>
-          <label for="providerSearch">Recherche provider</label>
-          <input type="search" id="providerSearch" placeholder="Rechercher un provider">
-        </div>
-        <div>
-          <label for="providerSelect">Providers disponibles</label>
-          <select id="providerSelect">
-            <option value="">Choisir un provider…</option>
+          <label for="carouselTopicSelect">Sujet carousel disponible</label>
+          <select id="carouselTopicSelect" disabled>
+            <option value="">Sélectionner un sujet carousel…</option>
           </select>
-        </div>
-        <div>
-          <label for="certSearch">Recherche certification</label>
-          <input type="search" id="certSearch" placeholder="Rechercher une certification" disabled>
-        </div>
-        <div>
-          <label for="certSelect">Certifications</label>
-          <select id="certSelect" disabled>
-            <option value="">Choisir une certification…</option>
-          </select>
-        </div>
-        <div>
-          <label for="topicType">Type de sujet</label>
-          <select id="topicType">
-            <option value="">Sélectionner…</option>
-            <option value="certification_presentation">Présentation de certification</option>
-            <option value="preparation_methodology">Méthodologie & préparation</option>
-            <option value="experience_testimony">Retour d'expérience</option>
-            <option value="career_impact">Impact carrière</option>
-            <option value="engagement_community">Engagement communauté</option>
-          </select>
-        </div>
-        <div>
-          <label for="contentType">Format de publication</label>
-          <select id="contentType">
-            <option value="post_social">Post court (social)</option>
-            <option value="article_long">Article long</option>
-            <option value="teasing">Teasing certification</option>
-            <option value="ressource">Partage de ressource/test</option>
-          </select>
-        </div>
-        <div>
-          <label for="linkInput">Lien de référence</label>
-          <div class="input-with-action">
-            <input type="url" id="linkInput" placeholder="URL du test partagé Examboot ou lien personnalisé">
-            <button type="button" class="secondary" id="generateExamBtn" disabled>Générer un test</button>
-          </div>
-          <p class="inline-hint">Utilise la certification sélectionnée pour générer et préremplir le lien Examboot.</p>
-        </div>
-        <div>
-          <label for="timeInput">Heure de diffusion</label>
-          <input type="time" id="timeInput" value="09:00">
-        </div>
-        <div class="checkbox-group">
-          <label class="checkbox-pill"><input type="checkbox" value="linkedin" class="channel-checkbox"> LinkedIn</label>
-          <label class="checkbox-pill"><input type="checkbox" value="x" class="channel-checkbox"> Twitter</label>
-          <label class="checkbox-pill"><input type="checkbox" value="article" class="channel-checkbox"> Article long</label>
+          <p class="inline-hint">Obligatoire si le canal Carousel est coché.</p>
         </div>
         <div class="option-row">
           <label class="image-toggle">
@@ -1203,6 +1127,7 @@
     const timeInput = document.getElementById('timeInput');
     const noteInput = document.getElementById('noteInput');
     const addImageToggle = document.getElementById('addImageToggle');
+    const carouselTopicSelect = document.getElementById('carouselTopicSelect');
     const generateExamBtn = document.getElementById('generateExamBtn');
     const formStatus = document.getElementById('formStatus');
     const scheduleForm = document.getElementById('scheduleForm');
@@ -1218,11 +1143,44 @@
     let filteredCerts = [];
     let planning = normalisePlanning(loadPlanning());
     let scheduleReports = {};
+    let availableCarouselTopics = [];
 
     let viewDate = new Date();
     let selectedDate = new Date();
 
-    const channelLabels = { linkedin: 'LinkedIn', x: 'Twitter', article: 'Article' };
+    const channelLabels = { linkedin: 'LinkedIn', x: 'Twitter', article: 'Article', carousel: 'Carousel' };
+
+    async function fetchCarouselTopics() {
+      try {
+        const response = await fetch('/articles/carousel-topics/list?available=1');
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Impossible de charger les sujets carousel');
+        availableCarouselTopics = Array.isArray(payload.topics) ? payload.topics : [];
+        carouselTopicSelect.innerHTML = '<option value="">Sélectionner un sujet carousel…</option>';
+        availableCarouselTopics.forEach(item => {
+          const option = document.createElement('option');
+          option.value = String(item.id);
+          option.textContent = item.topic;
+          carouselTopicSelect.appendChild(option);
+        });
+      } catch (err) {
+        setStatus(err.message || 'Erreur de chargement des sujets carousel', 'error');
+      }
+    }
+
+    function syncCarouselControls() {
+      const selectedChannels = Array.from(scheduleForm.querySelectorAll('.channel-checkbox:checked')).map(c => c.value);
+      const carouselSelected = selectedChannels.includes('carousel') || contentType.value === 'carousel_pdf';
+      carouselTopicSelect.disabled = !carouselSelected;
+      if (contentType.value === 'carousel_pdf' && !selectedChannels.includes('carousel')) {
+        scheduleForm.querySelectorAll('.channel-checkbox').forEach(box => {
+          box.checked = box.value === 'carousel';
+        });
+      }
+      if (carouselSelected && contentType.value !== 'carousel_pdf') {
+        contentType.value = 'carousel_pdf';
+      }
+    }
 
     function formatDateKey(date) {
       const y = date.getFullYear();
@@ -1661,6 +1619,12 @@
         const topic = document.createElement('div');
         topic.className = 'meta';
         topic.textContent = `${item.subjectLabel || 'Sujet'} • ${item.contentTypeLabel}`;
+        if (item.carouselTopicLabel) {
+          const cMeta = document.createElement('div');
+          cMeta.className = 'subtle';
+          cMeta.textContent = `Carousel: ${item.carouselTopicLabel}`;
+          card.appendChild(cMeta);
+        }
 
         const addImage = item.addImage !== false;
 
@@ -1936,6 +1900,10 @@
       updateActionsAvailability();
     });
 
+    contentType.addEventListener('change', syncCarouselControls);
+    scheduleForm.querySelectorAll('.channel-checkbox').forEach(box => box.addEventListener('change', syncCarouselControls));
+    carouselTopicSelect.addEventListener('change', syncCarouselControls);
+
     generateExamBtn.addEventListener('click', async () => {
       const providerId = providerSelect.value;
       const certId = certSelect.value;
@@ -2032,6 +2000,13 @@
         return;
       }
 
+      const isCarouselPlan = channelValues.includes('carousel') || contentType.value === 'carousel_pdf';
+      const selectedCarouselTopic = availableCarouselTopics.find(item => String(item.id) === String(carouselTopicSelect.value)) || null;
+      if (isCarouselPlan && !selectedCarouselTopic) {
+        setStatus('Veuillez sélectionner un sujet carousel disponible.', 'error');
+        return;
+      }
+
       if (link && !/^https?:\/\//i.test(link)) {
         link = `https://${link}`;
       }
@@ -2055,9 +2030,12 @@
         contentTypeLabel: contentLabel,
         link,
         time: timeInput.value || '09:00',
-        channels: channelValues,
+        channels: (isCarouselPlan ? ['carousel'] : channelValues),
         note: (noteInput.value || '').trim(),
         addImage: addImageToggle.checked,
+        carouselTopicId: selectedCarouselTopic ? selectedCarouselTopic.id : null,
+        carouselTopicLabel: selectedCarouselTopic ? selectedCarouselTopic.topic : '',
+        carouselQuestion: selectedCarouselTopic ? selectedCarouselTopic.question_to_address : '',
         status: 'queued'
       };
 
@@ -2077,6 +2055,8 @@
         renderCalendar();
         renderDayDetails();
         scheduleForm.reset();
+        carouselTopicSelect.value = '';
+        syncCarouselControls();
         addImageToggle.checked = true;
         certifications = [];
         renderCertifications([]);
@@ -2111,6 +2091,8 @@
       renderCertifications([]);
       updateActionsAvailability();
     });
+    fetchCarouselTopics();
+    syncCarouselControls();
     renderCalendar();
     renderDayDetails();
     fetchServerPlanning();

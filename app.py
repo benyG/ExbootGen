@@ -118,6 +118,7 @@ from edit_questions import edit_question_bp
 from articles import (
     articles_bp,
     render_x_callback,
+    run_scheduled_carousel_publication,
     run_scheduled_publication,
     SocialPostResult,
     ensure_exam_url,
@@ -1223,11 +1224,14 @@ def _build_schedule_reports(entries: List[dict]) -> Dict[str, Dict[str, object]]
     return reports
 
 
-def _serialise_schedule_note(note_text: str, add_image: bool) -> str:
+def _serialise_schedule_note(note_text: str, add_image: bool, meta: Dict[str, object] | None = None) -> str:
     """Serialize schedule note content along with media toggle metadata."""
 
+    payload: Dict[str, object] = {"text": note_text, "addImage": add_image}
+    if meta:
+        payload["meta"] = meta
     try:
-        return json.dumps({"text": note_text, "addImage": add_image})
+        return json.dumps(payload)
     except TypeError:
         return note_text
 
@@ -1401,7 +1405,12 @@ def schedule_save():
     add_image = bool(entry.get("addImage", True))
     note_text = entry.get("note") or ""
     entry["addImage"] = add_image
-    entry["note"] = _serialise_schedule_note(note_text, add_image)
+    note_meta = {
+        "carousel_topic_id": entry.get("carouselTopicId"),
+        "carousel_topic_label": entry.get("carouselTopicLabel"),
+        "carousel_question": entry.get("carouselQuestion"),
+    }
+    entry["note"] = _serialise_schedule_note(note_text, add_image, note_meta)
 
     required_fields = [
         "day",
@@ -1677,7 +1686,15 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         payload = {
             **entry_data,
             "link": link_value,
-            "note": _serialise_schedule_note(entry_data.get("note") or "", bool(entry_data.get("addImage", True))),
+            "note": _serialise_schedule_note(
+                entry_data.get("note") or "",
+                bool(entry_data.get("addImage", True)),
+                {
+                    "carousel_topic_id": entry_data.get("carouselTopicId"),
+                    "carousel_topic_label": entry_data.get("carouselTopicLabel"),
+                    "carousel_question": entry_data.get("carouselQuestion"),
+                },
+            ),
         }
         try:
             db.upsert_schedule_entry(payload)
@@ -1710,7 +1727,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         content_label = entry.get("contentTypeLabel") or entry.get("contentType") or "Contenu"
         link = (entry.get("link") or "").strip()
         time_of_day = entry.get("time") or "Heure non précisée"
-        allowed_channels = {"article", "linkedin", "x"}
+        allowed_channels = {"article", "linkedin", "x", "carousel"}
         channels = [channel for channel in (entry.get("channels") or []) if channel in allowed_channels]
         attach_image = bool(entry.get("addImage", True))
         entry_id = entry.get("id")
@@ -1787,14 +1804,28 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         _update_entry_status(entry_id, "running", stamp=True)
         channel_results: Dict[str, Dict[str, object]] = {}
         try:
-            result = run_scheduled_publication(
-                provider_id=provider_id,
-                certification_id=cert_id,
-                exam_url=link,
-                topic_type=str(entry.get("subject") or ""),
-                channels=channels,
-                attach_image=attach_image,
-            )
+            if "carousel" in channels:
+                carousel_topic_id = entry.get("carouselTopicId")
+                try:
+                    carousel_topic_id_int = int(carousel_topic_id)
+                except (TypeError, ValueError):
+                    raise ValueError("Aucun sujet de carrousel valide n'est associé à cette planification.")
+                result = run_scheduled_carousel_publication(
+                    provider_id=provider_id,
+                    certification_id=cert_id,
+                    exam_url=link,
+                    topic_id=carousel_topic_id_int,
+                    attach_image=attach_image,
+                )
+            else:
+                result = run_scheduled_publication(
+                    provider_id=provider_id,
+                    certification_id=cert_id,
+                    exam_url=link,
+                    topic_type=str(entry.get("subject") or ""),
+                    channels=channels,
+                    attach_image=attach_image,
+                )
         except Exception as exc:  # pragma: no cover - surfaced in job log
             counters["failed"] += 1
             _update_entry_status(entry_id, "failed", stamp=True)
@@ -1877,11 +1908,30 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
                     if linkedin_text:
                         context.log(f"Contenu LinkedIn : {_shorten(str(linkedin_text))}")
 
+            if "carousel" in channels:
+                carousel_linkedin_result: SocialPostResult | None = result.get("linkedin_result")
+                carousel_post = (carousel_linkedin_result.text if carousel_linkedin_result else None) or result.get("linkedin_post") or ""
+                carousel_pdf_url = result.get("pdf_url") or ""
+                if carousel_linkedin_result and carousel_linkedin_result.published:
+                    channel_outcomes.append(True)
+                    details = _shorten(str(carousel_post))
+                    if carousel_pdf_url:
+                        details = f"{details} · PDF: {carousel_pdf_url}" if details else f"PDF: {carousel_pdf_url}"
+                    channel_results["carousel"] = {"status": "succeeded", "message": details}
+                    context.log("Carousel généré et publication LinkedIn envoyée.")
+                    if carousel_pdf_url:
+                        context.log(f"PDF du carousel : {carousel_pdf_url}")
+                else:
+                    channel_outcomes.append(False)
+                    error = (carousel_linkedin_result and carousel_linkedin_result.error) or "Carousel LinkedIn non publié."
+                    channel_results["carousel"] = {"status": "failed", "message": error}
+                    context.log(error)
+
             success_count = sum(1 for outcome in channel_outcomes if outcome)
             total_channels = len(channel_outcomes)
             summary_parts = []
             for channel_name, result_data in channel_results.items():
-                label = {"article": "Article", "linkedin": "LinkedIn", "x": "X"}.get(channel_name, channel_name)
+                label = {"article": "Article", "linkedin": "LinkedIn", "x": "X", "carousel": "Carousel"}.get(channel_name, channel_name)
                 status_label = "OK" if result_data.get("status") == "succeeded" else "KO"
                 message = result_data.get("message")
                 summary_parts.append(f"{label}: {status_label}{f' ({message})' if message else ''}")
