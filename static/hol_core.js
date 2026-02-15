@@ -151,7 +151,7 @@ function ensurePaletteHasDecoy(palette){
       id: decoyId,
       label: 'Composant leurre',
       icon: '🧱',
-      description: "Élément distrayant qui n'est pas utile pour la solution.",
+      description: "Distractor element that is not useful for the solution.",
       tags: ['decoy'],
       is_decoy: true
     });
@@ -212,9 +212,9 @@ function runValidators(validators, payload, worldOverride){
     } else if (v.kind==='expression'){
       let ok=false;
       try{ ok = !!evalExpr(v.expr, { world: worldCtx, vars: state.vars, payload }); }
-      catch{ errors.push(templateString(v.error_message || v.message || 'Expression invalide', state.vars)); continue; }
+      catch{ errors.push(templateString(v.error_message || v.message || 'Invalid expression', state.vars)); continue; }
       if(!ok){
-        errors.push(templateString(v.message || 'Expression non vérifiée', state.vars));
+        errors.push(templateString(v.message || 'Expression not satisfied', state.vars));
       }
     } else if (v.kind==='payload'){
       const path = v.path || v.expect?.path || '';
@@ -243,9 +243,9 @@ const DEMO = {
   schema_version: "0.2.0",
   lab: {
     id: "s3-secure-mini",
-    title: "Sécuriser un bucket S3 (démo)",
+    title: "Secure an S3 bucket (demo)",
     subtitle: "Terminal + Console + Inspect + Quiz",
-    scenario_md: "Ce scénario de démonstration illustre comment le player orchestre une suite d'étapes complémentaires.\n\nVous incarnez un·e ingénieur·e cloud chargé·e de sécuriser un bucket S3 exposé. Chaque phase montre comment les validations mettent à jour l'état simulé et débloquent l'étape suivante.",
+    scenario_md: "This demo scenario shows how the player orchestrates a sequence of complementary steps.\n\nYou are a cloud engineer tasked with securing an exposed S3 bucket. Each phase shows how validations update the simulated state and unlock the next step.",
     variables: {
       bucket_name: { type: "choice", choices: ["acme-audit","contoso-audit","globex-audit"] },
       region: { type: "choice", choices: ["us-east-1","eu-west-1"] }
@@ -256,8 +256,8 @@ const DEMO = {
       { id: "policy_bad.json", kind: "file", mime: "application/json", inline: true, content_b64: btoa(JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Principal: "*", Action: ["s3:ListBucket"], Resource: "*" }] })) }
     ],
     steps: [
-      { id:"create-bucket", type:"terminal", title:"Créer le bucket",
-        instructions_md:"Crée le bucket **{{bucket_name}}** dans **{{region}}**.",
+      { id:"create-bucket", type:"terminal", title:"Create bucket",
+        instructions_md:"Create bucket **{{bucket_name}}** in **{{region}}**.",
         terminal:{ prompt:"user@vm:~$", validators:[{ kind:"command", match:{ program:"aws", subcommand:["s3api","create-bucket"], flags:{ required:["--bucket","--region"], aliases:{ "-b":"--bucket" } }, args:[ {flag:"--bucket", expect:"{{bucket_name}}"}, {flag:"--region", expect:"{{region}}"} ] }, response:{ stdout_template:"{\n  \"Location\": \"/{{bucket_name}}\"\n}\n", world_patch:[ {op:"set", path:"s3.buckets.{{bucket_name}}.region", value:"{{region}}"}, {op:"set", path:"s3.buckets.{{bucket_name}}.versioning", value:"Disabled"} ] } }] },
         hints:["Utilise **aws s3api create-bucket** avec --bucket et --region."], points:20,
         transitions:{ on_success:"enable-versioning", on_failure:"#stay" }
@@ -268,12 +268,12 @@ const DEMO = {
         validators:[ { kind:"world", expect:{ path:"s3.buckets.{{bucket_name}}.versioning", equals:"Enabled" } }, { kind:"expression", expr:"get('world.s3.buckets.' + get('vars.bucket_name') + '.versioning')==='Enabled'" } ], points:20, transitions:{ on_success:"inspect-policy" }
       },
       { id:"inspect-policy", type:"inspect_file", title:"Analyser et corriger la policy",
-        instructions_md:"Le fichier **policy_bad.json** est fourni. Corrige pour **interdire** l'accès anonyme au ListBucket.", file_ref:"policy_bad.json", input:{ widget:"text_area", language:"json" },
+        instructions_md:"File **policy_bad.json** is provided. Fix it to **deny** anonymous ListBucket access.", file_ref:"policy_bad.json", input:{ widget:"text_area", language:"json" },
         validators:[ {kind:"jsonschema", ref:"local://aws-policy.schema.json"}, {kind:"jsonpath_absent", jsonpath:"$.Statement[*].Principal", equals:"*"}, {kind:"expression", expr:"Array.isArray(get('payload.Statement')) && get('payload.Statement').every(s=>s.Principal!=='*')" }],
         points:20, transitions:{ on_success:"quiz-impact" }
       },
-      { id:"quiz-impact", type:"quiz", title:"Bloquer l'accès public",
-        question_md:"Bloquer l'accès public empêche…?", choices:[{id:"a",text:"Toutes les requêtes signées"},{id:"b",text:"L'accès anonyme"}], correct:["b"], points:20,
+      { id:"quiz-impact", type:"quiz", title:"Block public access",
+        question_md:"Blocking public access prevents…?", choices:[{id:"a",text:"All signed requests"},{id:"b",text:"Anonymous access"}], correct:["b"], points:20,
         transitions:{ on_success:"#end" }
       }
     ]
@@ -287,11 +287,52 @@ const state = {
   score: 0,
   currentId: DEMO.lab.steps[0].id,
   startTs: Date.now(),
-  remain: DEMO.lab.timer?.seconds || 0
+  remain: DEMO.lab.timer?.seconds || 0,
+  statusById: {},
+  errorById: {},
+  validateCurrent: null,
+  consoleLibrary: {}
 };
 
 function drawVariables(varsSpec, seed){ const rnd=seededRandom(seed); const v={}; for(const [k,s] of Object.entries(varsSpec||{})){ if(s.type==='choice'){ const choices=s.choices; v[k]=choices[Math.floor(rnd()*choices.length)]; } else if(s.type==='number'){ v[k]=Math.floor(s.min + rnd()*(s.max-s.min+1)); } } return v; }
 function resolve(obj){ return templateAny(obj, state.vars); }
+
+
+function normalizeCommandKey(cmd=''){
+  return String(cmd || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function detectConsoleType({ explicitType='', prompt='', title='', instructions='' }={}){
+  const direct = String(explicitType || '').trim().toLowerCase();
+  if(direct) return direct;
+  const text = `${prompt} ${title} ${instructions}`.toLowerCase();
+  if(/\baws\b|s3|ec2|iam|sts/.test(text)) return 'aws';
+  if(/\baz\b|azure/.test(text)) return 'azure';
+  if(/gcloud|google\s*cloud|gcp/.test(text)) return 'gcp';
+  if(/kubectl|k8s|kubernetes/.test(text)) return 'kubernetes';
+  if(/cisco|switch|router|vlan|gigabitethernet|show\s+ip/.test(text)) return 'cisco';
+  if(/powershell|cmd\.exe|windows|c:\\/.test(text)) return 'windows';
+  return 'linux';
+}
+
+function getSimulatedConsoleResponse(command, context={}){
+  const consoleType = detectConsoleType(context);
+  const lib = state.consoleLibrary || {};
+  const byType = lib[consoleType] || lib.linux || {};
+  const show = byType.show || {};
+  const key = normalizeCommandKey(command);
+  if(!key) return '';
+  if(show[key]) return show[key];
+  const hit = Object.entries(show).find(([k])=> key===normalizeCommandKey(k));
+  return hit ? hit[1] : '';
+}
+
+function loadConsoleLibrary(){
+  return fetch('/static/console_command_library.json', { cache: 'no-store' })
+    .then((res)=> res.ok ? res.json() : {})
+    .then((json)=>{ state.consoleLibrary = (json && typeof json === 'object') ? json : {}; })
+    .catch(()=>{ state.consoleLibrary = {}; });
+}
 
 // ===== UI Helpers =====
 function setText(id, html){ const el=document.getElementById(id); if(el) el.innerHTML=html; }
@@ -319,21 +360,62 @@ document.getElementById('btn-load').onclick = ()=>{
   try{
     const obj = JSON.parse(jsonArea.value);
     // soft schema check
-    if(!obj || !obj.schema_version || !obj.lab || !Array.isArray(obj.lab.steps)) throw new Error('Schéma basique invalide');
-    document.getElementById('schemaStatus').textContent = 'Schéma: OK (soft)';
+    if(!obj || !obj.schema_version || !obj.lab || !Array.isArray(obj.lab.steps)) throw new Error('Invalid basic schema');
+    document.getElementById('schemaStatus').textContent = 'Schema: OK (soft)';
     document.getElementById('schema-errors').innerHTML = '';
     state.lab = obj;
     boot();
   }catch(e){
-    document.getElementById('schemaStatus').textContent = 'Schéma: KO';
+    document.getElementById('schemaStatus').textContent = 'Schema: KO';
     document.getElementById('schema-errors').innerHTML = `<div class="ko">${e.message}</div>`;
   }
 };
 
 // ===== Step renderers =====
+function getStepIndexById(id){ return (state.lab.lab.steps||[]).findIndex(s=> s.id===id); }
+function getStepStatus(step, idx, currentIdx){
+  if(state.errorById[step.id]) return 'error';
+  if(state.statusById[step.id]==='done') return 'done';
+  if(step.id===state.currentId) return 'active';
+  return idx<currentIdx ? 'done' : 'todo';
+}
+function renderStepper(){
+  const mount=document.getElementById('stepper-items');
+  if(!mount) return;
+  mount.innerHTML='';
+  const steps=state.lab.lab.steps||[];
+  const currentIdx=getStepIndexById(state.currentId);
+  steps.forEach((step, idx)=>{
+    const status=getStepStatus(step, idx, currentIdx);
+    const btn=document.createElement('button');
+    btn.type='button';
+    btn.className=`stepper-item is-${status}`;
+    const symbol=status==='done'?'✓':(status==='error'?'!':String(idx+1));
+    const meta=status==='active'?'In progress':(status==='done'?'Done':(status==='error'?'Error':'To do'));
+    btn.innerHTML=`<div class="stepper-head"><span class="step-dot">${symbol}</span><span class="step-title">${step.title||step.id}</span></div><div class="step-meta">${meta}</div>`;
+    btn.onclick=()=>{ state.currentId=step.id; renderStep(); };
+    mount.appendChild(btn);
+  });
+}
+function stepObjectiveText(mdText=''){
+  const plain=String(mdText).replace(/[*_`#>-]/g,' ').replace(/\s+/g,' ').trim();
+  if(!plain) return 'Suivre la consigne puis valider.';
+  const first=plain.split(/[.!?]/).map(x=>x.trim()).find(Boolean);
+  return first || plain;
+}
+function setValidationSummary(step){
+  const count=(step.validators||step.terminal?.validators||[]).length;
+  const message=count>0
+    ? `This step checks ${count} criterion${count>1?'s':''} before validation.`
+    : 'Validation is based on expected action and obtained result.';
+  setText('step-validation', message);
+}
 function renderStep(){
   const step = state.lab.lab.steps.find(s=> s.id===state.currentId);
+  if(!step) return;
   const r = resolve(step);
+  const steps=state.lab.lab.steps||[];
+  const idx=getStepIndexById(state.currentId);
   setText('lab-title', state.lab.lab.title);
   setText('lab-subtitle', state.lab.lab.subtitle||'');
   const scenarioEl = document.getElementById('lab-context');
@@ -342,34 +424,85 @@ function renderStep(){
     scenarioEl.innerHTML = scenarioHtml;
     scenarioEl.style.display = scenarioHtml ? 'block' : 'none';
   }
-  setText('step-title', r.title || r.id);
+
+  setText('step-title', `Step ${idx+1}/${steps.length} — ${r.title || r.id}`);
+  setText('step-type-badge', r.type || 'step');
+  setText('step-objective', stepObjectiveText(r.instructions_md||''));
   setText('step-instr', md(r.instructions_md||''));
+  setValidationSummary(r);
+
   const body = document.getElementById('step-body');
   const feedback = document.getElementById('step-feedback');
   feedback.innerHTML = '';
   body.innerHTML = '';
+  state.validateCurrent = null;
 
-  // hints
   const btnHint = document.getElementById('btn-hint');
   if((r.hints||[]).length){ btnHint.style.display='inline-block'; btnHint.onclick = ()=>{ feedback.innerHTML = `<div class="hint">${r.hints[0]}</div>`; }; }
   else btnHint.style.display='none';
 
   if(r.type==='terminal'){
-    const term = document.createElement('div'); term.className='terminal'; term.innerHTML = '';
-    const row = document.createElement('div'); row.className='row'; row.style.marginTop = '8px';
-    const prompt = document.createElement('span'); prompt.textContent = r.terminal?.prompt||'user@host:$'; prompt.style.color = '#8ff0a4';
-    const input = document.createElement('input'); input.className='input'; input.placeholder='Tape ta commande…'; input.style.flex='1';
-    const btn = document.createElement('button'); btn.className='button'; btn.textContent='Exécuter';
-    const out = document.createElement('div'); out.className='stdout';
+    const term = document.createElement('div'); term.className='terminal terminal-shell';
+    const log = document.createElement('div'); log.className='terminal-log';
     const err = document.createElement('div'); err.className='stderr';
-    term.appendChild(out); term.appendChild(err); body.appendChild(term); row.appendChild(prompt); row.appendChild(input); row.appendChild(btn); body.appendChild(row);
-
-    const run = ()=>{
-      const res = validateTerminal(r, input.value);
-      if(res.ok){ if(res.stdout) out.innerHTML += res.stdout; input.value=''; }
-      else { if(res.message) err.innerHTML += (res.message+"\n"); }
+    const entry = document.createElement('div'); entry.className='terminal-entry';
+    const prompt = document.createElement('span'); prompt.className='terminal-prompt'; prompt.textContent = r.terminal?.prompt||'user@host:$';
+    const input = document.createElement('input'); input.className='terminal-cmd'; input.placeholder='Tape ta commande…';
+    entry.appendChild(prompt); entry.appendChild(input);
+    term.appendChild(log); term.appendChild(err); term.appendChild(entry); body.appendChild(term);
+    const appendCmd=(line)=>{
+      const row=document.createElement('div');
+      row.className='stdout';
+      row.textContent=`${prompt.textContent} ${line}`;
+      log.appendChild(row);
+      log.scrollTop=log.scrollHeight;
     };
-    btn.onclick = run; input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') run(); });
+    const run = ()=>{
+      const line=input.value.trim();
+      if(!line) return;
+      appendCmd(line);
+      const simulated = getSimulatedConsoleResponse(line, {
+        consoleType: r.console_type || r.platform || r.terminal?.console_type || r.terminal?.platform,
+        prompt: r.terminal?.prompt || '',
+        title: r.title || '',
+        instructions: r.instructions_md || ''
+      });
+      const res = validateTerminal(r, line);
+      if(res.ok){
+        state.errorById[r.id]='';
+        if(simulated){
+          const simLine=document.createElement('div');
+          simLine.className='stdout';
+          simLine.textContent=simulated;
+          log.appendChild(simLine);
+        }
+        if(res.stdout){
+          const outLine=document.createElement('div');
+          outLine.className='stdout';
+          outLine.textContent=res.stdout;
+          log.appendChild(outLine);
+        }
+        err.textContent='';
+        input.value='';
+        log.scrollTop=log.scrollHeight;
+      }
+      else {
+        if(simulated){
+          const simLine=document.createElement('div');
+          simLine.className='stdout';
+          simLine.textContent=simulated;
+          log.appendChild(simLine);
+          state.errorById[r.id]='';
+          err.textContent = 'Standard command executed (outside this step validation criteria).';
+        } else {
+          state.errorById[r.id]=res.message||'Validation error';
+          err.textContent = res.message || 'Validation error';
+          renderStepper();
+        }
+      }
+    };
+    state.validateCurrent=run;
+    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') run(); });
   }
   else if(r.type==='console_form'){
     const wrap=document.createElement('div');
@@ -380,118 +513,83 @@ function renderStep(){
       if(f.widget==='toggle'){
         const options = Array.isArray(f.options)? f.options : (typeof f.options==='string'? f.options.split(','): []);
         const placeholder = f.placeholder || 'Choisir';
-        const btn=document.createElement('button'); btn.className='button secondary';
-        if(local[f.key]!==undefined){ btn.textContent=local[f.key]; }
-        else { btn.textContent = options.length? placeholder : placeholder; }
-        btn.onclick=()=>{
-          if(!options.length){ return; }
-          const current = local[f.key];
-          const idx = options.findIndex(opt=> String(opt)===String(current));
-          const next = idx===-1 ? options[0] : options[(idx+1)%options.length];
-          local[f.key] = next;
-          btn.textContent = next;
-        };
-        row.appendChild(label);
-        row.appendChild(btn);
+        const btn=document.createElement('button'); btn.type='button'; btn.className='button secondary';
+        btn.textContent = local[f.key]!==undefined ? local[f.key] : placeholder;
+        btn.onclick=()=>{ if(!options.length) return; const current = local[f.key]; const i = options.findIndex(opt=> String(opt)===String(current)); const next = i===-1 ? options[0] : options[(i+1)%options.length]; local[f.key]=next; btn.textContent=next; };
+        row.appendChild(label); row.appendChild(btn);
       } else {
         const inp=document.createElement('input'); inp.className='input'; inp.value=local[f.key]||''; if(f.placeholder) inp.placeholder=f.placeholder; inp.oninput=()=> local[f.key]=inp.value; row.appendChild(label); row.appendChild(inp);
       }
       wrap.appendChild(row);
     });
-    const btnSave=document.createElement('button'); btnSave.className='button'; btnSave.textContent='Enregistrer'; btnSave.onclick=()=>{
-      const next=deepClone(state.world);
-      setByPath(next, templateString(path,state.vars), local);
-      feedback.innerHTML='';
+    body.appendChild(wrap);
+    state.validateCurrent=()=>{
+      const next=deepClone(state.world); setByPath(next, templateString(path,state.vars), local); feedback.innerHTML='';
       const res = runValidators(r.validators||[], local, next);
-      if(!res.ok){ feedback.innerHTML = '<div class="ko">'+res.errors.join('<br>')+'</div>'; return; }
-      state.world=next; setWorld();
-      success(r);
+      if(!res.ok){ state.errorById[r.id]=res.errors.join(', '); feedback.innerHTML = '<div class="ko">'+res.errors.join('<br>')+'</div>'; renderStepper(); return; }
+      state.errorById[r.id]=''; state.world=next; setWorld(); success(r);
     };
-    body.appendChild(wrap); body.appendChild(btnSave);
   }
-  else if(r.type==='inspect_file'){
-    const asset=(state.lab.lab.assets||[]).find(a=> a.id===r.file_ref);
-    const assetBox=document.createElement('div'); assetBox.className='inspect-asset';
-    let assetContent='';
-    if(asset && asset.inline && asset.content_b64){
-      try{ assetContent = atob(asset.content_b64); }
-      catch{ assetContent=''; }
-    }
-    if(asset){
-      const link=document.createElement('a');
-      link.className='button secondary';
-      link.textContent = `Télécharger ${asset.filename || asset.name || asset.id || 'fichier'}`;
-      link.download = asset.filename || asset.name || asset.id || 'asset';
-      if(asset.inline && asset.content_b64){
-        link.href = `data:${asset.mime || 'application/octet-stream'};base64,${asset.content_b64}`;
-      } else {
-        link.href = asset.url || asset.href || asset.path || '#';
-        link.target = '_blank';
-      }
-      assetBox.appendChild(link);
-      if(assetContent && assetContent.length < 16000){
-        const details=document.createElement('details');
-        const summary=document.createElement('summary');
-        summary.textContent='Afficher un aperçu intégré';
-        const pre=document.createElement('pre'); pre.textContent=assetContent;
-        details.appendChild(summary); details.appendChild(pre);
-        assetBox.appendChild(details);
-      }
-    }
-    if(asset && assetBox.childNodes.length){
-      body.appendChild(assetBox);
-    }
-    const mode=(r.input?.mode||'editor').toLowerCase();
-    let inputEl=null;
+  else if(r.type==='inspect_file' || r.type==='inspect'){
+    const mode = r.input?.widget==='text_area' ? 'editor' : 'answer';
+    let inputEl;
     if(mode==='answer'){
-      if(r.input?.prompt){
-        const prompt=document.createElement('div');
-        prompt.className='inspect-prompt';
-        prompt.innerHTML = md(r.input.prompt);
-        body.appendChild(prompt);
-      }
-      const area=document.createElement('textarea');
-      area.className='json';
-      area.placeholder = r.input?.placeholder || 'Saisis ta réponse ici…';
-      inputEl = area;
-      body.appendChild(area);
+      const inp=document.createElement('input'); inp.className='input'; inp.placeholder='Answer'; inputEl=inp; body.appendChild(inp);
     } else {
-      const area=document.createElement('textarea');
-      area.className='json';
-      area.value = assetContent || r.input?.prefill || '';
-      if(r.input?.placeholder) area.placeholder = r.input.placeholder;
-      inputEl = area;
-      body.appendChild(area);
+      let assetContent='';
+      const fileRef=r.file_ref;
+      if(fileRef && Array.isArray(state.lab.lab.assets)){
+        const asset=state.lab.lab.assets.find(a=>a.id===fileRef);
+        if(asset?.content_b64){ try{ assetContent = atob(asset.content_b64); }catch{} }
+      }
+      const area=document.createElement('textarea'); area.className='json'; area.value=assetContent || r.input?.prefill || ''; if(r.input?.placeholder) area.placeholder=r.input.placeholder; inputEl=area; body.appendChild(area);
     }
-    const btn=document.createElement('button'); btn.className='button'; btn.textContent='Valider'; btn.style.marginTop='8px';
-    btn.onclick=()=>{
+    state.validateCurrent=()=>{
       let payload = inputEl.value;
       if((mode==='editor' && (r.input?.language||'json')==='json') || (mode==='answer' && (r.input?.language||'text')==='json')){
-        try{ payload = JSON.parse(inputEl.value); }
-        catch{ feedback.innerHTML = '<div class="ko">JSON invalide</div>'; return; }
+        try{ payload = JSON.parse(inputEl.value); } catch{ state.errorById[r.id]='JSON invalide'; feedback.innerHTML='<div class="ko">JSON invalide</div>'; renderStepper(); return; }
       }
       const ok = validateInspect(r, payload);
-      if(ok){ success(r); }
+      if(ok){ state.errorById[r.id]=''; success(r); }
+      else { state.errorById[r.id]='Inspect validation failed'; renderStepper(); }
     };
-    body.appendChild(btn);
   }
   else if(r.type==='architecture'){
     renderArchitecture(r, body);
+    state.validateCurrent=()=>{
+      const localBtn=body.querySelector('button.button');
+      if(localBtn) localBtn.click();
+    };
   }
   else if(r.type==='quiz'){
-    const wrap=document.createElement('div');
-    let selected=null; (r.choices||[]).forEach(c=>{
-      const ch=document.createElement('div'); ch.className='choice'; ch.textContent=c.text; ch.onclick=()=>{ selected=c.id; Array.from(wrap.children).forEach(x=>x.classList.remove('selected')); ch.classList.add('selected'); };
-      wrap.appendChild(ch);
-    });
-    const btn=document.createElement('button'); btn.className='button'; btn.textContent='Valider'; btn.style.marginTop='8px'; btn.onclick=()=>{ if((r.correct||[]).includes(selected)) success(r); else feedback.innerHTML='<div class="ko">Mauvaise réponse. Réessaie.</div>'; };
-    body.appendChild(wrap); body.appendChild(btn);
+    const wrap=document.createElement('div'); let selected=null;
+    (r.choices||[]).forEach(c=>{ const ch=document.createElement('div'); ch.className='choice'; ch.textContent=c.text; ch.onclick=()=>{ selected=c.id; Array.from(wrap.children).forEach(x=>x.classList.remove('selected')); ch.classList.add('selected'); }; wrap.appendChild(ch); });
+    body.appendChild(wrap);
+    state.validateCurrent=()=>{ if((r.correct||[]).includes(selected)){ state.errorById[r.id]=''; success(r); } else { state.errorById[r.id]='Wrong answer'; feedback.innerHTML='<div class="ko">Wrong answer. Try again.</div>'; renderStepper(); } };
   }
 
-  document.getElementById('btn-restart').onclick = ()=>{ state.world={}; state.score=0; state.currentId=state.lab.lab.steps[0].id; setScore(); setWorld(); renderStep(); };
+  document.getElementById('btn-restart').onclick = ()=>{ state.world={}; state.score=0; state.statusById={}; state.errorById={}; state.currentId=state.lab.lab.steps[0].id; setScore(); setWorld(); renderStep(); };
+  document.getElementById('btn-validate').onclick = ()=>{ if(typeof state.validateCurrent==='function') state.validateCurrent(); };
+  document.getElementById('btn-next').onclick = ()=>{
+    const i=getStepIndexById(state.currentId);
+    if(i>=0 && i<steps.length-1){ state.currentId=steps[i+1].id; renderStep(); }
+  };
+  renderStepper();
 }
 
-function success(r){ state.score += (r.points||0); setScore(); const step = state.lab.lab.steps.find(s=> s.id===state.currentId); const next = (step.transitions&&step.transitions.on_success)||'#end'; const fb=document.getElementById('step-feedback'); fb.innerHTML = `<div class="ok">Bravo ! +${r.points||0} pts</div>`; if(next==="#end"){ fb.innerHTML += '<div class="ok" style="margin-top:6px">Lab terminé ✔</div>'; } else { setTimeout(()=>{ state.currentId = next; renderStep(); }, 600); }}
+function success(r){
+  state.score += (r.points||0);
+  state.statusById[r.id]='done';
+  state.errorById[r.id]='';
+  setScore();
+  const step = state.lab.lab.steps.find(s=> s.id===state.currentId);
+  const next = (step.transitions&&step.transitions.on_success)||'#end';
+  const fb=document.getElementById('step-feedback');
+  fb.innerHTML = `<div class="ok">Bravo ! +${r.points||0} pts</div>`;
+  renderStepper();
+  if(next==="#end"){ fb.innerHTML += '<div class="ok" style="margin-top:6px">Lab completed ✔</div>'; }
+  else { setTimeout(()=>{ state.currentId = next; renderStep(); }, 450); }
+}
 
 function validateTerminal(r, line){
   const cmd = parseCommand(line||'');
@@ -512,13 +610,13 @@ function validateInspect(r, payload){
   const fb=document.getElementById('step-feedback');
   for(const v of (r.validators||[])){
     if(v.kind==='jsonschema'){
-      if(typeof payload !== 'object' || payload===null){ fb.innerHTML='<div class="ko">Le contenu doit être un objet JSON</div>'; return false; }
+      if(typeof payload !== 'object' || payload===null){ fb.innerHTML='<div class="ko">Content must be a JSON object</div>'; return false; }
     } else if (v.kind==='jsonpath_absent'){
       const list = jsonPathGetAll(payload, v.jsonpath||'$');
-      if(v.equals!==undefined){ if(list.some(x=> JSON.stringify(x)===JSON.stringify(v.equals))){ fb.innerHTML=`<div class=\"ko\">La valeur ${JSON.stringify(v.equals)} ne doit pas apparaître à ${v.jsonpath}</div>`; return false; } }
+      if(v.equals!==undefined){ if(list.some(x=> JSON.stringify(x)===JSON.stringify(v.equals))){ fb.innerHTML=`<div class=\"ko\">Value ${JSON.stringify(v.equals)} must not appear at ${v.jsonpath}</div>`; return false; } }
       else if (list.length>0){ fb.innerHTML=`<div class=\"ko\">Le chemin ${v.jsonpath} ne doit pas exister.</div>`; return false; }
     } else if (v.kind==='expression'){
-      try{ if(!evalExpr(v.expr, { world: state.world, vars: state.vars, payload })) { fb.innerHTML='<div class="ko">Expression non vérifiée</div>'; return false; } }catch{ fb.innerHTML='<div class=\"ko\">Expression invalide</div>'; return false; }
+      try{ if(!evalExpr(v.expr, { world: state.world, vars: state.vars, payload })) { fb.innerHTML='<div class="ko">Expression not satisfied</div>'; return false; } }catch{ fb.innerHTML='<div class=\"ko\">Invalid expression</div>'; return false; }
     }
   }
   return true;
@@ -528,6 +626,8 @@ function boot(){
   state.world = {};
   state.vars = drawVariables(state.lab.lab.variables, 'seed-'+Date.now());
   state.score = 0;
+  state.statusById = {};
+  state.errorById = {};
   state.currentId = state.lab.lab.steps[0].id;
   state.remain = state.lab.lab.timer?.seconds || 0;
   setScore(); setWorld(); renderStep(); setTimer();
@@ -539,7 +639,8 @@ setInterval(()=>{ if(state.remain>0){ state.remain--; setTimer(); } }, 1000);
 
 function createCommandTerminal(options={}){
   const prompt = options.prompt || '$';
-  const placeholder = options.placeholder || 'Tape une commande et presse Entrée';
+  const placeholder = options.placeholder || 'Type a command and press Enter';
+  const consoleType = detectConsoleType({ explicitType: options.consoleType, prompt, title: options.title, instructions: options.instructions });
   const raf = (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function')
     ? window.requestAnimationFrame.bind(window)
     : (fn)=> setTimeout(fn, 0);
@@ -562,34 +663,43 @@ function createCommandTerminal(options={}){
   form.appendChild(input);
   root.appendChild(form);
 
-  let history = [];
+  let commandHistory = [];
+  let transcript = [];
   let historyIndex = 0;
   let enabled = false;
   let changeCb = ()=>{};
 
   const sync = ()=>{
     log.innerHTML = '';
-    history.forEach(cmd=>{
+    transcript.forEach(entry=>{
       const line = document.createElement('div');
-      line.className = 'arch-terminal-line';
-      const p = document.createElement('span');
-      p.className = 'prompt';
-      p.textContent = prompt;
-      const span = document.createElement('span');
-      span.className = 'cmd';
-      span.textContent = cmd;
-      line.appendChild(p);
-      line.appendChild(span);
+      line.className = entry.kind==='output' ? 'arch-terminal-line arch-terminal-output' : 'arch-terminal-line';
+      if(entry.kind==='command'){
+        const p = document.createElement('span');
+        p.className = 'prompt';
+        p.textContent = prompt;
+        const span = document.createElement('span');
+        span.className = 'cmd';
+        span.textContent = entry.value;
+        line.appendChild(p);
+        line.appendChild(span);
+      } else {
+        const out = document.createElement('span');
+        out.className = 'cmd';
+        out.textContent = entry.value;
+        line.appendChild(out);
+      }
       log.appendChild(line);
     });
     log.scrollTop = log.scrollHeight;
   };
 
-  const getValue = ()=> history.join('\n');
+  const getValue = ()=> commandHistory.join('\n');
   const setValue = (text)=>{
     const lines = (text || '').split(/\r?\n/).map(line=> line).filter(line=> line.trim().length>0);
-    history = lines;
-    historyIndex = history.length;
+    commandHistory = lines;
+    transcript = lines.map(line=> ({ kind:'command', value:line }));
+    historyIndex = commandHistory.length;
     input.value = '';
     sync();
   };
@@ -600,21 +710,20 @@ function createCommandTerminal(options={}){
     input.disabled = !enabled;
     root.dataset.disabled = enabled ? 'false' : 'true';
     root.classList.toggle('is-disabled', !enabled);
-    if(enabled){
-      raf(()=> input.focus());
-    }
+    if(enabled){ raf(()=> input.focus()); }
   };
 
   const focus = ()=>{
     if(!enabled) return;
     input.focus();
-    const end = input.value.length;
-    input.setSelectionRange(end, end);
+    const endPos = input.value.length;
+    input.setSelectionRange(endPos, endPos);
   };
 
   const clear = ()=>{
-    if(history.length===0) return;
-    history = [];
+    if(commandHistory.length===0 && transcript.length===0) return;
+    commandHistory = [];
+    transcript = [];
     historyIndex = 0;
     sync();
     emitChange();
@@ -625,8 +734,15 @@ function createCommandTerminal(options={}){
     if(!enabled) return;
     const value = input.value;
     if(!value || !value.trim()){ input.value=''; return; }
-    history.push(value);
-    historyIndex = history.length;
+    commandHistory.push(value);
+    transcript.push({ kind:'command', value });
+    const simulated = getSimulatedConsoleResponse(value, { consoleType, prompt, title: options.title, instructions: options.instructions });
+    if(simulated){
+      simulated.split(/\r?\n/).filter(Boolean).forEach(line=>{
+        transcript.push({ kind:'output', value: line });
+      });
+    }
+    historyIndex = commandHistory.length;
     input.value = '';
     sync();
     emitChange();
@@ -635,21 +751,22 @@ function createCommandTerminal(options={}){
   input.addEventListener('keydown', (e)=>{
     if(!enabled) return;
     if(e.key==='ArrowUp'){
-      if(history.length===0) return;
+      if(commandHistory.length===0) return;
       e.preventDefault();
       historyIndex = Math.max(0, historyIndex-1);
-      input.value = history[historyIndex] || '';
-      raf(()=>{ const end=input.value.length; input.setSelectionRange(end,end); });
+      input.value = commandHistory[historyIndex] || '';
+      raf(()=>{ const endPos=input.value.length; input.setSelectionRange(endPos,endPos); });
     } else if(e.key==='ArrowDown'){
-      if(history.length===0) return;
+      if(commandHistory.length===0) return;
       e.preventDefault();
-      historyIndex = Math.min(history.length, historyIndex+1);
-      input.value = history[historyIndex] || '';
-      raf(()=>{ const end=input.value.length; input.setSelectionRange(end,end); });
-    } else if(e.key==='Backspace' && input.value==='' && history.length>0){
+      historyIndex = Math.min(commandHistory.length, historyIndex+1);
+      input.value = commandHistory[historyIndex] || '';
+      raf(()=>{ const endPos=input.value.length; input.setSelectionRange(endPos,endPos); });
+    } else if(e.key==='Backspace' && input.value==='' && commandHistory.length>0){
       e.preventDefault();
-      history.pop();
-      historyIndex = history.length;
+      commandHistory.pop();
+      transcript = commandHistory.map(line=> ({ kind:'command', value: line }));
+      historyIndex = commandHistory.length;
       sync();
       emitChange();
     } else if((e.ctrlKey||e.metaKey) && (e.key==='l' || e.key==='L')){
@@ -661,10 +778,11 @@ function createCommandTerminal(options={}){
   log.addEventListener('click', (e)=>{
     if(!enabled) return;
     const line = e.target.closest('.arch-terminal-line');
-    if(!line) return;
-    const idx = Array.from(log.children).indexOf(line);
-    if(idx<0 || idx>=history.length) return;
-    input.value = history[idx] || '';
+    if(!line || line.classList.contains('arch-terminal-output')) return;
+    const commandLines = Array.from(log.querySelectorAll('.arch-terminal-line:not(.arch-terminal-output)'));
+    const idx = commandLines.indexOf(line);
+    if(idx<0 || idx>=commandHistory.length) return;
+    input.value = commandHistory[idx] || '';
     historyIndex = idx;
     focus();
   });
@@ -673,6 +791,7 @@ function createCommandTerminal(options={}){
 
   return { root, setValue, getValue, setEnabled, focus, onChange, clear };
 }
+
 function renderArchitecture(step, mount){
   const cfgInput = step.architecture;
   const configs = Array.isArray(cfgInput) ? cfgInput : [cfgInput || {}];
@@ -741,7 +860,7 @@ function renderArchitectureFreeform(step, cfg, mount){
   const connectBtn = document.createElement('button');
   connectBtn.type = 'button';
   connectBtn.className = 'button secondary';
-  connectBtn.textContent = 'Créer un lien';
+  connectBtn.textContent = 'Create link';
   connectBtn.disabled = true;
   paletteActions.appendChild(connectBtn);
   paletteCol.appendChild(paletteActions);
@@ -770,8 +889,23 @@ function renderArchitectureFreeform(step, cfg, mount){
   }
   const helper = document.createElement('div');
   helper.className = 'arch-help';
-  helper.innerHTML = cfg.help || 'Astuce : double-clique pour configurer, clic droit pour supprimer, relie les ports latéraux.';
+  helper.innerHTML = cfg.help || 'Tip: double-click to configure, right-click to delete, connect side ports.';
   canvasWrap.appendChild(helper);
+
+  const minimap = document.createElement('div');
+  minimap.className = 'arch-minimap';
+  const minimapCanvas = document.createElement('canvas');
+  minimapCanvas.width = 180;
+  minimapCanvas.height = 110;
+  const minimapLabel = document.createElement('div');
+  minimapLabel.className = 'arch-minimap-label';
+  minimapLabel.textContent = 'Topology overview';
+  minimap.appendChild(minimapCanvas);
+  minimap.appendChild(minimapLabel);
+  canvasWrap.appendChild(minimap);
+
+  const inspectorDock = document.createElement('aside');
+  inspectorDock.className = 'arch-inspector-dock';
 
   const inspectorModal = document.createElement('div');
   inspectorModal.className = 'arch-inspector-modal';
@@ -788,13 +922,13 @@ function renderArchitectureFreeform(step, cfg, mount){
   const inspectorCloseBtn = document.createElement('button');
   inspectorCloseBtn.type = 'button';
   inspectorCloseBtn.className = 'arch-inspector-close';
-  inspectorCloseBtn.setAttribute('aria-label', 'Fermer l\'inspecteur');
+  inspectorCloseBtn.setAttribute('aria-label', 'Close inspector');
   inspectorCloseBtn.innerHTML = '&times;';
   inspector.appendChild(inspectorCloseBtn);
   const inspectorTitle = document.createElement('h4');
-  inspectorTitle.textContent = 'Sélectionne un composant';
+  inspectorTitle.textContent = 'Select a component';
   const inspectorSubtitle = document.createElement('p');
-  inspectorSubtitle.textContent = 'Double-clique sur un élément de la topologie pour saisir ses commandes standard.';
+  inspectorSubtitle.textContent = 'Double-click a topology element to enter its standard commands.';
   const inspectorTitleId = `arch-inspector-title-${Math.random().toString(36).slice(2)}`;
   const inspectorDescId = `arch-inspector-desc-${Math.random().toString(36).slice(2)}`;
   inspectorTitle.id = inspectorTitleId;
@@ -803,7 +937,7 @@ function renderArchitectureFreeform(step, cfg, mount){
   inspectorModal.setAttribute('aria-describedby', inspectorDescId);
   const labelField = document.createElement('label');
   const labelSpan = document.createElement('span');
-  labelSpan.textContent = 'Nom affiché';
+  labelSpan.textContent = 'Display name';
   const labelInput = document.createElement('input');
   labelInput.className = 'input';
   labelInput.disabled = true;
@@ -811,10 +945,13 @@ function renderArchitectureFreeform(step, cfg, mount){
   labelField.appendChild(labelInput);
   const configField = document.createElement('label');
   const configSpan = document.createElement('span');
-  configSpan.textContent = 'Commande(s) appliquées';
+  configSpan.textContent = 'Applied command(s)';
   const configTerminal = createCommandTerminal({
     prompt: cfg.command_prompt || cfg.prompt || '$',
-    placeholder: cfg.command_placeholder || 'Ex: interface Gi0/1'
+    placeholder: cfg.command_placeholder || 'Ex: interface Gi0/1',
+    consoleType: cfg.console_type || cfg.platform || step.console_type || step.platform,
+    title: step.title || cfg.title || '',
+    instructions: step.instructions_md || cfg.instructions || ''
   });
   configField.appendChild(configSpan);
   configField.appendChild(configTerminal.root);
@@ -823,7 +960,7 @@ function renderArchitectureFreeform(step, cfg, mount){
   const clearCmdBtn = document.createElement('button');
   clearCmdBtn.type = 'button';
   clearCmdBtn.className = 'button secondary';
-  clearCmdBtn.textContent = cfg.clear_commands_label || 'Effacer les commandes';
+  clearCmdBtn.textContent = cfg.clear_commands_label || 'Clear commands';
   clearCmdBtn.disabled = true;
   inspectorActions.appendChild(clearCmdBtn);
   inspector.appendChild(inspectorTitle);
@@ -831,7 +968,7 @@ function renderArchitectureFreeform(step, cfg, mount){
   inspector.appendChild(labelField);
   inspector.appendChild(configField);
   inspector.appendChild(inspectorActions);
-  inspectorModal.appendChild(inspector);
+  inspectorDock.appendChild(inspector);
   canvasWrap.appendChild(inspectorModal);
 
   inspectorCloseBtn.addEventListener('click', ()=>{ closeInspector(); });
@@ -839,6 +976,7 @@ function renderArchitectureFreeform(step, cfg, mount){
     if(event.target === inspectorModal){ closeInspector(); }
   });
 
+  paletteCol.appendChild(inspectorDock);
   layout.appendChild(paletteCol);
   layout.appendChild(canvasWrap);
   mount.appendChild(layout);
@@ -853,6 +991,8 @@ function renderArchitectureFreeform(step, cfg, mount){
 
   const gridState = { visible: cfg.show_grid !== false };
   const snapState = { enabled: cfg.snap_to_grid !== false };
+  const routeState = { enabled: cfg.auto_route !== false };
+  const isCompactInspector = ()=> window.matchMedia('(max-width: 1024px)').matches;
   const snapSize = typeof cfg.snap_to_grid === 'number' ? Math.max(1, cfg.snap_to_grid) : 20;
   const gridSize = cfg.grid_spacing || 64;
 
@@ -875,6 +1015,7 @@ function renderArchitectureFreeform(step, cfg, mount){
     stage.height(canvasBox.clientHeight);
     drawGrid();
     drawLinks();
+    drawMinimap();
   });
   resizeObserver.observe(canvasBox);
 
@@ -891,6 +1032,7 @@ function renderArchitectureFreeform(step, cfg, mount){
     stage.position(newPos);
     stage.batchDraw();
     drawLinks();
+    drawMinimap();
   });
 
   const nodes = [];
@@ -902,36 +1044,91 @@ function renderArchitectureFreeform(step, cfg, mount){
   let selectedNode = null;
   let inspectorNodeId = null;
   let inspectorVisible = false;
+  let linkCandidateId = null;
+
+  function drawMinimap(){
+    const ctx = minimapCanvas.getContext('2d');
+    if(!ctx) return;
+    const w = minimapCanvas.width;
+    const h = minimapCanvas.height;
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle = '#061225';
+    ctx.fillRect(0,0,w,h);
+    const maxX = Math.max(stage.width(), ...nodes.map(n=> n.group.x()+n.width+40));
+    const maxY = Math.max(stage.height(), ...nodes.map(n=> n.group.y()+n.height+40));
+    const scale = Math.max(0.1, Math.min((w-12)/maxX, (h-12)/maxY));
+    const ox = (w - maxX*scale)/2;
+    const oy = (h - maxY*scale)/2;
+    ctx.strokeStyle = 'rgba(71,245,192,0.45)';
+    ctx.lineWidth = 1;
+    links.forEach(l=>{
+      const A=centerPoint(l.fromNode,'out');
+      const B=centerPoint(l.toNode,'in');
+      ctx.beginPath();
+      ctx.moveTo(ox + A.x*scale, oy + A.y*scale);
+      ctx.lineTo(ox + B.x*scale, oy + B.y*scale);
+      ctx.stroke();
+    });
+    nodes.forEach(n=>{
+      const x = ox + n.group.x()*scale;
+      const y = oy + n.group.y()*scale;
+      ctx.fillStyle = n.id===selectedNode ? 'rgba(124,247,255,0.9)' : 'rgba(173, 216, 255, 0.75)';
+      ctx.fillRect(x, y, Math.max(3,n.width*scale), Math.max(2,n.height*scale));
+    });
+    const s = stage.scaleX() || 1;
+    const vx = -stage.x()/s;
+    const vy = -stage.y()/s;
+    const vw = stage.width()/s;
+    const vh = stage.height()/s;
+    ctx.strokeStyle = 'rgba(250, 204, 21, 0.9)';
+    ctx.strokeRect(ox + vx*scale, oy + vy*scale, vw*scale, vh*scale);
+  }
 
   function updateLinkButton(){
     const hasSelection = !!selectedNode;
     connectBtn.disabled = !hasSelection;
     if(!hasSelection){
-      connectBtn.textContent = 'Créer un lien';
+      connectBtn.textContent = 'Create link';
       connectBtn.classList.remove('is-armed');
       return;
     }
     if(pendingFrom && pendingFrom === selectedNode){
-      connectBtn.textContent = 'Sélectionne la cible…';
+      connectBtn.textContent = 'Select target…';
       connectBtn.classList.add('is-armed');
     } else {
-      connectBtn.textContent = 'Créer un lien';
+      connectBtn.textContent = 'Create link';
       connectBtn.classList.remove('is-armed');
     }
   }
 
+
+  function placeInspector(){
+    if(isCompactInspector()){
+      if(inspector.parentElement !== inspectorModal){ inspectorModal.appendChild(inspector); }
+    } else {
+      if(inspector.parentElement !== inspectorDock){ inspectorDock.appendChild(inspector); }
+      inspectorModal.hidden = true;
+      inspectorModal.setAttribute('aria-hidden', 'true');
+      inspectorModal.setAttribute('data-state', 'hidden');
+    }
+  }
+
   function updateInspector(){
+    placeInspector();
     if(!inspectorVisible){
       inspectorNodeId = null;
       inspectorModal.classList.remove('is-visible');
       inspectorModal.setAttribute('data-state', 'hidden');
       inspectorModal.hidden = true;
       inspectorModal.setAttribute('aria-hidden', 'true');
-      inspectorTitle.textContent = 'Sélectionne un composant';
-      inspectorSubtitle.textContent = 'Double-clique sur un élément de la topologie pour saisir ses commandes standard.';
+      inspectorTitle.textContent = 'Docked inspector';
+      inspectorSubtitle.textContent = 'Select a component to edit its name and commands without opening a popup.';
+      labelInput.value = '';
       labelInput.disabled = true;
+      configTerminal.setValue('');
       configTerminal.setEnabled(false);
       clearCmdBtn.disabled = true;
+      inspector.setAttribute('data-state', 'empty');
       return;
     }
     const node = getNodeById(inspectorNodeId);
@@ -939,10 +1136,13 @@ function renderArchitectureFreeform(step, cfg, mount){
       closeInspector();
       return;
     }
-    inspectorModal.hidden = false;
-    inspectorModal.setAttribute('aria-hidden', 'false');
-    inspectorModal.classList.add('is-visible');
-    inspectorModal.setAttribute('data-state', 'active');
+    if(isCompactInspector()){
+      inspectorModal.hidden = false;
+      inspectorModal.setAttribute('aria-hidden', 'false');
+      inspectorModal.classList.add('is-visible');
+      inspectorModal.setAttribute('data-state', 'active');
+    }
+    inspector.setAttribute('data-state', 'active');
     const currentLabel = node.labelNode.text();
     inspectorTitle.textContent = currentLabel || 'Composant';
     inspectorSubtitle.textContent = 'Saisis ou colle la configuration attendue pour ce composant.';
@@ -1024,9 +1224,17 @@ function renderArchitectureFreeform(step, cfg, mount){
 
   function isLinking(){ return pendingFrom!==null; }
 
+  function calcPointsFromPoints(A, B){
+    if(!routeState.enabled) return [A.x,A.y,B.x,B.y];
+    const mx = A.x + Math.max(26, (B.x-A.x)/2);
+    return [A.x,A.y,mx,A.y,mx,B.y,B.x,B.y];
+  }
+
   function drawLinkPreview(){
     if(!pendingFrom){
       previewLine.visible(false);
+      linkCandidateId = null;
+      updatePortHighlights();
       return;
     }
     const from = centerPoint(pendingFrom, 'out');
@@ -1035,12 +1243,16 @@ function renderArchitectureFreeform(step, cfg, mount){
       previewLine.visible(false);
       return;
     }
-    previewLine.points([from.x, from.y, pointer.x, pointer.y]);
+    linkCandidateId = nearestTargetFromPointer();
+    const target = linkCandidateId ? centerPoint(linkCandidateId, 'in') : pointer;
+    previewLine.points(calcPointsFromPoints(from, target));
     previewLine.visible(true);
+    updatePortHighlights();
   }
 
   function cancelPendingLink(){
     pendingFrom=null;
+    linkCandidateId = null;
     stage.container().classList.remove('is-linking');
     previewLine.visible(false);
     layerLinks.batchDraw();
@@ -1057,7 +1269,8 @@ function renderArchitectureFreeform(step, cfg, mount){
   }
 
   function finishLink(targetId){
-    if(pendingFrom && pendingFrom!==targetId){ addLink(pendingFrom, targetId); }
+    const resolved = targetId || linkCandidateId;
+    if(pendingFrom && resolved && pendingFrom!==resolved){ addLink(pendingFrom, resolved); }
     cancelPendingLink();
   }
 
@@ -1093,16 +1306,16 @@ function renderArchitectureFreeform(step, cfg, mount){
 
   function addNode(componentId, overrides={}){
     const spec = paletteLookup(componentId);
-    const width = overrides.width || spec.width || 176;
-    const height = overrides.height || spec.height || 68;
+    const width = Math.round((overrides.width || spec.width || 176) * 0.75);
+    const height = Math.round((overrides.height || spec.height || 68) * 0.75);
     const id = overrides.id || 'n'+(nodeUid++);
     const startX = overrides.position?.x ?? Math.max(32, (stage.width()/2 - width/2) + ((nodes.length%3)-1)*48);
     const startY = overrides.position?.y ?? Math.max(24, (stage.height()/2 - height/2) + (nodes.length*28)%240);
     const group = new Konva.Group({ x:startX, y:startY, draggable:true });
     const rect = new Konva.Rect({ width, height, cornerRadius:14, stroke:'#1d2a5b', strokeWidth:1.4, fill:'#0f1630', shadowColor:'#47f5c0', shadowBlur:18, shadowOpacity:0, shadowOffset:{x:0,y:0} });
-    const label = new Konva.Text({ text: overrides.label || spec.label || componentId, fontSize:16, fill:'#cde1ff', y: height/2 - 9, width: width - 48, align:'left' });
-    const portIn = new Konva.Circle({ x:0, y:height/2, radius:6, fill:'#16264d', stroke:'#47f5c0', strokeWidth:1.4 });
-    const portOut = new Konva.Circle({ x:width, y:height/2, radius:6, fill:'#16264d', stroke:'#47f5c0', strokeWidth:1.4 });
+    const label = new Konva.Text({ text: overrides.label || spec.label || componentId, fontSize:12, fill:'#cde1ff', y: height/2 - 7, width: width - 36, align:'left' });
+    const portIn = new Konva.Circle({ x:0, y:height/2, radius:5, fill:'#1e335f', stroke:'#47f5c0', strokeWidth:1.4 });
+    const portOut = new Konva.Circle({ x:width, y:height/2, radius:5, fill:'#1e335f', stroke:'#47f5c0', strokeWidth:1.4 });
 
     group.add(rect);
     group.add(label);
@@ -1141,6 +1354,9 @@ function renderArchitectureFreeform(step, cfg, mount){
     portOut.on('click tap', handleBeginLink);
     portIn.on('mouseup touchend', handleFinishLink);
     portIn.on('click tap', handleFinishLink);
+    portIn.on('mouseenter', ()=>{ linkCandidateId = id; updatePortHighlights(); });
+    portIn.on('mouseleave', ()=>{ if(linkCandidateId===id) linkCandidateId = null; updatePortHighlights(); });
+    portOut.on('mouseenter', ()=>{ if(pendingFrom===id){ updatePortHighlights(); } });
 
     const tagsRaw = overrides.tags!==undefined ? overrides.tags : spec.tags;
     const tags = Array.isArray(tagsRaw)? tagsRaw : (tagsRaw ? [tagsRaw] : []);
@@ -1153,7 +1369,7 @@ function renderArchitectureFreeform(step, cfg, mount){
     else if(spec.default_config !== undefined) configValue = String(spec.default_config);
     else if(spec.config !== undefined) configValue = String(spec.config);
     configValue = configValue.replace(/\r\n/g, '\n');
-    const nodeData = { id, type: nodeType, paletteId, group, rect, labelNode: label, iconRaw: null, icon: null, iconNode: null, width, height, tags, alias: null, configText: configValue };
+    const nodeData = { id, type: nodeType, paletteId, group, rect, labelNode: label, portIn, portOut, iconRaw: null, icon: null, iconNode: null, width, height, tags, alias: null, configText: configValue };
     nodes.push(nodeData);
     setNodeIcon(nodeData, overrides.icon!==undefined ? overrides.icon : spec.iconRaw);
     portIn.moveToTop();
@@ -1195,12 +1411,12 @@ function renderArchitectureFreeform(step, cfg, mount){
     layerNodes.batchDraw();
     if(!id){
       closeInspector();
-    } else if(inspectorVisible){
-      if(inspectorNodeId === id){
-        updateInspector();
-      } else {
-        closeInspector();
-      }
+    } else {
+      inspectorVisible = true;
+      inspectorNodeId = id;
+      const node = getNodeById(id);
+      if(node){ configTerminal.setValue(node.configText || ''); }
+      updateInspector();
     }
     updateLinkButton();
   }
@@ -1215,12 +1431,44 @@ function renderArchitectureFreeform(step, cfg, mount){
     return { x: pos.x, y: pos.y + node.height/2 };
   }
 
-  function calcPoints(fromId, toId){ const A=centerPoint(fromId,'out'); const B=centerPoint(toId,'in'); return [A.x,A.y,B.x,B.y]; }
+  function calcPoints(fromId, toId){ const A=centerPoint(fromId,'out'); const B=centerPoint(toId,'in'); if(!routeState.enabled) return [A.x,A.y,B.x,B.y]; const mx = A.x + Math.max(26, (B.x-A.x)/2); return [A.x,A.y,mx,A.y,mx,B.y,B.x,B.y]; }
+
+
+  function updatePortHighlights(){
+    nodes.forEach(node=>{
+      const isSource = pendingFrom===node.id;
+      const isCandidate = linkCandidateId===node.id;
+      const inStroke = isCandidate ? '#facc15' : (pendingFrom ? '#7cf7ff' : '#47f5c0');
+      node.portIn.stroke(inStroke);
+      node.portIn.fill(isCandidate ? '#3b2f0f' : '#1e335f');
+      node.portIn.radius(isCandidate ? 7 : (pendingFrom ? 6 : 5));
+      node.portOut.stroke(isSource ? '#facc15' : '#47f5c0');
+      node.portOut.fill(isSource ? '#3b2f0f' : '#1e335f');
+      node.portOut.radius(isSource ? 7 : 5);
+    });
+    layerNodes.batchDraw();
+  }
+
+  function nearestTargetFromPointer(){
+    if(!pendingFrom) return null;
+    const pointer = stage.getRelativePointerPosition();
+    if(!pointer) return null;
+    let best = null;
+    let bestDist = 999999;
+    nodes.forEach(node=>{
+      if(node.id===pendingFrom) return;
+      const c = centerPoint(node.id, 'in');
+      const d = Math.hypot(c.x-pointer.x, c.y-pointer.y);
+      if(d<bestDist){ bestDist=d; best=node.id; }
+    });
+    return bestDist <= 40 ? best : null;
+  }
 
   function drawLinks(){
     links.forEach(link=>{ link.shape.points(calcPoints(link.fromNode, link.toNode)); });
     drawLinkPreview();
     layerLinks.batchDraw();
+    drawMinimap();
   }
 
   function addLink(fromId, toId){
@@ -1365,7 +1613,7 @@ function renderArchitectureFreeform(step, cfg, mount){
 
   const btnValidate = document.createElement('button');
   btnValidate.className = 'button';
-  btnValidate.textContent = cfg.validate_label || 'Valider';
+  btnValidate.textContent = cfg.validate_label || 'Validate';
   btnValidate.addEventListener('click', ()=>{
     const payload = buildPayload();
     submitArchitectureResult(step, cfg, payload);
@@ -1373,36 +1621,46 @@ function renderArchitectureFreeform(step, cfg, mount){
 
   const btnReset = document.createElement('button');
   btnReset.className = 'button secondary';
-  btnReset.textContent = 'Réinitialiser';
+  btnReset.textContent = 'Reset';
   btnReset.addEventListener('click', ()=>{ clearScene(); setupInitial(); });
 
   const btnSnap = document.createElement('button');
   btnSnap.className = 'button secondary';
-  const updateSnap = ()=>{ btnSnap.textContent = snapState.enabled ? 'Aimantation: ON' : 'Aimantation: OFF'; btnSnap.setAttribute('data-active', snapState.enabled); };
+  const updateSnap = ()=>{ btnSnap.textContent = snapState.enabled ? 'Snap: ON' : 'Snap: OFF'; btnSnap.setAttribute('data-active', snapState.enabled); };
   btnSnap.addEventListener('click', ()=>{ snapState.enabled = !snapState.enabled; updateSnap(); });
   updateSnap();
 
   const btnGrid = document.createElement('button');
   btnGrid.className = 'button secondary';
-  const updateGridBtn = ()=>{ btnGrid.textContent = gridState.visible ? 'Grille: ON' : 'Grille: OFF'; btnGrid.setAttribute('data-active', gridState.visible); };
+  const updateGridBtn = ()=>{ btnGrid.textContent = gridState.visible ? 'Grid: ON' : 'Grid: OFF'; btnGrid.setAttribute('data-active', gridState.visible); };
   btnGrid.addEventListener('click', ()=>{ gridState.visible = !gridState.visible; updateGridBtn(); drawGrid(); });
   updateGridBtn();
 
   const btnPan = document.createElement('button');
   btnPan.className = 'button secondary';
-  const updatePan = ()=>{ btnPan.textContent = stage.draggable() ? 'Déplacement vue: ON' : 'Déplacement vue: OFF'; btnPan.setAttribute('data-active', stage.draggable()); };
+  const updatePan = ()=>{ btnPan.textContent = stage.draggable() ? 'Pan view: ON' : 'Pan view: OFF'; btnPan.setAttribute('data-active', stage.draggable()); };
   btnPan.addEventListener('click', ()=>{ stage.draggable(!stage.draggable()); updatePan(); });
   updatePan();
+
+  const btnRoute = document.createElement('button');
+  btnRoute.className = 'button secondary';
+  const updateRoute = ()=>{ btnRoute.textContent = routeState.enabled ? 'Auto-route: ON' : 'Auto-route: OFF'; btnRoute.setAttribute('data-active', routeState.enabled); };
+  btnRoute.addEventListener('click', ()=>{ routeState.enabled = !routeState.enabled; updateRoute(); drawLinks(); });
+  updateRoute();
 
   actions.appendChild(btnValidate);
   actions.appendChild(btnReset);
   actions.appendChild(btnSnap);
   actions.appendChild(btnGrid);
   actions.appendChild(btnPan);
+  actions.appendChild(btnRoute);
   mount.appendChild(actions);
 
   setupInitial();
-  stage.on('mouseup touchend', ()=>{ if(pendingFrom){ cancelPendingLink(); } });
+  drawMinimap();
+  updatePortHighlights();
+  window.addEventListener('resize', ()=>{ placeInspector(); drawMinimap(); });
+  stage.on('mouseup touchend', ()=>{ if(pendingFrom){ if(linkCandidateId){ finishLink(linkCandidateId); } else { cancelPendingLink(); } } });
 }
 
 function renderArchitectureSlots(step, cfg, mount){
@@ -1431,10 +1689,13 @@ function renderArchitectureSlots(step, cfg, mount){
     const configLabel=document.createElement('label');
     configLabel.className='slot-config';
     configLabel.dataset.active='false';
-    const span=document.createElement('span'); span.textContent='Commande(s)';
+    const span=document.createElement('span'); span.textContent='Command(s)';
     const configTerminal=createCommandTerminal({
       prompt: cfg.command_prompt || cfg.prompt || '$',
-      placeholder: cfg.command_placeholder || 'Ex: interface Gi0/1'
+      placeholder: cfg.command_placeholder || 'Ex: interface Gi0/1',
+      consoleType: cfg.console_type || cfg.platform || step.console_type || step.platform,
+      title: step.title || cfg.title || '',
+      instructions: step.instructions_md || cfg.instructions || ''
     });
     configTerminal.setEnabled(false);
     configLabel.appendChild(span);
@@ -1538,7 +1799,7 @@ function renderArchitectureSlots(step, cfg, mount){
   });
 
   const actions=document.createElement('div'); actions.className='arch-actions row';
-  const btn=document.createElement('button'); btn.className='button'; btn.textContent='Valider';
+  const btn=document.createElement('button'); btn.className='button'; btn.textContent='Validate';
   btn.addEventListener('click', ()=>{
     const payload = finalizeArchitecturePayload({
       nodes: Object.entries(allAssignments).map(([slotId, compId])=>{
@@ -1684,17 +1945,17 @@ function validateArchitectureSpec(specInput, payload){
     const max = rule.max;
     const matches = nodes.filter(node=> matchNode(node, matcher));
     if(matches.length < count){
-      errors.push(rule.message || `Il faut au moins ${count} composant(s) correspondant(s) à ${matcher.label || matcher.type || matcher}`);
+      errors.push(rule.message || `At least ${count} matching component(s) required for ${matcher.label || matcher.type || matcher}`);
     }
     if(max !== undefined && matches.length > max){
-      errors.push(rule.message_max || `Trop de composants du type ${matcher.label || matcher.type || matcher}`);
+      errors.push(rule.message_max || `Too many components of type ${matcher.label || matcher.type || matcher}`);
     }
   });
 
   if(spec.allow_extra_nodes === false && (spec.nodes||[]).length){
     const extras = nodes.filter(node=> !(spec.nodes||[]).some(rule=> matchNode(node, rule.match || rule)));
     if(extras.length){
-      errors.push(`Composants non attendus : ${extras.map(n=> n.label || n.type).join(', ')}`);
+      errors.push(`Unexpected components: ${extras.map(n=> n.label || n.type).join(', ')}`);
     }
   }
 
@@ -1703,10 +1964,10 @@ function validateArchitectureSpec(specInput, payload){
     const max = rule.max;
     const matches = links.filter(link=> linkMatches(link, rule, nodes));
     if(matches.length < min){
-      errors.push(rule.message || `Lien attendu manquant (${min}x ${rule.from?.type || rule.from || '?'} → ${rule.to?.type || rule.to || '?'})`);
+      errors.push(rule.message || `Missing required link (${min}x ${rule.from?.type || rule.from || '?'} → ${rule.to?.type || rule.to || '?'})`);
     }
     if(max !== undefined && matches.length > max){
-      errors.push(rule.message_max || `Trop de liens ${rule.from?.type || rule.from || '?'} → ${rule.to?.type || rule.to || '?'}`);
+      errors.push(rule.message_max || `Too many links ${rule.from?.type || rule.from || '?'} → ${rule.to?.type || rule.to || '?'}`);
     }
   });
 
@@ -1714,17 +1975,17 @@ function validateArchitectureSpec(specInput, payload){
     const min = rule.count ?? rule.min ?? 1;
     const max = rule.max;
     const matches = (payload.summary?.type_connections || []).filter(conn=> matchNode({ type: conn.from, label: conn.from }, rule.from) && matchNode({ type: conn.to, label: conn.to }, rule.to));
-    if(matches.length < min){ errors.push(rule.message || `Connexion de type ${rule.from} → ${rule.to} attendue (${min})`); }
-    if(max !== undefined && matches.length > max){ errors.push(rule.message_max || `Trop de connexions ${rule.from} → ${rule.to}`); }
+    if(matches.length < min){ errors.push(rule.message || `Expected type connection ${rule.from} → ${rule.to} (${min})`); }
+    if(max !== undefined && matches.length > max){ errors.push(rule.message_max || `Too many connections ${rule.from} → ${rule.to}`); }
   });
 
   (spec.expressions||[]).forEach(expr=>{
     try {
       if(!evalExpr(expr, { world: state.world, vars: state.vars, payload })){
-        errors.push(`Expression invalide: ${expr}`);
+        errors.push(`Invalid expression: ${expr}`);
       }
     } catch {
-      errors.push(`Expression invalide: ${expr}`);
+      errors.push(`Invalid expression: ${expr}`);
     }
   });
 
@@ -1772,4 +2033,4 @@ function submitArchitectureResult(step, cfg, payload){
 }
 
 // Start
-boot();
+loadConsoleLibrary().finally(()=> boot());
