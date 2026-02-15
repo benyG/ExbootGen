@@ -379,6 +379,42 @@ function getStepStatus(step, idx, currentIdx){
   if(step.id===state.currentId) return 'active';
   return idx<currentIdx ? 'done' : 'todo';
 }
+function canAccessStep(stepId){
+  if(stepId===state.currentId) return true;
+  return state.statusById[stepId]==='done';
+}
+
+function transitionTarget(step, mode='success'){
+  const t = step?.transitions || {};
+  const key = mode==='failure' ? 'on_failure' : 'on_success';
+  const target = t[key];
+  if(!target || target==='#stay') return step?.id || state.currentId;
+  return target;
+}
+
+function moveToStep(stepId){
+  const steps = state.lab.lab.steps || [];
+  const exists = steps.some(s=> s.id===stepId);
+  if(!exists) return false;
+  state.currentId = stepId;
+  renderStep();
+  return true;
+}
+
+function handleStepFailure(step, message, feedbackHtml=''){
+  const msg = message || 'Validation failed';
+  state.errorById[step.id] = msg;
+  if(feedbackHtml){
+    const fb=document.getElementById('step-feedback');
+    if(fb) fb.innerHTML = feedbackHtml;
+  }
+  renderStepper();
+  const target = transitionTarget(step, 'failure');
+  if(target && target!==step.id){
+    setTimeout(()=> moveToStep(target), 250);
+  }
+}
+
 function renderStepper(){
   const mount=document.getElementById('stepper-items');
   if(!mount) return;
@@ -393,13 +429,14 @@ function renderStepper(){
     const symbol=status==='done'?'✓':(status==='error'?'!':String(idx+1));
     const meta=status==='active'?'In progress':(status==='done'?'Done':(status==='error'?'Error':'To do'));
     btn.innerHTML=`<div class="stepper-head"><span class="step-dot">${symbol}</span><span class="step-title">${step.title||step.id}</span></div><div class="step-meta">${meta}</div>`;
-    btn.onclick=()=>{ state.currentId=step.id; renderStep(); };
+    btn.disabled = !canAccessStep(step.id);
+    btn.onclick=()=>{ if(!canAccessStep(step.id)) return; moveToStep(step.id); };
     mount.appendChild(btn);
   });
 }
 function stepObjectiveText(mdText=''){
   const plain=String(mdText).replace(/[*_`#>-]/g,' ').replace(/\s+/g,' ').trim();
-  if(!plain) return 'Suivre la consigne puis valider.';
+  if(!plain) return 'Follow the instructions and validate.';
   const first=plain.split(/[.!?]/).map(x=>x.trim()).find(Boolean);
   return first || plain;
 }
@@ -447,7 +484,7 @@ function renderStep(){
     const err = document.createElement('div'); err.className='stderr';
     const entry = document.createElement('div'); entry.className='terminal-entry';
     const prompt = document.createElement('span'); prompt.className='terminal-prompt'; prompt.textContent = r.terminal?.prompt||'user@host:$';
-    const input = document.createElement('input'); input.className='terminal-cmd'; input.placeholder='Tape ta commande…';
+    const input = document.createElement('input'); input.className='terminal-cmd'; input.placeholder='Type your command…';
     entry.appendChild(prompt); entry.appendChild(input);
     term.appendChild(log); term.appendChild(err); term.appendChild(entry); body.appendChild(term);
     const appendCmd=(line)=>{
@@ -492,12 +529,12 @@ function renderStep(){
           simLine.className='stdout';
           simLine.textContent=simulated;
           log.appendChild(simLine);
-          state.errorById[r.id]='';
           err.textContent = 'Standard command executed (outside this step validation criteria).';
+          handleStepFailure(r, 'Validation mismatch');
         } else {
-          state.errorById[r.id]=res.message||'Validation error';
-          err.textContent = res.message || 'Validation error';
-          renderStepper();
+          const failMsg = res.message || 'Validation error';
+          err.textContent = failMsg;
+          handleStepFailure(r, failMsg);
         }
       }
     };
@@ -526,7 +563,7 @@ function renderStep(){
     state.validateCurrent=()=>{
       const next=deepClone(state.world); setByPath(next, templateString(path,state.vars), local); feedback.innerHTML='';
       const res = runValidators(r.validators||[], local, next);
-      if(!res.ok){ state.errorById[r.id]=res.errors.join(', '); feedback.innerHTML = '<div class="ko">'+res.errors.join('<br>')+'</div>'; renderStepper(); return; }
+      if(!res.ok){ const msg=res.errors.join(', '); handleStepFailure(r, msg, '<div class="ko">'+res.errors.join('<br>')+'</div>'); return; }
       state.errorById[r.id]=''; state.world=next; setWorld(); success(r);
     };
   }
@@ -547,11 +584,11 @@ function renderStep(){
     state.validateCurrent=()=>{
       let payload = inputEl.value;
       if((mode==='editor' && (r.input?.language||'json')==='json') || (mode==='answer' && (r.input?.language||'text')==='json')){
-        try{ payload = JSON.parse(inputEl.value); } catch{ state.errorById[r.id]='JSON invalide'; feedback.innerHTML='<div class="ko">JSON invalide</div>'; renderStepper(); return; }
+        try{ payload = JSON.parse(inputEl.value); } catch{ handleStepFailure(r, 'Invalid JSON', '<div class="ko">Invalid JSON</div>'); return; }
       }
       const ok = validateInspect(r, payload);
       if(ok){ state.errorById[r.id]=''; success(r); }
-      else { state.errorById[r.id]='Inspect validation failed'; renderStepper(); }
+      else { handleStepFailure(r, 'Inspect validation failed'); }
     };
   }
   else if(r.type==='architecture'){
@@ -565,14 +602,17 @@ function renderStep(){
     const wrap=document.createElement('div'); let selected=null;
     (r.choices||[]).forEach(c=>{ const ch=document.createElement('div'); ch.className='choice'; ch.textContent=c.text; ch.onclick=()=>{ selected=c.id; Array.from(wrap.children).forEach(x=>x.classList.remove('selected')); ch.classList.add('selected'); }; wrap.appendChild(ch); });
     body.appendChild(wrap);
-    state.validateCurrent=()=>{ if((r.correct||[]).includes(selected)){ state.errorById[r.id]=''; success(r); } else { state.errorById[r.id]='Wrong answer'; feedback.innerHTML='<div class="ko">Wrong answer. Try again.</div>'; renderStepper(); } };
+    state.validateCurrent=()=>{ if((r.correct||[]).includes(selected)){ state.errorById[r.id]=''; success(r); } else { handleStepFailure(r, 'Wrong answer', '<div class="ko">Wrong answer. Try again.</div>'); } };
   }
 
   document.getElementById('btn-restart').onclick = ()=>{ state.world={}; state.score=0; state.statusById={}; state.errorById={}; state.currentId=state.lab.lab.steps[0].id; setScore(); setWorld(); renderStep(); };
   document.getElementById('btn-validate').onclick = ()=>{ if(typeof state.validateCurrent==='function') state.validateCurrent(); };
   document.getElementById('btn-next').onclick = ()=>{
-    const i=getStepIndexById(state.currentId);
-    if(i>=0 && i<steps.length-1){ state.currentId=steps[i+1].id; renderStep(); }
+    const stepNow = state.lab.lab.steps.find(s=> s.id===state.currentId);
+    if(!stepNow) return;
+    const target = transitionTarget(stepNow, 'success');
+    if(state.statusById[stepNow.id]!=='done') return;
+    moveToStep(target);
   };
   renderStepper();
 }
@@ -585,21 +625,21 @@ function success(r){
   const step = state.lab.lab.steps.find(s=> s.id===state.currentId);
   const next = (step.transitions&&step.transitions.on_success)||'#end';
   const fb=document.getElementById('step-feedback');
-  fb.innerHTML = `<div class="ok">Bravo ! +${r.points||0} pts</div>`;
+  fb.innerHTML = `<div class="ok">Great job! +${r.points||0} pts</div>`;
   renderStepper();
   if(next==="#end"){ fb.innerHTML += '<div class="ok" style="margin-top:6px">Lab completed ✔</div>'; }
-  else { setTimeout(()=>{ state.currentId = next; renderStep(); }, 450); }
+  else { setTimeout(()=>{ moveToStep(next); }, 450); }
 }
 
 function validateTerminal(r, line){
   const cmd = parseCommand(line||'');
   const rule = (r.terminal?.validators||[])[0];
-  if(!rule || rule.kind!=="command") return { ok:false, message:"Aucun validateur." };
-  if(cmd.program !== rule.match.program) return { ok:false, message:`Programme attendu: ${rule.match.program}` };
-  const sub = rule.match.subcommand||[]; for(let i=0;i<sub.length;i++){ if(cmd.subcmd[i]!==sub[i]) return { ok:false, message:`Sous-commande attendue: ${sub.join(' ')}` }; }
+  if(!rule || rule.kind!=="command") return { ok:false, message:"No validator configured." };
+  if(cmd.program !== rule.match.program) return { ok:false, message:`Expected program: ${rule.match.program}` };
+  const sub = rule.match.subcommand||[]; for(let i=0;i<sub.length;i++){ if(cmd.subcmd[i]!==sub[i]) return { ok:false, message:`Expected subcommand: ${sub.join(' ')}` }; }
   const aliases = (rule.match.flags&&rule.match.flags.aliases)||{}; const flags={}; for(const [k,v] of Object.entries(cmd.flags)){ flags[aliases[k]||k]=v; }
-  for(const req of (rule.match.flags?.required||[])){ if(!(req in flags)) return { ok:false, message:`Flag requis manquant: ${req}` }; }
-  for(const a of (rule.match.args||[])){ const got = flags[a.flag]; const expect = templateString(a.expect, state.vars); if(String(got)!==String(expect)) return { ok:false, message:`Valeur attendue pour ${a.flag}: ${expect}` }; }
+  for(const req of (rule.match.flags?.required||[])){ if(!(req in flags)) return { ok:false, message:`Missing required flag: ${req}` }; }
+  for(const a of (rule.match.args||[])){ const got = flags[a.flag]; const expect = templateString(a.expect, state.vars); if(String(got)!==String(expect)) return { ok:false, message:`Expected value for ${a.flag}: ${expect}` }; }
   applyWorldPatch(state.world, rule.response?.world_patch||[], state.vars); setWorld();
   const out = templateString(rule.response?.stdout_template||'', state.vars);
   success(r);
@@ -614,7 +654,7 @@ function validateInspect(r, payload){
     } else if (v.kind==='jsonpath_absent'){
       const list = jsonPathGetAll(payload, v.jsonpath||'$');
       if(v.equals!==undefined){ if(list.some(x=> JSON.stringify(x)===JSON.stringify(v.equals))){ fb.innerHTML=`<div class=\"ko\">Value ${JSON.stringify(v.equals)} must not appear at ${v.jsonpath}</div>`; return false; } }
-      else if (list.length>0){ fb.innerHTML=`<div class=\"ko\">Le chemin ${v.jsonpath} ne doit pas exister.</div>`; return false; }
+      else if (list.length>0){ fb.innerHTML=`<div class=\"ko\">Path ${v.jsonpath} must not exist.</div>`; return false; }
     } else if (v.kind==='expression'){
       try{ if(!evalExpr(v.expr, { world: state.world, vars: state.vars, payload })) { fb.innerHTML='<div class="ko">Expression not satisfied</div>'; return false; } }catch{ fb.innerHTML='<div class=\"ko\">Invalid expression</div>'; return false; }
     }
@@ -992,7 +1032,6 @@ function renderArchitectureFreeform(step, cfg, mount){
   const gridState = { visible: cfg.show_grid !== false };
   const snapState = { enabled: cfg.snap_to_grid !== false };
   const routeState = { enabled: cfg.auto_route !== false };
-  const isCompactInspector = ()=> window.matchMedia('(max-width: 1024px)').matches;
   const snapSize = typeof cfg.snap_to_grid === 'number' ? Math.max(1, cfg.snap_to_grid) : 20;
   const gridSize = cfg.grid_spacing || 64;
 
@@ -1046,44 +1085,6 @@ function renderArchitectureFreeform(step, cfg, mount){
   let inspectorVisible = false;
   let linkCandidateId = null;
 
-  function drawMinimap(){
-    const ctx = minimapCanvas.getContext('2d');
-    if(!ctx) return;
-    const w = minimapCanvas.width;
-    const h = minimapCanvas.height;
-    ctx.clearRect(0,0,w,h);
-    ctx.fillStyle = '#061225';
-    ctx.fillRect(0,0,w,h);
-    const maxX = Math.max(stage.width(), ...nodes.map(n=> n.group.x()+n.width+40));
-    const maxY = Math.max(stage.height(), ...nodes.map(n=> n.group.y()+n.height+40));
-    const scale = Math.max(0.1, Math.min((w-12)/maxX, (h-12)/maxY));
-    const ox = (w - maxX*scale)/2;
-    const oy = (h - maxY*scale)/2;
-    ctx.strokeStyle = 'rgba(71,245,192,0.45)';
-    ctx.lineWidth = 1;
-    links.forEach(l=>{
-      const A=centerPoint(l.fromNode,'out');
-      const B=centerPoint(l.toNode,'in');
-      ctx.beginPath();
-      ctx.moveTo(ox + A.x*scale, oy + A.y*scale);
-      ctx.lineTo(ox + B.x*scale, oy + B.y*scale);
-      ctx.stroke();
-    });
-    nodes.forEach(n=>{
-      const x = ox + n.group.x()*scale;
-      const y = oy + n.group.y()*scale;
-      ctx.fillStyle = n.id===selectedNode ? 'rgba(124,247,255,0.9)' : 'rgba(173, 216, 255, 0.75)';
-      ctx.fillRect(x, y, Math.max(3,n.width*scale), Math.max(2,n.height*scale));
-    });
-    const s = stage.scaleX() || 1;
-    const vx = -stage.x()/s;
-    const vy = -stage.y()/s;
-    const vw = stage.width()/s;
-    const vh = stage.height()/s;
-    ctx.strokeStyle = 'rgba(250, 204, 21, 0.9)';
-    ctx.strokeRect(ox + vx*scale, oy + vy*scale, vw*scale, vh*scale);
-  }
-
   function updateLinkButton(){
     const hasSelection = !!selectedNode;
     connectBtn.disabled = !hasSelection;
@@ -1102,17 +1103,6 @@ function renderArchitectureFreeform(step, cfg, mount){
   }
 
 
-  function placeInspector(){
-    if(isCompactInspector()){
-      if(inspector.parentElement !== inspectorModal){ inspectorModal.appendChild(inspector); }
-    } else {
-      if(inspector.parentElement !== inspectorDock){ inspectorDock.appendChild(inspector); }
-      inspectorModal.hidden = true;
-      inspectorModal.setAttribute('aria-hidden', 'true');
-      inspectorModal.setAttribute('data-state', 'hidden');
-    }
-  }
-
   function updateInspector(){
     placeInspector();
     if(!inspectorVisible){
@@ -1121,8 +1111,8 @@ function renderArchitectureFreeform(step, cfg, mount){
       inspectorModal.setAttribute('data-state', 'hidden');
       inspectorModal.hidden = true;
       inspectorModal.setAttribute('aria-hidden', 'true');
-      inspectorTitle.textContent = 'Docked inspector';
-      inspectorSubtitle.textContent = 'Select a component to edit its name and commands without opening a popup.';
+      inspectorTitle.textContent = 'Select a component';
+      inspectorSubtitle.textContent = 'Double-click a topology element to enter its standard commands.';
       labelInput.value = '';
       labelInput.disabled = true;
       configTerminal.setValue('');
@@ -1136,16 +1126,14 @@ function renderArchitectureFreeform(step, cfg, mount){
       closeInspector();
       return;
     }
-    if(isCompactInspector()){
-      inspectorModal.hidden = false;
-      inspectorModal.setAttribute('aria-hidden', 'false');
-      inspectorModal.classList.add('is-visible');
-      inspectorModal.setAttribute('data-state', 'active');
-    }
+    inspectorModal.hidden = false;
+    inspectorModal.setAttribute('aria-hidden', 'false');
+    inspectorModal.classList.add('is-visible');
+    inspectorModal.setAttribute('data-state', 'active');
     inspector.setAttribute('data-state', 'active');
     const currentLabel = node.labelNode.text();
-    inspectorTitle.textContent = currentLabel || 'Composant';
-    inspectorSubtitle.textContent = 'Saisis ou colle la configuration attendue pour ce composant.';
+    inspectorTitle.textContent = currentLabel || 'Component';
+    inspectorSubtitle.textContent = 'Type or paste the expected configuration for this component.';
     if(document.activeElement !== labelInput){
       labelInput.value = currentLabel;
     }
@@ -1176,7 +1164,7 @@ function renderArchitectureFreeform(step, cfg, mount){
     if(!node) return;
     const nextLabel = labelInput.value || '';
     node.labelNode.text(nextLabel);
-    inspectorTitle.textContent = nextLabel || 'Composant';
+    inspectorTitle.textContent = nextLabel || 'Component';
     layerNodes.batchDraw();
     drawLinks();
   });
@@ -1313,7 +1301,7 @@ function renderArchitectureFreeform(step, cfg, mount){
     const startY = overrides.position?.y ?? Math.max(24, (stage.height()/2 - height/2) + (nodes.length*28)%240);
     const group = new Konva.Group({ x:startX, y:startY, draggable:true });
     const rect = new Konva.Rect({ width, height, cornerRadius:14, stroke:'#1d2a5b', strokeWidth:1.4, fill:'#0f1630', shadowColor:'#47f5c0', shadowBlur:18, shadowOpacity:0, shadowOffset:{x:0,y:0} });
-    const label = new Konva.Text({ text: overrides.label || spec.label || componentId, fontSize:12, fill:'#cde1ff', y: height/2 - 7, width: width - 36, align:'left' });
+    const label = new Konva.Text({ text: overrides.label || spec.label || componentId, fontSize:10, fill:'#cde1ff', y: height/2 - 7, width: width - 36, align:'left' });
     const portIn = new Konva.Circle({ x:0, y:height/2, radius:5, fill:'#1e335f', stroke:'#47f5c0', strokeWidth:1.4 });
     const portOut = new Konva.Circle({ x:width, y:height/2, radius:5, fill:'#1e335f', stroke:'#47f5c0', strokeWidth:1.4 });
 
@@ -1411,12 +1399,8 @@ function renderArchitectureFreeform(step, cfg, mount){
     layerNodes.batchDraw();
     if(!id){
       closeInspector();
-    } else {
-      inspectorVisible = true;
-      inspectorNodeId = id;
-      const node = getNodeById(id);
-      if(node){ configTerminal.setValue(node.configText || ''); }
-      updateInspector();
+    } else if(inspectorVisible && inspectorNodeId!==id){
+      closeInspector();
     }
     updateLinkButton();
   }
@@ -1657,9 +1641,8 @@ function renderArchitectureFreeform(step, cfg, mount){
   mount.appendChild(actions);
 
   setupInitial();
-  drawMinimap();
+
   updatePortHighlights();
-  window.addEventListener('resize', ()=>{ placeInspector(); drawMinimap(); });
   stage.on('mouseup touchend', ()=>{ if(pendingFrom){ if(linkCandidateId){ finishLink(linkCandidateId); } else { cancelPendingLink(); } } });
 }
 
@@ -2024,6 +2007,7 @@ function submitArchitectureResult(step, cfg, payload){
   if(errors.length){
     const fb=document.getElementById('step-feedback');
     fb.innerHTML = '<div class="ko">'+errors.join('<br>')+'</div>';
+    handleStepFailure(step, errors.join(', '), fb.innerHTML);
     return false;
   }
   state.world = next;
