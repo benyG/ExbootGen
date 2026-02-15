@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Carousel Topics · ExBoot</title>
+  <style>
+    body { font-family: Inter, system-ui, sans-serif; margin:0; background:#050914; color:#e2e8f0; padding:2rem; }
+    main { max-width: 1100px; margin:0 auto; display:grid; gap:1rem; }
+    section { background:#0f172a; border:1px solid #334155; border-radius:14px; padding:1rem; }
+    h1,h2{margin:.2rem 0 1rem;}
+    button { background:#22c55e; color:#062; border:none; padding:.6rem 1rem; border-radius:8px; cursor:pointer; font-weight:600; }
+    button.secondary { background:#334155; color:#e2e8f0; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    textarea { width:100%; min-height:260px; background:#020617; color:#e2e8f0; border:1px solid #334155; border-radius:10px; padding:.75rem; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { border-bottom:1px solid #334155; padding:.55rem; text-align:left; vertical-align:top; }
+    input[type="text"] { width:100%; background:#020617; color:#e2e8f0; border:1px solid #334155; border-radius:8px; padding:.45rem; }
+    .status { color:#94a3b8; }
+    .actions { display:flex; gap:.5rem; margin-bottom:.75rem; }
+    a { color:#7dd3fc; }
+  </style>
+</head>
+<body>
+  <main>
+    <a href="{{ url_for('articles.index') }}">← Retour Article Builder(AI)</a>
+    <section>
+      <h1>Gestion des sujets de carrousel PDF</h1>
+      <div class="actions">
+        <button id="generateIdeasBtn">Générer 20 idées IA</button>
+        <button id="saveIdeasBtn" class="secondary">Enregistrer en base</button>
+      </div>
+      <div class="status" id="ideasStatus">Cliquez sur "Générer 20 idées IA" pour proposer des sujets.</div>
+      <textarea id="ideasJson"></textarea>
+    </section>
+
+    <section>
+      <h2>Sujets enregistrés</h2>
+      <div class="status" id="storedStatus">Chargement…</div>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Topic</th>
+            <th>Question to address</th>
+            <th>Statut</th>
+          </tr>
+        </thead>
+        <tbody id="topicsTableBody"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    const generateIdeasBtn = document.getElementById('generateIdeasBtn');
+    const saveIdeasBtn = document.getElementById('saveIdeasBtn');
+    const ideasJson = document.getElementById('ideasJson');
+    const ideasStatus = document.getElementById('ideasStatus');
+    const topicsTableBody = document.getElementById('topicsTableBody');
+    const storedStatus = document.getElementById('storedStatus');
+
+    ideasJson.value = JSON.stringify({ topics: [] }, null, 2);
+
+    async function loadStoredTopics() {
+      storedStatus.textContent = 'Chargement…';
+      const response = await fetch('/articles/carousel-topics/list');
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Impossible de charger les sujets');
+      }
+      const topics = payload.topics || [];
+      topicsTableBody.innerHTML = topics.map((item) => `
+        <tr>
+          <td>${item.id}</td>
+          <td>${item.topic || ''}</td>
+          <td>${item.question_to_address || ''}</td>
+          <td>${item.is_processed ? 'Traité' : 'Disponible'}</td>
+        </tr>
+      `).join('');
+      storedStatus.textContent = `${topics.length} sujet(s) enregistré(s).`;
+    }
+
+    generateIdeasBtn.addEventListener('click', async () => {
+      try {
+        generateIdeasBtn.disabled = true;
+        ideasStatus.textContent = 'Génération IA en cours…';
+        const response = await fetch('/articles/carousel-topics/generate-ideas', { method: 'POST' });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur de génération');
+        }
+        ideasJson.value = JSON.stringify({ topics: payload.topics || [] }, null, 2);
+        ideasStatus.textContent = '20 idées générées. Vous pouvez les éditer puis enregistrer.';
+      } catch (error) {
+        ideasStatus.textContent = error.message || String(error);
+      } finally {
+        generateIdeasBtn.disabled = false;
+      }
+    });
+
+    saveIdeasBtn.addEventListener('click', async () => {
+      try {
+        saveIdeasBtn.disabled = true;
+        ideasStatus.textContent = 'Enregistrement en base…';
+        let parsed;
+        try {
+          parsed = JSON.parse(ideasJson.value || '{}');
+        } catch {
+          throw new Error('JSON invalide.');
+        }
+        const response = await fetch('/articles/carousel-topics/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(parsed)
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Erreur pendant la sauvegarde');
+        }
+        ideasStatus.textContent = `${payload.saved || 0} sujet(s) enregistré(s).`;
+        await loadStoredTopics();
+      } catch (error) {
+        ideasStatus.textContent = error.message || String(error);
+      } finally {
+        saveIdeasBtn.disabled = false;
+      }
+    });
+
+    loadStoredTopics().catch((error) => {
+      storedStatus.textContent = error.message || String(error);
+    });
+  </script>
+</body>
+</html>

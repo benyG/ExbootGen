@@ -386,6 +386,31 @@ Expected JSON format:
 }
 """
 
+CAROUSEL_TOPIC_IDEAS_PROMPT_TEMPLATE = """
+Research the internet for 20 trending questions, real-world problems, common mistakes, and current trends related to certifications.
+Identify specific topics that can be transformed into an educational or informational LinkedIn PDF carousel
+(format: Question (problem) → common mistake → explanation → expert advice).
+
+The goal is to provide significant educational value to certification candidates while subtly highlighting the benefits
+of an AI coach and an exam simulator like ExamBoot.net.
+
+Important requirements:
+- Return exactly 20 items.
+- Prioritize practical, current, and high-intent topics for certification candidates.
+- Use clear and concise phrasing.
+- Avoid duplicates and near-duplicates.
+
+You MUST return ONLY valid JSON with this exact shape:
+{
+  "topics": [
+    {
+      "topic": "Short thematic title suitable for carousel generation",
+      "question_to_address": "Specific question/problem to address in the carousel"
+    }
+  ]
+}
+"""
+
 CODE_CERT_RESPONSE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -474,6 +499,28 @@ LINKEDIN_CAROUSEL_SCHEMA = {
                 },
             },
         },
+    },
+}
+
+CAROUSEL_TOPIC_IDEAS_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["topics"],
+    "properties": {
+        "topics": {
+            "type": "array",
+            "minItems": 20,
+            "maxItems": 20,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["topic", "question_to_address"],
+                "properties": {
+                    "topic": {"type": "string"},
+                    "question_to_address": {"type": "string"},
+                },
+            },
+        }
     },
 }
 
@@ -1939,6 +1986,22 @@ def generate_certification_linkedin_post(
         exam_url,
     )
     return _run_completion(prompt)
+
+
+def generate_carousel_topic_ideas() -> dict:
+    """Generate 20 carousel topic ideas as structured JSON."""
+
+    if not OPENAI_API_KEY:
+        raise Exception(
+            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer des idées de sujets."
+        )
+
+    raw_content = _run_completion(
+        CAROUSEL_TOPIC_IDEAS_PROMPT_TEMPLATE,
+        text_format=_json_schema_format(CAROUSEL_TOPIC_IDEAS_SCHEMA, "carousel_topic_ideas"),
+        web_search_options={},
+    )
+    return clean_and_decode_json(raw_content)
 
 
 def generate_linkedin_carousel(subject: str, question: str) -> dict:

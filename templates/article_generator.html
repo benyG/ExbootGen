@@ -561,12 +561,15 @@
       <h2 style="margin-top:0;margin-bottom:1rem;font-weight:600;font-size:1.2rem;letter-spacing:0.01em;color:var(--accent-strong)">4. Carrousel LinkedIn</h2>
       <div class="grid-two">
         <div class="field-group">
-          <label for="carouselSubject">Sujet</label>
-          <input type="search" id="carouselSubject" placeholder="Ex. Accélérer la prise de décision B2B" autocomplete="off">
+          <label for="carouselTopicSelect">Sujet enregistré</label>
+          <select id="carouselTopicSelect">
+            <option value="">Sélectionner un sujet disponible…</option>
+          </select>
+          <span class="sub-label">Gérez vos sujets dans <a href="{{ url_for('articles.carousel_topics_page') }}">Carousel Topics</a>.</span>
         </div>
         <div class="field-group">
-          <label for="carouselQuestion">Question à adresser</label>
-          <textarea id="carouselQuestion" rows="4" placeholder="Ex. Comment aligner marketing et sales pour réduire le cycle de vente ?" autocomplete="off"></textarea>
+          <label for="carouselQuestionPreview">Question à adresser</label>
+          <textarea id="carouselQuestionPreview" rows="4" readonly placeholder="La question liée au sujet sélectionné apparaîtra ici."></textarea>
         </div>
       </div>
       <div class="actions">
@@ -614,8 +617,8 @@
     const tweetOutput = document.getElementById('tweetOutput');
     const linkedinOutput = document.getElementById('linkedinOutput');
     const addImageCheckbox = document.getElementById('addImageCheckbox');
-    const carouselSubjectInput = document.getElementById('carouselSubject');
-    const carouselQuestionInput = document.getElementById('carouselQuestion');
+    const carouselTopicSelect = document.getElementById('carouselTopicSelect');
+    const carouselQuestionPreview = document.getElementById('carouselQuestionPreview');
     const generateCarouselBtn = document.getElementById('generateCarouselBtn');
     const carouselDownloadLink = document.getElementById('carouselDownloadLink');
     const carouselJsonOutput = document.getElementById('carouselJsonOutput');
@@ -639,6 +642,8 @@
     let loadingButton = null;
     let currentCarousel = null;
     let currentCarouselPdfUrl = '';
+    let availableCarouselTopics = [];
+    let selectedCarouselTopic = null;
 
     const PLAYBOOK_PROGRESS_STEPS = [
       { label: 'Création du test Examboot…', target: 15 },
@@ -849,10 +854,34 @@
     }
 
     function updateCarouselAvailability() {
-      const hasCarouselInput = Boolean(
-        carouselSubjectInput.value.trim() && carouselQuestionInput.value.trim()
-      );
+      const hasCarouselInput = Boolean(selectedCarouselTopic && selectedCarouselTopic.topic && selectedCarouselTopic.question_to_address);
       generateCarouselBtn.disabled = !hasCarouselInput;
+    }
+
+    async function fetchCarouselTopics() {
+      try {
+        const response = await fetch('/articles/carousel-topics/list?available=1');
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Impossible de charger les sujets de carrousel.');
+        }
+        availableCarouselTopics = Array.isArray(payload.topics) ? payload.topics : [];
+        carouselTopicSelect.innerHTML = '<option value="">Sélectionner un sujet disponible…</option>';
+        availableCarouselTopics.forEach((item) => {
+          const option = document.createElement('option');
+          option.value = item.id;
+          option.textContent = item.topic;
+          carouselTopicSelect.appendChild(option);
+        });
+        selectedCarouselTopic = null;
+        carouselTopicSelect.value = '';
+        carouselQuestionPreview.value = '';
+        updateCarouselAvailability();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        carouselStatus.textContent = message;
+        carouselStatus.style.color = '#f87171';
+      }
     }
 
     const params = new URLSearchParams(window.location.search);
@@ -974,8 +1003,12 @@
       updateCourseArtSection();
       updateActionAvailability();
     });
-    carouselSubjectInput.addEventListener('input', updateCarouselAvailability);
-    carouselQuestionInput.addEventListener('input', updateCarouselAvailability);
+    carouselTopicSelect.addEventListener('change', () => {
+      const selectedId = Number(carouselTopicSelect.value);
+      selectedCarouselTopic = availableCarouselTopics.find((item) => item.id === selectedId) || null;
+      carouselQuestionPreview.value = selectedCarouselTopic?.question_to_address || '';
+      updateCarouselAvailability();
+    });
 
     generateExamBtn.addEventListener('click', async () => {
       const identifiers = getSelectionIdentifiers();
@@ -1199,11 +1232,17 @@
     });
 
     generateCarouselBtn.addEventListener('click', async () => {
-      const subject = carouselSubjectInput.value.trim();
-      const question = carouselQuestionInput.value.trim();
+      if (!selectedCarouselTopic) {
+        carouselStatus.textContent = 'Veuillez sélectionner un sujet enregistré.';
+        carouselStatus.style.color = '#f87171';
+        return;
+      }
+
+      const subject = (selectedCarouselTopic.topic || '').trim();
+      const question = (selectedCarouselTopic.question_to_address || '').trim();
 
       if (!subject || !question) {
-        carouselStatus.textContent = 'Veuillez renseigner un sujet et une question.';
+        carouselStatus.textContent = 'Sujet invalide: topic et question_to_address sont requis.';
         carouselStatus.style.color = '#f87171';
         return;
       }
@@ -1215,7 +1254,7 @@
         const response = await fetch('/articles/generate-carousel', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subject, question })
+          body: JSON.stringify({ subject, question, topic_id: selectedCarouselTopic.id })
         });
         const payload = await response.json();
         if (!response.ok) {
@@ -1232,11 +1271,14 @@
         } else {
           carouselDownloadLink.hidden = true;
         }
-        carouselStatus.textContent = 'Carrousel généré avec succès.';
+        carouselStatus.textContent = 'Carrousel généré avec succès. Sujet marqué comme traité.';
         carouselStatus.style.color = 'var(--text-muted)';
+        await fetchCarouselTopics();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        carouselJsonOutput.textContent = `${DEFAULT_CAROUSEL_TEXT}\n\nErreur : ${message}`;
+        carouselJsonOutput.textContent = `${DEFAULT_CAROUSEL_TEXT}
+
+Erreur : ${message}`;
         carouselDownloadLink.hidden = true;
         carouselStatus.textContent = message;
         carouselStatus.style.color = '#f87171';
@@ -1610,6 +1652,7 @@
     updateCourseArtSection();
     updateCarouselAvailability();
     fetchProviders();
+    fetchCarouselTopics();
     updateActionAvailability();
   </script>
 </body>

@@ -46,6 +46,7 @@ from openai_api import (
     generate_certification_course_art,
     generate_certification_linkedin_post,
     generate_certification_tweet,
+    generate_carousel_topic_ideas,
     generate_linkedin_carousel,
 )
 
@@ -151,6 +152,63 @@ class SocialPublishError(RuntimeError):
 
 class ExambootTestGenerationError(RuntimeError):
     """Raised when the Examboot test creation API fails."""
+
+
+def _fetch_carousel_topics(only_available: bool = False) -> list[dict]:
+    """Return stored carousel topics ordered from newest to oldest."""
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor(dictionary=True)
+    try:
+        query = (
+            "SELECT id, topic, question_to_address, is_processed, created_at, updated_at "
+            "FROM carousel_topics"
+        )
+        params: tuple = ()
+        if only_available:
+            query += " WHERE is_processed = 0"
+        query += " ORDER BY created_at DESC"
+        cursor.execute(query, params)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def _insert_carousel_topic(topic: str, question_to_address: str) -> int:
+    """Persist a carousel topic and return its identifier."""
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO carousel_topics (topic, question_to_address, is_processed, created_at, updated_at)
+            VALUES (%s, %s, 0, NOW(), NOW())
+            """,
+            (topic.strip(), question_to_address.strip()),
+        )
+        conn.commit()
+        return int(cursor.lastrowid)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def _mark_carousel_topic_processed(topic_id: int) -> None:
+    """Set a carousel topic as processed once the PDF is generated."""
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE carousel_topics SET is_processed = 1, updated_at = NOW() WHERE id = %s",
+            (topic_id,),
+        )
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def _fetch_selection(provider_id: int, certification_id: int) -> Selection:
@@ -1008,6 +1066,78 @@ def index() -> str:
         "article_generator.html",
         topic_types=TOPIC_TYPE_OPTIONS,
     )
+
+
+@articles_bp.route("/carousel-topics")
+def carousel_topics_page() -> str:
+    """Render the carousel topic management interface."""
+
+    return render_template("carousel_topics.html")
+
+
+@articles_bp.route("/carousel-topics/list")
+def carousel_topics_list():
+    """Return saved carousel topics."""
+
+    only_available = request.args.get("available") == "1"
+    return jsonify({"topics": _fetch_carousel_topics(only_available=only_available)})
+
+
+@articles_bp.route("/carousel-topics/generate-ideas", methods=["POST"])
+def carousel_topics_generate_ideas():
+    """Generate 20 AI topic ideas for LinkedIn carousels."""
+
+    try:
+        payload = generate_carousel_topic_ideas()
+    except Exception as exc:  # pragma: no cover - external API call
+        return jsonify({"error": str(exc)}), 500
+
+    topics = payload.get("topics") if isinstance(payload, dict) else None
+    if not isinstance(topics, list):
+        return jsonify({"error": "Réponse IA invalide."}), 500
+
+    normalized_topics = []
+    for item in topics:
+        if not isinstance(item, dict):
+            continue
+        topic = (item.get("topic") or "").strip()
+        question_to_address = (item.get("question_to_address") or "").strip()
+        if not topic or not question_to_address:
+            continue
+        normalized_topics.append(
+            {
+                "topic": topic,
+                "question_to_address": question_to_address,
+            }
+        )
+
+    return jsonify({"topics": normalized_topics})
+
+
+@articles_bp.route("/carousel-topics/save", methods=["POST"])
+def carousel_topics_save():
+    """Save one or many carousel topics into the database."""
+
+    data = request.get_json() or {}
+    raw_topics = data.get("topics")
+    if not isinstance(raw_topics, list) or not raw_topics:
+        return jsonify({"error": "Le champ topics est requis et doit être une liste."}), 400
+
+    inserted = 0
+    for item in raw_topics:
+        if not isinstance(item, dict):
+            continue
+        topic = (item.get("topic") or "").strip()
+        question_to_address = (item.get("question_to_address") or "").strip()
+        if not topic or not question_to_address:
+            continue
+        _insert_carousel_topic(topic, question_to_address)
+        inserted += 1
+
+    if inserted == 0:
+        return jsonify({"error": "Aucun sujet valide à enregistrer."}), 400
+
+    return jsonify({"saved": inserted})
 
 
 def _extract_selection_payload(data: dict) -> Tuple[int, int, str, str]:
@@ -2048,13 +2178,24 @@ def generate_carousel():
     data = request.get_json() or {}
     subject = (data.get("subject") or "").strip()
     question = (data.get("question") or "").strip()
+    topic_id = data.get("topic_id")
+
     if not subject or not question:
         return jsonify({"error": "Le sujet et la question sont requis."}), 400
+
+    topic_id_int = None
+    if topic_id not in (None, ""):
+        try:
+            topic_id_int = int(topic_id)
+        except (TypeError, ValueError):
+            return jsonify({"error": "topic_id invalide."}), 400
 
     try:
         carousel_payload = generate_linkedin_carousel(subject, question)
         pages = _normalize_carousel_pages(carousel_payload)
         pdf_path = _build_carousel_pdf(pages)
+        if topic_id_int is not None:
+            _mark_carousel_topic_processed(topic_id_int)
     except Exception as exc:  # pragma: no cover - external API issues
         return jsonify({"error": str(exc)}), 500
 
