@@ -9,7 +9,11 @@ from flask import Blueprint, request, jsonify, render_template, send_file
 from werkzeug.utils import secure_filename
 
 from routes_pdf import detect_questions, extract_text_from_pdf, db_conn
-from openai_api import generate_questions
+from openai_api import (
+    delete_openai_file,
+    generate_questions,
+    upload_pdf_bytes_to_openai,
+)
 from config import DISTRIBUTION, API_REQUEST_DELAY
 import db
 
@@ -101,6 +105,30 @@ def _record_file_imported(filename: str, module_id: int | None) -> None:
 # ``domain_id`` (nouveau flux) ou ``module_id`` (ancien flux /upload-pdf).
 # On gère donc les deux pour rétrocompatibilité.
 SESSIONS = {}  # { session_id: { "domain_id"|"module_id": int, "questions": [...] } }
+EPHEMERAL_FILE_TTL_SECONDS = 24 * 60 * 60
+EPHEMERAL_DOCS = {}  # { document_ref: {file_id, filename, expires_at, created_at} }
+
+
+def _cleanup_expired_docs() -> None:
+    now = time.time()
+    expired = [ref for ref, meta in EPHEMERAL_DOCS.items() if meta.get("expires_at", 0) <= now]
+    for ref in expired:
+        meta = EPHEMERAL_DOCS.pop(ref, None)
+        if meta:
+            delete_openai_file(meta.get("file_id", ""))
+
+
+def _register_ephemeral_doc(filename: str, file_id: str) -> tuple[str, dict]:
+    now = time.time()
+    document_ref = os.urandom(12).hex()
+    doc = {
+        "file_id": file_id,
+        "filename": filename,
+        "created_at": now,
+        "expires_at": now + EPHEMERAL_FILE_TTL_SECONDS,
+    }
+    EPHEMERAL_DOCS[document_ref] = doc
+    return document_ref, doc
 
 # -------- Mappings (text -> code BD) --------
 LEVEL_MAP = {"easy": 0, "medium": 1, "hard": 2}
@@ -780,9 +808,20 @@ def generate_index():
     return render_template("pdf_generate.html")
 
 
+@pdf_bp.route("/api/document/<document_ref>", methods=["DELETE"])
+def delete_ephemeral_document(document_ref: str):
+    _cleanup_expired_docs()
+    meta = EPHEMERAL_DOCS.pop(document_ref, None)
+    if not meta:
+        return jsonify({"status": "error", "message": "Document introuvable"}), 404
+    delete_openai_file(meta.get("file_id", ""))
+    return jsonify({"status": "ok"})
+
+
 @pdf_bp.route("/generate-questions", methods=["POST"])
 def generate_questions_from_pdf():
     """Generate questions from an uploaded PDF using the OpenAI API."""
+    _cleanup_expired_docs()
     try:
         provider_id = int(request.form.get("provider_id", 0))
         cert_id = int(request.form.get("cert_id", 0))
@@ -796,33 +835,37 @@ def generate_questions_from_pdf():
     level = request.form.get("level", "medium")
     scenario = request.form.get("scenario", "no")
     scenario_illustration_type = request.form.get("scenario_illustration_type", "none")
+    document_ref = (request.form.get("document_ref") or "").strip()
+    doc_meta = EPHEMERAL_DOCS.get(document_ref) if document_ref else None
 
-    pdf_file = request.files.get("pdf_file")
-    if not pdf_file or not pdf_file.filename.lower().endswith(".pdf"):
-        return jsonify({"status": "error", "message": "Fichier PDF requis"}), 400
+    if doc_meta and doc_meta.get("expires_at", 0) <= time.time():
+        delete_openai_file(doc_meta.get("file_id", ""))
+        EPHEMERAL_DOCS.pop(document_ref, None)
+        doc_meta = None
 
-    # Taille max 20 Mo
-    pdf_file.stream.seek(0, os.SEEK_END)
-    size = pdf_file.stream.tell()
-    pdf_file.stream.seek(0)
-    if size > 20 * 1024 * 1024:
-        return jsonify({"status": "error", "message": "Fichier trop volumineux (>20Mo)"}), 400
+    if not doc_meta:
+        pdf_file = request.files.get("pdf_file")
+        if not pdf_file or not pdf_file.filename.lower().endswith(".pdf"):
+            return jsonify({"status": "error", "message": "Fichier PDF requis"}), 400
 
-    filename = secure_filename(pdf_file.filename)
-    save_path = UPLOAD_DIR / filename
-    pdf_file.save(str(save_path))
+        # Taille max 20 Mo
+        pdf_file.stream.seek(0, os.SEEK_END)
+        size = pdf_file.stream.tell()
+        pdf_file.stream.seek(0)
+        if size > 20 * 1024 * 1024:
+            return jsonify({"status": "error", "message": "Fichier trop volumineux (>20Mo)"}), 400
 
-    text = extract_text_from_pdf(
-        str(save_path),
-        use_ocr=False,
-        skip_first_page=True,
-        header_ratio=0.10,
-        footer_ratio=0.10,
-        detect_visuals=True,
-    )
+        filename = secure_filename(pdf_file.filename)
+        file_bytes = pdf_file.read()
+        if not file_bytes:
+            return jsonify({"status": "error", "message": "PDF vide"}), 400
+        try:
+            file_id = upload_pdf_bytes_to_openai(file_bytes, filename)
+        except Exception as exc:
+            return jsonify({"status": "error", "message": f"Upload OpenAI impossible: {exc}"}), 500
+        document_ref, doc_meta = _register_ephemeral_doc(filename, file_id)
 
-    if not text.strip():
-        return jsonify({"status": "error", "message": "PDF vide"}), 400
+    file_id = doc_meta.get("file_id", "")
 
     # Récupération des noms provider, certification et domaine
     conn = db_conn()
@@ -862,30 +905,24 @@ def generate_questions_from_pdf():
     else:
         pairs.append([q_type, scenario, scenario_illustration_type, num_questions])
 
-    chunk_size = 4000
-    chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)] or [text]
-
     questions = []
-    chunk_idx = 0
-    num_chunks = len(chunks)
     for qt, scen, scen_illu, count in pairs:
         remaining = count
         while remaining > 0:
-            chunk = chunks[chunk_idx % num_chunks]
-            chunk_idx += 1
             to_generate = min(remaining, 5)
             try:
                 data = generate_questions(
                     provider_name=provider_name,
                     certification=cert_name,
                     domain=domain_name,
-                    domain_descr=chunk,
+                    domain_descr="",
                     level=level,
                     q_type=qt,
                     practical=scen,
                     scenario_illustration_type=scen_illu,
                     num_questions=to_generate,
-                    use_text=True,
+                    use_text=False,
+                    source_file_id=file_id,
                 )
                 questions.extend(data.get("questions", []))
                 remaining -= len(data.get("questions", []))
@@ -899,7 +936,17 @@ def generate_questions_from_pdf():
 
     session_id = os.urandom(8).hex()
     SESSIONS[session_id] = {"domain_id": domain_id, "questions": questions}
-    return jsonify({"status": "ok", "session_id": session_id, "json_data": {"questions": questions}})
+    expires_at = int(doc_meta.get("expires_at", time.time()))
+    return jsonify(
+        {
+            "status": "ok",
+            "session_id": session_id,
+            "document_ref": document_ref,
+            "document_filename": doc_meta.get("filename", ""),
+            "document_expires_at": expires_at,
+            "json_data": {"questions": questions},
+        }
+    )
 
 
 @pdf_bp.route("/export/questions", methods=["POST"])

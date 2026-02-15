@@ -932,6 +932,21 @@ function renderArchitectureFreeform(step, cfg, mount){
   helper.innerHTML = cfg.help || 'Tip: double-click to configure, right-click to delete, connect side ports.';
   canvasWrap.appendChild(helper);
 
+  const minimap = document.createElement('div');
+  minimap.className = 'arch-minimap';
+  const minimapCanvas = document.createElement('canvas');
+  minimapCanvas.width = 180;
+  minimapCanvas.height = 110;
+  const minimapLabel = document.createElement('div');
+  minimapLabel.className = 'arch-minimap-label';
+  minimapLabel.textContent = 'Topology overview';
+  minimap.appendChild(minimapCanvas);
+  minimap.appendChild(minimapLabel);
+  canvasWrap.appendChild(minimap);
+
+  const inspectorDock = document.createElement('aside');
+  inspectorDock.className = 'arch-inspector-dock';
+
   const inspectorModal = document.createElement('div');
   inspectorModal.className = 'arch-inspector-modal';
   inspectorModal.setAttribute('data-state', 'hidden');
@@ -993,7 +1008,7 @@ function renderArchitectureFreeform(step, cfg, mount){
   inspector.appendChild(labelField);
   inspector.appendChild(configField);
   inspector.appendChild(inspectorActions);
-  inspectorModal.appendChild(inspector);
+  inspectorDock.appendChild(inspector);
   canvasWrap.appendChild(inspectorModal);
 
   inspectorCloseBtn.addEventListener('click', ()=>{ closeInspector(); });
@@ -1001,6 +1016,7 @@ function renderArchitectureFreeform(step, cfg, mount){
     if(event.target === inspectorModal){ closeInspector(); }
   });
 
+  paletteCol.appendChild(inspectorDock);
   layout.appendChild(paletteCol);
   layout.appendChild(canvasWrap);
   mount.appendChild(layout);
@@ -1038,6 +1054,7 @@ function renderArchitectureFreeform(step, cfg, mount){
     stage.height(canvasBox.clientHeight);
     drawGrid();
     drawLinks();
+    drawMinimap();
   });
   resizeObserver.observe(canvasBox);
 
@@ -1054,6 +1071,7 @@ function renderArchitectureFreeform(step, cfg, mount){
     stage.position(newPos);
     stage.batchDraw();
     drawLinks();
+    drawMinimap();
   });
 
   const nodes = [];
@@ -1086,6 +1104,7 @@ function renderArchitectureFreeform(step, cfg, mount){
 
 
   function updateInspector(){
+    placeInspector();
     if(!inspectorVisible){
       inspectorNodeId = null;
       inspectorModal.classList.remove('is-visible');
@@ -1433,6 +1452,7 @@ function renderArchitectureFreeform(step, cfg, mount){
     links.forEach(link=>{ link.shape.points(calcPoints(link.fromNode, link.toNode)); });
     drawLinkPreview();
     layerLinks.batchDraw();
+    drawMinimap();
   }
 
   function addLink(fromId, toId){
