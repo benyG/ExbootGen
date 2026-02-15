@@ -1,0 +1,75 @@
+{
+  "linux": {
+    "show": {
+      "pwd": "/home/lab\n",
+      "ls": "README.md  scripts/  docs/  logs/\n",
+      "ls -la": "drwxr-xr-x 6 lab lab 4096 .\ndrwxr-xr-x 3 root root 4096 ..\n-rw-r--r-- 1 lab lab  245 README.md\ndrwxr-xr-x 2 lab lab 4096 docs\ndrwxr-xr-x 2 lab lab 4096 logs\ndrwxr-xr-x 2 lab lab 4096 scripts\n",
+      "whoami": "lab\n",
+      "uname -a": "Linux lab-host 6.5.0-generic #1 SMP x86_64 GNU/Linux\n",
+      "cat /etc/os-release": "NAME=\"Ubuntu\"\nVERSION=\"22.04 LTS\"\n",
+      "echo $shell": "/bin/bash\n",
+      "history | tail": "  96  ls -la\n  97  cat README.md\n  98  grep -n TODO docs/notes.md\n  99  pwd\n 100  whoami\n",
+      "df -h": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/root        50G   11G   37G  23% /\ntmpfs           1.0G     0  1.0G   0% /run\n",
+      "free -h": "               total        used        free      shared  buff/cache   available\nMem:           3.8Gi       1.2Gi       1.5Gi       120Mi       1.1Gi       2.3Gi\n",
+      "ps aux | head": "USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND\nroot         1  0.0  0.1 169252  9728 ?        Ss   08:00   0:01 /sbin/init\nlab       1423  0.1  0.8 512000 32200 ?        Sl   08:07   0:03 python app.py\n"
+    }
+  },
+  "windows": {
+    "show": {
+      "dir": " Volume in drive C has no label.\n Directory of C:\\Users\\Student\n\n06/02/2026  09:41 AM    <DIR>          Desktop\n06/02/2026  09:41 AM    <DIR>          Documents\n06/02/2026  09:40 AM               512 notes.txt\n",
+      "whoami": "labdomain\\student\n",
+      "ver": "Microsoft Windows [Version 10.0.20348.0]\n",
+      "systeminfo": "Host Name:                 LAB-WS\nOS Name:                   Microsoft Windows Server 2022 Standard\nSystem Type:               x64-based PC\n",
+      "where powershell": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\n",
+      "Get-ExecutionPolicy": "RemoteSigned\n",
+      "Get-ChildItem": "\n\n    Directory: C:\\Users\\Student\\\n\nMode                 LastWriteTime         Length Name\n----                 -------------         ------ ----\nd-----        06/02/2026     09:41                Desktop\nd-----        06/02/2026     09:41                Documents\n",
+      "Get-Service | Select-Object -First 5": "Status   Name               DisplayName\n------   ----               -----------\nRunning  BITS               Background Intelligent Transfer Service\nRunning  EventLog           Windows Event Log\nRunning  LanmanWorkstation  Workstation\n"
+    }
+  },
+  "aws": {
+    "show": {
+      "aws --version": "aws-cli/2.15.0 Python/3.11 botocore/2.4.0\n",
+      "aws sts get-caller-identity": "{\n  \"UserId\": \"AIDAEXAMPLE\",\n  \"Account\": \"<ACCOUNT_ID>\",\n  \"Arn\": \"arn:aws:iam::<ACCOUNT_ID>:user/lab-user\"\n}\n",
+      "aws configure list": "      Name                    Value             Type    Location\n      ----                    -----             ----    --------\n   profile                <not set>             None    None\naccess_key     ****************ABCD shared-credentials-file\nsecret_key     ****************WXYZ shared-credentials-file\n    region                us-east-1      config-file    ~/.aws/config\n",
+      "aws s3 ls": "2026-02-01 11:41:22 lab-assets\n2026-02-01 11:42:05 training-backups\n",
+      "aws ec2 describe-regions": "{\n  \"Regions\": [\n    {\"RegionName\": \"us-east-1\"},\n    {\"RegionName\": \"eu-west-1\"}\n  ]\n}\n",
+      "aws iam list-users": "{\n  \"Users\": [\n    {\"UserName\": \"lab-user\"},\n    {\"UserName\": \"auditor-readonly\"}\n  ]\n}\n"
+    }
+  },
+  "azure": {
+    "show": {
+      "az version": "{\n  \"azure-cli\": \"2.61.0\",\n  \"python\": \"3.11.7\"\n}\n",
+      "az account show": "{\n  \"id\": \"<SUBSCRIPTION_ID>\",\n  \"name\": \"Lab Subscription\",\n  \"tenantId\": \"<TENANT_ID>\",\n  \"user\": {\"name\": \"student@lab.local\"}\n}\n",
+      "az group list": "[\n  {\"name\": \"rg-core\", \"location\": \"westeurope\"},\n  {\"name\": \"rg-monitoring\", \"location\": \"westeurope\"}\n]\n",
+      "az resource list --top 5": "[\n  {\"name\": \"kv-lab-shared\", \"type\": \"Microsoft.KeyVault/vaults\"},\n  {\"name\": \"stlabassets\", \"type\": \"Microsoft.Storage/storageAccounts\"}\n]\n",
+      "az aks list": "[]\n"
+    }
+  },
+  "gcp": {
+    "show": {
+      "gcloud version": "Google Cloud SDK 469.0.0\nbq 2.0.104\ngsutil 5.28\n",
+      "gcloud config list": "[core]\naccount = student@lab-service-account.iam.gserviceaccount.com\nproject = lab-sandbox\n",
+      "gcloud projects list": "PROJECT_ID      NAME          PROJECT_NUMBER\nlab-sandbox     Lab Sandbox   <PROJECT_NUMBER>\n",
+      "gcloud auth list": "Credentialed Accounts\nACTIVE  ACCOUNT\n*       student@lab-service-account.iam.gserviceaccount.com\n",
+      "gcloud services list --enabled --limit=5": "NAME                                TITLE\ncompute.googleapis.com              Compute Engine API\nstorage.googleapis.com              Cloud Storage API\n"
+    }
+  },
+  "cisco": {
+    "show": {
+      "show version": "Cisco IOS Software, IOSv Software (VIOS-ADVENTERPRISEK9-M), Version 15.8(3)M\nSystem image file is \"flash0:/vios-adventerprisek9-m\"\n",
+      "show running-config | include hostname": "hostname R1\n",
+      "show interfaces status": "Port      Name               Status       Vlan       Duplex  Speed Type\nGi0/0                        connected    trunk      a-full  a-1000 10/100/1000BaseTX\nGi0/1                        notconnect   1          auto    auto   10/100/1000BaseTX\n",
+      "show vlan brief": "VLAN Name                             Status    Ports\n1    default                          active    Gi0/1, Gi0/2\n10   USERS                            active    \n20   SERVERS                          active    \n",
+      "show clock": "*10:44:21.123 UTC Sat Feb 15 2026\n"
+    }
+  },
+  "kubernetes": {
+    "show": {
+      "kubectl get nodes": "NAME        STATUS   ROLES           AGE   VERSION\nmaster-01   Ready    control-plane   16d   v1.29.3\nworker-01   Ready    <none>          16d   v1.29.3\n",
+      "kubectl get pods -A": "NAMESPACE     NAME                                  READY   STATUS    RESTARTS   AGE\nkube-system   coredns-565d847f94-7h7x5              1/1     Running   0          16d\n",
+      "kubectl config current-context": "lab-context\n",
+      "kubectl get ns": "NAME              STATUS   AGE\ndefault           Active   16d\nkube-system       Active   16d\nmonitoring        Active   15d\n",
+      "kubectl api-resources | head": "NAME         SHORTNAMES   APIVERSION   NAMESPACED   KIND\npods         po           v1           true         Pod\nservices     svc          v1           true         Service\n"
+    }
+  }
+}
