@@ -36,6 +36,7 @@ DOMAIN_PROMPT_TEMPLATE = (
     "Reference sources: only the official website of the specified certification vendor. If the vendor's official website is unavailable, find the most reliable source to the best of your knowledge.\n"
     "If direct browsing is not available, rely on your most accurate and up-to-date knowledge of the vendor's official exam outline to provide accurate domains and descriptions, without mentioning any limitations.\n"
     "Each domain must correspond to a section from the official outline and include a concise vendor-aligned description.\n"
+    "I am not asking you to return to me the detailed pedagogical breakdown of the areas of the official program, but the official areas themselves."
     "If you include sources, they must be listed only in a top-level \"sources\" array.\n"
     "Do not include URLs or citations anywhere else in the JSON.\n"
     "Format your response as a decodable JSON object in a single line without line breaks.\n"
