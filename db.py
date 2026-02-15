@@ -96,19 +96,23 @@ def _dict_from_schedule_row(row, columns):
 
     def _decode_schedule_note(raw_note):
         add_image = True
+        metadata = {}
         if not raw_note:
-            return "", add_image
+            return "", add_image, metadata
         try:
             parsed = json.loads(raw_note)
         except (TypeError, json.JSONDecodeError):
-            return raw_note or "", add_image
+            return raw_note or "", add_image, metadata
         if isinstance(parsed, dict):
             text = parsed.get("text")
             add_image = parsed.get("addImage", True)
-            return (text if isinstance(text, str) else "") or "", bool(add_image)
+            meta_value = parsed.get("meta")
+            if isinstance(meta_value, dict):
+                metadata = meta_value
+            return (text if isinstance(text, str) else "") or "", bool(add_image), metadata
         if isinstance(parsed, str):
-            return parsed, add_image
-        return str(parsed), add_image
+            return parsed, add_image, metadata
+        return str(parsed), add_image, metadata
 
     def _format_timestamp(value):
         if value is None:
@@ -127,7 +131,7 @@ def _dict_from_schedule_row(row, columns):
             return str(value)
 
     data = {columns[index]: value for index, value in enumerate(row)}
-    note, add_image = _decode_schedule_note(data.get("note"))
+    note, add_image, note_meta = _decode_schedule_note(data.get("note"))
     last_run_at = data.get("last_run_at") or data.get("lastRunAt")
     job_id = data.get("job_id") or data.get("jobId")
     result_summary = data.get("result_summary") or data.get("summary")
@@ -164,6 +168,9 @@ def _dict_from_schedule_row(row, columns):
         "channels": json.loads(data.get("channels")) if data.get("channels") else [],
         "note": note,
         "addImage": add_image,
+        "carouselTopicId": note_meta.get("carousel_topic_id"),
+        "carouselTopicLabel": note_meta.get("carousel_topic_label"),
+        "carouselQuestion": note_meta.get("carousel_question"),
         "status": data.get("status") or "queued",
         "lastRunAt": _format_timestamp(last_run_at),
         "jobId": job_id,

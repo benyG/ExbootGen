@@ -46,6 +46,7 @@ from openai_api import (
     generate_certification_course_art,
     generate_certification_linkedin_post,
     generate_certification_tweet,
+    generate_carousel_linkedin_post,
     generate_carousel_topic_ideas,
     generate_linkedin_carousel,
 )
@@ -170,6 +171,23 @@ def _fetch_carousel_topics(only_available: bool = False) -> list[dict]:
         query += " ORDER BY created_at DESC"
         cursor.execute(query, params)
         return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def _get_carousel_topic_by_id(topic_id: int) -> Optional[dict]:
+    """Return one carousel topic by identifier."""
+
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id, topic, question_to_address, is_processed FROM carousel_topics WHERE id = %s",
+            (topic_id,),
+        )
+        row = cursor.fetchone()
+        return row
     finally:
         cursor.close()
         conn.close()
@@ -2109,6 +2127,55 @@ def _run_linkedin_workflow(
         status_code=200,
         media_filename=media_filename,
     )
+
+
+def run_scheduled_carousel_publication(
+    provider_id: int,
+    certification_id: int,
+    exam_url: str,
+    topic_id: int,
+    attach_image: bool = False,
+) -> dict:
+    """Generate a carousel PDF from a saved topic and publish its companion post on LinkedIn."""
+
+    topic = _get_carousel_topic_by_id(topic_id)
+    if not topic:
+        raise ValueError("Sujet de carrousel introuvable.")
+    if int(topic.get("is_processed") or 0) == 1:
+        raise ValueError("Ce sujet de carrousel a déjà été traité.")
+
+    subject = (topic.get("topic") or "").strip()
+    question = (topic.get("question_to_address") or "").strip()
+    if not subject or not question:
+        raise ValueError("Le sujet sélectionné est invalide.")
+
+    exam_url, _ = ensure_exam_url(certification_id, exam_url)
+    selection = _fetch_selection(provider_id, certification_id)
+
+    carousel_payload = generate_linkedin_carousel(subject, question)
+    pages = _normalize_carousel_pages(carousel_payload)
+    pdf_path = _build_carousel_pdf(pages)
+
+    _mark_carousel_topic_processed(topic_id)
+
+    linkedin_text = generate_carousel_linkedin_post(subject, question, exam_url)
+    linkedin_result = _run_linkedin_workflow(
+        selection,
+        exam_url,
+        "preparation_methodology",
+        attach_image=attach_image,
+        linkedin_post=linkedin_text,
+    )
+
+    return {
+        "carousel": carousel_payload,
+        "pdf_filename": pdf_path.name,
+        "pdf_url": url_for("articles.download_carousel", filename=pdf_path.name),
+        "linkedin_post": linkedin_text,
+        "linkedin_result": linkedin_result,
+        "topic_id": topic_id,
+        "topic": subject,
+    }
 
 
 @articles_bp.route("/generate-tweet", methods=["POST"])

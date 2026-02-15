@@ -2004,6 +2004,36 @@ def generate_carousel_topic_ideas() -> dict:
     return clean_and_decode_json(raw_content)
 
 
+
+
+def generate_carousel_linkedin_post(subject: str, question: str, exam_url: str) -> str:
+    """Generate a LinkedIn post to accompany a carousel PDF publication."""
+
+    if not OPENAI_API_KEY:
+        raise Exception(
+            "OPENAI_API_KEY n'est pas configurée. Veuillez renseigner la clé avant de générer un post LinkedIn de carrousel."
+        )
+
+    subject_clean = (subject or "").strip()
+    question_clean = (question or "").strip()
+    exam_url_clean = (exam_url or "").strip()
+    if not subject_clean or not question_clean:
+        raise ValueError("Le sujet et la question sont requis pour générer le post LinkedIn du carrousel.")
+
+    prompt = (
+        "Write a concise and high-value LinkedIn post in English to introduce a certification-focused PDF carousel.\n"
+        f"Carousel topic: {subject_clean}\n"
+        f"Question to address: {question_clean}\n"
+        f"Exam simulation URL: {exam_url_clean or 'http://examboot.net'}\n"
+        "Requirements:\n"
+        "- 120 to 220 words.\n"
+        "- Hook + practical value + short CTA.\n"
+        "- Mention ExamBoot.net naturally as AI coach + exam simulator.\n"
+        "- Do not use hashtags spam (max 4).\n"
+        "- Keep a professional, educational tone.\n"
+    )
+    return _run_completion(prompt)
+
 def generate_linkedin_carousel(subject: str, question: str) -> dict:
     """Generate the LinkedIn carousel content as structured JSON."""
 
