@@ -2145,48 +2145,57 @@ def generate_questions(
    # Always initialize text_for_diagram_type to ensure it's defined.
     text_for_diagram_type = ""
     if practical == "scenario-illustrated":
-        text_for_diagram_type = "architecture"
-        #text_for_diagram_type = "sequence|flowchart|architecture"
+        text_for_diagram_type = ""
     
      # Construction du prompt en fonction du scenario: 'practical', 'scenario_illustration_type', ...
        
     if practical == "scenario":
+        scenario_artifact_guidance = (
+            " The question may include supporting artifacts when necessary (especially tabular data in context). "
+            "If tabular data is needed for comparison, calculations, plans or logs, include it in context with [table]...[/table]."
+        )
         if scenario_illustration_type == 'case':
             specific_question_quality = (
                 "Based on a realistic practical case scenario which must be elaborated in 2 or 3 paragraphs and integrate concepts from the identified domains. Illustrate the context of the question with an image. To do so, provides  in the 'diagram_descr' key, a detailed textual prompt to be used to generate that image, specifying components, details and any relevant annotations."
+                + scenario_artifact_guidance
             )
         elif scenario_illustration_type == 'archi':
             specific_question_quality = (
                 "Based on a realistic technical design/architecture integrating concepts from the identified domains. The question aims to assess skills in understanding, design, diagnosis and/or improvement of infrastructure and architecture."
+                + scenario_artifact_guidance
             )
         elif scenario_illustration_type == 'config':
             specific_question_quality = (
                 "Based on a described Configuration process integrating concepts from the identified domains. the question aims to assess skills in understanding, analysis, diagnosis and/or improvement of a configuration."
+                + scenario_artifact_guidance
             )
         elif scenario_illustration_type == 'console':
             specific_question_quality = (
                 "Based on a realistic console output integrating concepts from the identified domains. the question aims to assess skills in understanding, correction and/or execution of a task using command lines."
+                + scenario_artifact_guidance
             )
         elif scenario_illustration_type == 'code':
             specific_question_quality = (
                 "The question aims to assess skills in understanding, correction and/or code writing. A code example may be present or not and integrate concepts from the identified domains."
+                + scenario_artifact_guidance
             )
         else:
             specific_question_quality = (
                 "Based on a realistic context, the question must present a long practical scenario illustrated in 2 or 3 paragraphs."
+                + scenario_artifact_guidance
             )
     elif practical == "scenario-illustrated":
         if scenario_illustration_type == 'archi':
             specific_question_quality = (
-                "Based on a realistic technical design/architecture integrating concepts from the identified domains. the question aims to assess skills in understanding, design, diagnosis and/or improvement of infrastructure and architecture. Illustrate the context of the question with a diagram. To do so, provides a detailed textual description of the intended diagram in the 'diagram_descr' key, specifying components, relationships, connection links if it is a network, any relevant annotations. Set the value of 'diagram_type' json key to 'architecture'" #   The type of the diagram must be: architecture"
+                "Based on a realistic technical design/architecture integrating concepts from the identified domains. The question aims to assess skills in understanding, design, diagnosis and/or improvement of infrastructure and architecture. The question may include one or multiple supporting artifacts: a table, an image prompt, a diagram prompt, console output, and/or code. Choose the minimal set of artifacts needed for realism and to make the question solvable. If tabular data improves clarity (registers, plans, logs, calculations), include a [table]...[/table] block inside context. If an image is needed, put the image generation prompt in image. If a diagram is needed, set diagram_type accordingly and put valid Mermaid code in diagram_descr."
             )
         elif scenario_illustration_type == 'config':
             specific_question_quality = (
-                "Based on a described Configuration process integrating concepts from the identified domains. the question aims to assess skills in understanding, analysis, diagnosis and/or improvement of a configuration. Illustrate the context of the question with a diagram. To do so, provides a detailed textual description of the intended diagram in the 'diagram_descr' key, specifying components, relationships, connection links if it is a network, any relevant annotations. Set the value of 'diagram_type' json key to 'architecture'" #  The type of the diagram can be: architecture"
+                "Based on a described configuration process integrating concepts from the identified domains. The question aims to assess skills in understanding, analysis, diagnosis and/or improvement of a configuration. The question may include one or multiple supporting artifacts: a table, an image prompt, a diagram prompt, console output, and/or code. Choose the minimal set of artifacts needed for realism and to make the question solvable. If tabular data improves clarity (registers, plans, logs, calculations), include a [table]...[/table] block inside context. If an image is needed, put the image generation prompt in image. If a diagram is needed, set diagram_type accordingly and put valid Mermaid code in diagram_descr."
             )
         elif scenario_illustration_type == 'console':
             specific_question_quality = (
-                "Based on a realistic console output integrating concepts from the identified domains. the question aims to assess skills in understanding, correction and/or execution of a task using command lines. Illustrate the context of the question with a diagram. To do so, provides a detailed textual description of the intended diagram in the 'diagram_descr' key, specifying components, relationships, connection links if it is a network, any relevant annotations. Set the value of 'diagram_type' json key to 'architecture'" # the selected diagram type  The type of the diagram can be: architecture"
+                "Based on a realistic console output integrating concepts from the identified domains. The question aims to assess skills in understanding, correction and/or execution of a task using command lines. The question may include one or multiple supporting artifacts: a table, an image prompt, a diagram prompt, console output, and/or code. Choose the minimal set of artifacts needed for realism and to make the question solvable. If tabular data improves clarity (registers, plans, logs, calculations), include a [table]...[/table] block inside context. If an image is needed, put the image generation prompt in image. If a diagram is needed, set diagram_type accordingly and put valid Mermaid code in diagram_descr."
             )
         elif scenario_illustration_type == 'code':
             specific_question_quality = (
@@ -2362,8 +2371,15 @@ RESPONSE FORMAT (JSON only, no additional text):
 RULES:
 1. If you want to present a line of code in your response, surround that portion with '[code]...[/code]'. This will help in formatting it.
 2. If you want to present a console command or result in your response, surround that portion with '[console]...[/console]'. This will help in formatting it.
-3. Strictly align questions to the content of the syllabus of the domain selected for the indicated certification.
-4. Questions must be self-contained and cannot rely on the reader has the provided text. Do not use phrases like "in the provided text"; restate the necessary context directly in the question stem or options.
+3. If you want to present tabular data, surround that portion with '[table]...[/table]'. Inside [table], use a Markdown table.
+4. Questions may include multiple supporting artifacts when necessary: table, image prompt, diagram prompt, console output, and/or code.
+5. diagram_type may contain multiple tokens separated by | (e.g., table|architecture|image). Allowed tokens: table, image, architecture, flowchart, sequence, console, code.
+6. Use a table only if it is necessary to answer (comparison, calculation, register/log reading, addressing plan). At least one correct answer must depend on the table values.
+7. Keep tables compact and realistic: max 6 columns, max 8 rows. Ensure internal consistency (numbers, totals, dates, CIDR ranges).
+8. For scenario-illustrated questions that include a diagram, "diagram_descr" MUST be valid Mermaid code (diagram-as-code) with no Markdown fences/backticks.
+9. Mermaid syntax must be either "flowchart LR"/"flowchart TB" (architecture/network) or "sequenceDiagram" (interactions). Keep Mermaid diagrams readable (6-14 nodes, short labels), factual, and complementary to console/code/table blocks.
+10. Strictly align questions to the content of the syllabus of the domain selected for the indicated certification.
+11. Questions must be self-contained and cannot rely on the reader has the provided text. Do not use phrases like "in the provided text"; restate the necessary context directly in the question stem or options.
 """
         else:
             content_prompt = f"""
@@ -2400,9 +2416,16 @@ STRICT SCOPE:
 RULES:
 1. If you want to present a line of code in your response, surround that portion with '[code]...[/code]'. This will help in formatting it.
 2. If you want to present a console command or result in your response, surround that portion with '[console]...[/console]'. This will help in formatting it.
-3. The text of each response section (value, target) must remain of a reasonable length and not exceed 150 characters.
-4. Questions must be self-contained and cannot rely on the reader having seen the domain description above; avoid wording such as "according to the text" and restate any needed facts in the stem or options.
-5. Ensure every correct answer can be inferred directly from the content you include in the question.
+3. If you want to present tabular data, surround that portion with '[table]...[/table]'. Inside [table], use a Markdown table.
+4. Questions may include multiple supporting artifacts when necessary: table, image prompt, diagram prompt, console output, and/or code.
+5. diagram_type may contain multiple tokens separated by | (e.g., table|architecture|image). Allowed tokens: table, image, architecture, flowchart, sequence, console, code.
+6. Use a table only if it is necessary to answer (comparison, calculation, register/log reading, addressing plan). At least one correct answer must depend on the table values.
+7. Keep tables compact and realistic: max 6 columns, max 8 rows. Ensure internal consistency (numbers, totals, dates, CIDR ranges).
+8. For scenario-illustrated questions that include a diagram, "diagram_descr" MUST be valid Mermaid code (diagram-as-code) with no Markdown fences/backticks.
+9. Mermaid syntax must be either "flowchart LR"/"flowchart TB" (architecture/network) or "sequenceDiagram" (interactions). Keep Mermaid diagrams readable (6-14 nodes, short labels), factual, and complementary to console/code/table blocks.
+10. The text of each response section (value, target) must remain of a reasonable length and not exceed 150 characters.
+11. Questions must be self-contained and cannot rely on the reader having seen the domain description above; avoid wording such as "according to the text" and restate any needed facts in the stem or options.
+12. Ensure every correct answer can be inferred directly from the content you include in the question.
 """
 
         payload = _build_response_payload(
