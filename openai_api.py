@@ -387,29 +387,46 @@ Expected JSON format:
 """
 
 CAROUSEL_TOPIC_IDEAS_PROMPT_TEMPLATE = """
-Research the internet for 20 trending questions, real-world problems, common mistakes, and current trends related to certifications.
-Identify specific topics that can be transformed into an educational or informational LinkedIn PDF carousel
-(format: Question/problem → common mistake → explanation → expert advice).
+Research current discussions, high-engagement debates, tension angles, high-interest themes around the content Pillars listed bellow and then generate 20 HIGH-IMPACT LinkedIn carousel topics for ExamBoot.net
+The topics MUST reflect a plural strategic approach, covering multiple angles:
 
-The goal is to provide significant educational value to certification candidates while subtly highlighting the benefits
-of an AI coach and an exam simulator like ExamBoot.net.
+Content Pillars to distribute across the 20 topics:
+1. Career acceleration & salary leverage (examples: Certifications and Salary Increases, Internal Promotion vs. Changing Companies, Perceived vs. Actual Skills, How to Accelerate Your Career in 6 Months)
+2. Study strategy & productivity psychology (examples: Poor Learning Strategies, Deep Work vs. Multitasking, How to Structure 12 Weeks of Preparation)
+3. AI in learning & smart preparation (examples: Will AI Replace Instructors?, AI Coaching vs. Traditional Courses, Learn Faster with AI, The Limitations of Traditional Dummies, AI Learning vs. Memorization )
+4. Hiring & recruiter perspective (examples: Why Fear Blocks Performance, Why 80% of Candidates Drop Out, The False Confidence of High Scores)
+5. Certification market trends (examples: Most in-demand certifications in 2026, Cybersecurity vs. Cloud vs. AI, Explosion of AML jobs)
 
-Important requirements:
-- Return exactly 20 items.
-- Prioritize practical, current, and high-intent topics for certification candidates.
-- Use clear and concise phrasing.
-- Avoid duplicates and near-duplicates.
+CRITICAL REQUIREMENTS:
+- Each question must be short (max 10 words).
+- Clear, mobile-friendly wording.
+- Avoid long compound or technical phrasing.
+- Avoid administrative or niche procedural topics.
+- Prioritize emotionally engaging or career-relevant angles.
+- Each topic must feel broad enough to interest a wide professional audience.
+- No duplicate themes.
+- Balance across the 5 pillars above.
 
-You MUST return ONLY valid JSON with this exact shape:
+Angle orientation:
+Use tension-driven questions, contrast, psychological triggers, or uncomfortable truths.
+
+Each topic must follow:
+Short Question → Big tension.
+
+You MUST return ONLY valid JSON with exactly this structure:
 {
   "topics": [
     {
-      "topic": "Short thematic title suitable for carousel generation",
-      "question_to_address": "Specific question/problem to address in the carousel"
+      "topic": "Content Pillar used",
+      "question_to_address": "Short, punchy question (max 10 words)"
     }
   ]
 }
+
+Return exactly 20 items.
+No commentary. No explanation. Only JSON.
 """
+
 
 CODE_CERT_RESPONSE_SCHEMA = {
     "type": "object",
