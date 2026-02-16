@@ -571,6 +571,14 @@
           <label for="carouselQuestionPreview">Question à adresser</label>
           <textarea id="carouselQuestionPreview" rows="4" readonly placeholder="La question liée au sujet sélectionné apparaîtra ici."></textarea>
         </div>
+        <div class="field-group">
+          <label for="carouselTemplateSelect">Template PDF</label>
+          <select id="carouselTemplateSelect">
+            <option value="random" selected>Aléatoire (Light ou Dark)</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
       </div>
       <div class="actions">
         <div class="primary-actions">
@@ -619,6 +627,7 @@
     const addImageCheckbox = document.getElementById('addImageCheckbox');
     const carouselTopicSelect = document.getElementById('carouselTopicSelect');
     const carouselQuestionPreview = document.getElementById('carouselQuestionPreview');
+    const carouselTemplateSelect = document.getElementById('carouselTemplateSelect');
     const generateCarouselBtn = document.getElementById('generateCarouselBtn');
     const carouselDownloadLink = document.getElementById('carouselDownloadLink');
     const carouselJsonOutput = document.getElementById('carouselJsonOutput');
@@ -1288,7 +1297,12 @@
         const response = await fetch('/articles/generate-carousel', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subject, question, topic_id: selectedCarouselTopic.id })
+          body: JSON.stringify({
+            subject,
+            question,
+            topic_id: selectedCarouselTopic.id,
+            template: carouselTemplateSelect.value
+          })
         });
         const payload = await response.json();
         if (!response.ok) {
@@ -1305,7 +1319,8 @@
         } else {
           carouselDownloadLink.hidden = true;
         }
-        carouselStatus.textContent = 'Carrousel généré avec succès. Sujet marqué comme traité.';
+        const templateLabel = payload.template ? ` (${payload.template})` : '';
+        carouselStatus.textContent = `Carrousel généré avec succès${templateLabel}. Sujet marqué comme traité.`;
         carouselStatus.style.color = 'var(--text-muted)';
         await fetchCarouselTopics();
       } catch (error) {
