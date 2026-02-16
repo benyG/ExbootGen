@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import mimetypes
 import random
 import secrets
@@ -128,6 +129,7 @@ CAROUSEL_FONT_CANDIDATES = (
 )
 CAROUSEL_FONT_SEARCH_PATHS = (
     BASE_DIR / "fonts",
+    Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts",
     Path("/usr/share/fonts"),
     Path("/usr/local/share/fonts"),
     Path("/usr/share/fonts/truetype"),
