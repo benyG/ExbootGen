@@ -2076,15 +2076,34 @@ def generate_module_blueprint_excerpt(
 
     code_line = f"Certification code (code_cert): {code_cert_clean}.\n" if code_cert_clean else ""
     prompt = (
-        f"Using the official exam guide, produce an excerpt from the blueprint for the domain: {domain}, of the certification: {certification}.\n"
-        f"{code_line}"
-        "RULES:\n"
-        "- 150–300 words\n"
-        "- Focus only on what’s listed in the official exam blueprint and if you don’t have access to the official exam blueprint, use the most accurate and up-to-date and reliable source to the best of your knowledge.\n"
-        "- If you are unsure whether a topic is covered in the certification curriculum, do not include it in the excerpt.\n"
-        "- If you include sources, list them only at the end in a dedicated 'Sources:' section with bullet URLs.\n"
-        "STRICT RESPONSE STRUCTURE:\n"
-        "- Key focus areas from the official exam guide."
+        f"""
+Using the official exam outline (exam blueprint) for the certification: {certification},{code_line} 
+produce a structured and accurate excerpt for the domain: {domain}.
+RULES:
+- Length: 180–280 words.
+- Focus strictly on topics explicitly listed in the official exam outline.
+- Do NOT speculate or expand beyond the documented blueprint.
+- If uncertain about coverage, omit the topic.
+- Do NOT invent exam weights, percentages, or subdomains unless officially known.
+- Do NOT fabricate sources.
+OBJECTIVE:
+The output must be structured in a way that allows precise and high-quality AI-generated exam questions for this domain.
+STRUCTURE REQUIREMENTS:
+1. Domain Overview (1–2 sentences summarizing its purpose within the certification).
+2. Core Competency Areas (clearly separated bullet points).
+3. Knowledge Depth Indicators (what candidates are expected to understand, analyze, or apply).
+4. Task Orientation (if applicable: what professionals must be able to perform in real scenarios).
+STYLE:
+- Clear, formal, technical.
+- Concise but precise.
+- No marketing tone.
+- No generic explanations.
+- No repetition.
+If sources are included, list them at the very end under:
+Sources:
+- [URL]
+Return only the structured content.
+"""
     )
 
     return _run_completion(
@@ -2100,18 +2119,31 @@ def _build_course_art_prompt(certification: str, vendor: str) -> str:
     except NameError:  # pragma: no cover - defensive guard for partial imports
         template = """
 Generate a concise JSON profile for the certification exam {certification} from vendor {vendor}.
-Return **only** valid JSON following exactly this structure:
-{{
+Return ONLY valid JSON following exactly this structure:
+{
   "prerequisites": ["text1", "text2", "text3"],
   "targeted_profession": ["job title1", "job title2", "job title3"],
   "studytip": "20-25 words"
-}}
+}
+
 Rules:
-- Provide a maximum of five distinct, specific prerequisite statements.
-- Provide a maximum of five distinct targeted job titles that match real professional roles.
-- The studytip must be up to 20-25 words that clearly states how tactically preppare for certification exam.
-- Use double quotes for every string and return valid JSON without additional commentary or code fences.
+- Output must be strictly valid JSON (no markdown, no code fences, no trailing commas).
+- Use double quotes for every string.
+- prerequisites:
+  - Provide 3–5 distinct prerequisites.
+  - Prefer verifiable, exam-relevant prerequisites (experience, foundational knowledge, recommended prior certs).
+  - Avoid vague items like "motivation" or "interest".
+  - If official prerequisites are unknown, use widely accepted prerequisites for this exam category and avoid absolute claims (no "must" unless official).
+- targeted_profession:
+  - Provide 3–5 real, commonly used job titles relevant to the certification.
+  - Avoid overly broad titles (e.g., "IT Professional") and avoid vendor-internal titles.
+- studytip:
+  - 20–40 words exactly (aim for 22–38).
+  - Must be tactical and specific (mention practice tests, weak-area drills, timed blocks, reviewing rationales, blueprint alignment).
+  - No fluff, no marketing, no emojis, no hashtags.
+- Do not include any extra fields.
 """
+
 
     return template.format(certification=certification, vendor=vendor)
 
@@ -2630,7 +2662,7 @@ RULES:
 4. Questions may include multiple supporting artifacts when necessary: table, image prompt, diagram prompt, console output, and/or code.
 5. diagram_type may contain multiple tokens separated by | (e.g., table|architecture|image). Allowed tokens: table, image, architecture, flowchart, sequence, console, code.
 6. Use a table only if it is necessary to answer (comparison, calculation, register/log reading, addressing plan). At least one correct answer must depend on the table values.
-7. Keep tables compact and realistic: max 6 columns, max 8 rows. Ensure internal consistency (numbers, totals, dates, CIDR ranges).
+7. Keep tables compact and realistic: max 6 columns, max 8 rows. Ensure internal consistency (numbers, totals, dates, CIDR ranges,..etc).
 8. For scenario-illustrated questions that include a diagram, "diagram_descr" MUST be valid Mermaid code (diagram-as-code) with no Markdown fences/backticks.
 9. Mermaid syntax must be either "flowchart LR"/"flowchart TB" (architecture/network) or "sequenceDiagram" (interactions). Keep Mermaid diagrams readable (6-14 nodes, short labels), factual, and complementary to console/code/table blocks.
 10. Strictly align questions to the content of the syllabus of the domain selected for the indicated certification.
