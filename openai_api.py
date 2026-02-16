@@ -340,6 +340,7 @@ Important:
 - No long explanations.
 - Each page must feel punchy and scroll-stopping.
 - Avoid sounding like marketing copy.
+- Page 1 has NO  "key_message". Keep it empty
 
 Required structure:
 You MUST respond only with valid JSON (no text before/after).
@@ -351,8 +352,7 @@ Expected JSON format:
       "page_number": 1,
       "role": "Ultra-captivating hook (question, promise, or stat)",
       "headline": "",
-      "subtext": "",
-      "key_message": ""
+      "subtext": ""
     },
     {
       "page_number": 2,
