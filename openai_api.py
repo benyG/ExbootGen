@@ -391,11 +391,11 @@ Research current discussions, high-engagement debates, tension angles, high-inte
 The topics MUST reflect a plural strategic approach, covering multiple angles:
 
 Content Pillars to distribute across the 20 topics:
-1. Career acceleration & salary leverage (examples: Certifications and Salary Increases, Internal Promotion vs. Changing Companies, Perceived vs. Actual Skills, How to Accelerate Your Career in 6 Months)
-2. Study strategy & productivity psychology (examples: Poor Learning Strategies, Deep Work vs. Multitasking, How to Structure 12 Weeks of Preparation)
-3. AI in learning & smart preparation (examples: Will AI Replace Instructors?, AI Coaching vs. Traditional Courses, Learn Faster with AI, The Limitations of Traditional Dummies, AI Learning vs. Memorization )
-4. Hiring & recruiter perspective (examples: Why Fear Blocks Performance, Why 80% of Candidates Drop Out, The False Confidence of High Scores)
-5. Certification market trends (examples: Most in-demand certifications in 2026, Cybersecurity vs. Cloud vs. AI, Explosion of AML jobs)
+1. Career acceleration & salary leverage
+2. Study strategy & productivity psychology
+3. AI in learning & smart preparation
+4. Hiring & recruiter perspective
+5. Certification market trends
 
 CRITICAL REQUIREMENTS:
 - Each question must be short (max 10 words).
@@ -414,19 +414,18 @@ Each topic must follow:
 Short Question → Big tension.
 
 You MUST return ONLY valid JSON with exactly this structure:
-{
-  "topics": [
     {
-      "topic": "Content Pillar used",
-      "question_to_address": "Short, punchy question (max 10 words)"
+      "topics": [
+        {
+          "topic": "4–7 word strong carousel title",
+          "question_to_address": "Short, punchy question (max 10 words)"
+        }
+      ]
     }
-  ]
-}
 
 Return exactly 20 items.
 No commentary. No explanation. Only JSON.
 """
-
 
 CODE_CERT_RESPONSE_SCHEMA = {
     "type": "object",
