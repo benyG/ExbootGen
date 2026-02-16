@@ -323,8 +323,8 @@ Emojis:
 0–1 max per page (only if it reinforces meaning).
 
 Layout constraints:
-- headline: 4 to 9 words, ≤ 55 characters, no line breaks.
-- subtext: 1 to 2 sharp sentences, ≤ 120 characters, no lists.
+- headline: 6 to 12 words, ≤ 55 characters, no line breaks.
+- subtext: 2 to 3 sharp and well articulated sentences, ≤ 200 characters, no lists.
 - key_message: micro-CTA (3 to 6 words) to push to the next page, ≤ 32 characters, start with an action verb.
 
 Strategic flow:
