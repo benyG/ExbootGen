@@ -697,39 +697,39 @@ def _build_carousel_pdf(
         bold_fontfile,
     ) = _resolve_carousel_fonts()
 
-    frame_rect = _find_carousel_frame_rect(template.load_page(1))
-    page_rect = template.load_page(1).rect
-
-    content_rect = fitz.Rect(
-        frame_rect.x0 + frame_rect.width * CAROUSEL_FRAME_X_PADDING_RATIO,
-        frame_rect.y0,
-        frame_rect.x1 - frame_rect.width * CAROUSEL_FRAME_X_PADDING_RATIO,
-        frame_rect.y1,
-    )
-
-    headline_rect = fitz.Rect(
-        content_rect.x0,
-        frame_rect.y0 + frame_rect.height * CAROUSEL_HEADLINE_Y_START_RATIO,
-        content_rect.x1,
-        frame_rect.y0 + frame_rect.height * CAROUSEL_HEADLINE_Y_END_RATIO,
-    )
-    subtext_rect = fitz.Rect(
-        content_rect.x0,
-        frame_rect.y0 + frame_rect.height * CAROUSEL_SUBTEXT_Y_START_RATIO,
-        content_rect.x1,
-        frame_rect.y0 + frame_rect.height * CAROUSEL_SUBTEXT_Y_END_RATIO,
-    )
-
-    key_message_top = frame_rect.y1 - frame_rect.height * CAROUSEL_KEY_MESSAGE_Y_OFFSET_RATIO
-    key_message_bottom = key_message_top + frame_rect.height * CAROUSEL_KEY_MESSAGE_HEIGHT_RATIO
-    key_message_rect = fitz.Rect(
-        frame_rect.x0 + frame_rect.width * CAROUSEL_KEY_MESSAGE_X_INSET_RATIO,
-        key_message_top,
-        frame_rect.x1 - frame_rect.width * CAROUSEL_KEY_MESSAGE_X_INSET_RATIO,
-        min(key_message_bottom, page_rect.y1 - 8),
-    )
-
     for idx, page_payload in enumerate(pages):
+        template_page = template.load_page(idx)
+        frame_rect = _find_carousel_frame_rect(template_page)
+        page_rect = template_page.rect
+
+        content_rect = fitz.Rect(
+            frame_rect.x0 + frame_rect.width * CAROUSEL_FRAME_X_PADDING_RATIO,
+            frame_rect.y0,
+            frame_rect.x1 - frame_rect.width * CAROUSEL_FRAME_X_PADDING_RATIO,
+            frame_rect.y1,
+        )
+
+        headline_rect = fitz.Rect(
+            content_rect.x0,
+            frame_rect.y0 + frame_rect.height * CAROUSEL_HEADLINE_Y_START_RATIO,
+            content_rect.x1,
+            frame_rect.y0 + frame_rect.height * CAROUSEL_HEADLINE_Y_END_RATIO,
+        )
+        subtext_rect = fitz.Rect(
+            content_rect.x0,
+            frame_rect.y0 + frame_rect.height * CAROUSEL_SUBTEXT_Y_START_RATIO,
+            content_rect.x1,
+            frame_rect.y0 + frame_rect.height * CAROUSEL_SUBTEXT_Y_END_RATIO,
+        )
+
+        key_message_top = frame_rect.y1 - frame_rect.height * CAROUSEL_KEY_MESSAGE_Y_OFFSET_RATIO
+        key_message_bottom = key_message_top + frame_rect.height * CAROUSEL_KEY_MESSAGE_HEIGHT_RATIO
+        key_message_rect = fitz.Rect(
+            frame_rect.x0 + frame_rect.width * CAROUSEL_KEY_MESSAGE_X_INSET_RATIO,
+            key_message_top,
+            frame_rect.x1 - frame_rect.width * CAROUSEL_KEY_MESSAGE_X_INSET_RATIO,
+            min(key_message_bottom, page_rect.y1 - 8),
+        )
         if idx >= output.page_count - 1:
             break
         page = output.load_page(idx)

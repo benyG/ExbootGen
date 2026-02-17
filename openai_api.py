@@ -2127,20 +2127,15 @@ Return only the structured content.
         web_search_options={},
     )
 
-def _build_course_art_prompt(certification: str, vendor: str) -> str:
-    """Return the course art prompt even if the template constant is missing."""
 
-    try:
-        template = COURSE_ART_PROMPT_TEMPLATE
-    except NameError:  # pragma: no cover - defensive guard for partial imports
-        template = """
+COURSE_ART_PROMPT_TEMPLATE = """
 Generate a concise JSON profile for the certification exam {certification} from vendor {vendor}.
 Return ONLY valid JSON following exactly this structure:
-{
+{{
   "prerequisites": ["text1", "text2", "text3"],
   "targeted_profession": ["job title1", "job title2", "job title3"],
   "studytip": "20-25 words"
-}
+}}
 
 Rules:
 - Output must be strictly valid JSON (no markdown, no code fences, no trailing commas).
@@ -2160,8 +2155,13 @@ Rules:
 - Do not include any extra fields.
 """
 
+def _build_course_art_prompt(certification: str, vendor: str) -> str:
+    """Build the course art prompt from the static template."""
 
-    return template.format(certification=certification, vendor=vendor)
+    return COURSE_ART_PROMPT_TEMPLATE.format(
+        certification=certification,
+        vendor=vendor,
+    )
 
 def generate_certification_course_art(certification: str, vendor: str) -> dict:
     """Generate structured JSON describing the certification course."""
