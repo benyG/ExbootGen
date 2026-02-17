@@ -109,6 +109,14 @@ BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 CAROUSEL_TEMPLATE_PATH = BASE_DIR / "docs" / "Caroussel-Template-ExamBoot.pdf"
+CAROUSEL_DARK_TEMPLATE_PATH = BASE_DIR / "docs" / "Black_Caroussel-Template-ExamBoot.pdf"
+CAROUSEL_TEMPLATE_LIGHT = "light"
+CAROUSEL_TEMPLATE_DARK = "dark"
+CAROUSEL_TEMPLATE_RANDOM = "random"
+CAROUSEL_TEMPLATE_CHOICES = (
+    CAROUSEL_TEMPLATE_LIGHT,
+    CAROUSEL_TEMPLATE_DARK,
+)
 CAROUSEL_FRAME_X_PADDING_RATIO = 0.07
 CAROUSEL_HEADLINE_Y_START_RATIO = 0.23
 CAROUSEL_HEADLINE_Y_END_RATIO = 0.59
@@ -120,6 +128,7 @@ CAROUSEL_KEY_MESSAGE_X_INSET_RATIO = 0.2
 CAROUSEL_LINE_HEIGHT = 1.12
 CAROUSEL_TITLE_COLOR = (0.13, 0.77, 0.37)
 CAROUSEL_SUBTEXT_COLOR = (0.22, 0.22, 0.22)
+CAROUSEL_SUBTEXT_DARK_COLOR = (1.0, 1.0, 1.0)
 CAROUSEL_CTA_COLOR = (0.22, 0.22, 0.22)
 CAROUSEL_FOOTER_WHITE_COLOR = (1.0, 1.0, 1.0)
 CAROUSEL_FONT_CANDIDATES = (
@@ -641,13 +650,38 @@ def _insert_text_block(
     )
 
 
-def _build_carousel_pdf(pages: list[dict]) -> Path:
+def _resolve_carousel_template(template_name: Optional[str] = None) -> tuple[str, Path]:
+    """Resolve the carousel template name and corresponding PDF path."""
+
+    normalized = (template_name or "").strip().lower()
+    if not normalized or normalized == CAROUSEL_TEMPLATE_RANDOM:
+        normalized = random.choice(CAROUSEL_TEMPLATE_CHOICES)
+
+    if normalized not in CAROUSEL_TEMPLATE_CHOICES:
+        allowed = ", ".join([*CAROUSEL_TEMPLATE_CHOICES, CAROUSEL_TEMPLATE_RANDOM])
+        raise ValueError(f"Template carrousel invalide. Valeurs attendues: {allowed}.")
+
+    template_path = (
+        CAROUSEL_DARK_TEMPLATE_PATH
+        if normalized == CAROUSEL_TEMPLATE_DARK
+        else CAROUSEL_TEMPLATE_PATH
+    )
+    if not template_path.exists():
+        raise FileNotFoundError(
+            f"Template PDF du carrousel introuvable: {template_path.name}."
+        )
+
+    return normalized, template_path
+
+
+def _build_carousel_pdf(
+    pages: list[dict],
+    template_name: Optional[str] = None,
+) -> tuple[Path, str]:
     """Render the LinkedIn carousel pages into the PDF template."""
 
-    if not CAROUSEL_TEMPLATE_PATH.exists():
-        raise FileNotFoundError("Template PDF du carrousel introuvable.")
-
-    template = fitz.open(CAROUSEL_TEMPLATE_PATH)
+    selected_template, template_path = _resolve_carousel_template(template_name)
+    template = fitz.open(template_path)
     output = fitz.open()
     output.insert_pdf(template)
 
@@ -663,39 +697,39 @@ def _build_carousel_pdf(pages: list[dict]) -> Path:
         bold_fontfile,
     ) = _resolve_carousel_fonts()
 
-    frame_rect = _find_carousel_frame_rect(template.load_page(1))
-    page_rect = template.load_page(1).rect
-
-    content_rect = fitz.Rect(
-        frame_rect.x0 + frame_rect.width * CAROUSEL_FRAME_X_PADDING_RATIO,
-        frame_rect.y0,
-        frame_rect.x1 - frame_rect.width * CAROUSEL_FRAME_X_PADDING_RATIO,
-        frame_rect.y1,
-    )
-
-    headline_rect = fitz.Rect(
-        content_rect.x0,
-        frame_rect.y0 + frame_rect.height * CAROUSEL_HEADLINE_Y_START_RATIO,
-        content_rect.x1,
-        frame_rect.y0 + frame_rect.height * CAROUSEL_HEADLINE_Y_END_RATIO,
-    )
-    subtext_rect = fitz.Rect(
-        content_rect.x0,
-        frame_rect.y0 + frame_rect.height * CAROUSEL_SUBTEXT_Y_START_RATIO,
-        content_rect.x1,
-        frame_rect.y0 + frame_rect.height * CAROUSEL_SUBTEXT_Y_END_RATIO,
-    )
-
-    key_message_top = frame_rect.y1 - frame_rect.height * CAROUSEL_KEY_MESSAGE_Y_OFFSET_RATIO
-    key_message_bottom = key_message_top + frame_rect.height * CAROUSEL_KEY_MESSAGE_HEIGHT_RATIO
-    key_message_rect = fitz.Rect(
-        frame_rect.x0 + frame_rect.width * CAROUSEL_KEY_MESSAGE_X_INSET_RATIO,
-        key_message_top,
-        frame_rect.x1 - frame_rect.width * CAROUSEL_KEY_MESSAGE_X_INSET_RATIO,
-        min(key_message_bottom, page_rect.y1 - 8),
-    )
-
     for idx, page_payload in enumerate(pages):
+        template_page = template.load_page(idx)
+        frame_rect = _find_carousel_frame_rect(template_page)
+        page_rect = template_page.rect
+
+        content_rect = fitz.Rect(
+            frame_rect.x0 + frame_rect.width * CAROUSEL_FRAME_X_PADDING_RATIO,
+            frame_rect.y0,
+            frame_rect.x1 - frame_rect.width * CAROUSEL_FRAME_X_PADDING_RATIO,
+            frame_rect.y1,
+        )
+
+        headline_rect = fitz.Rect(
+            content_rect.x0,
+            frame_rect.y0 + frame_rect.height * CAROUSEL_HEADLINE_Y_START_RATIO,
+            content_rect.x1,
+            frame_rect.y0 + frame_rect.height * CAROUSEL_HEADLINE_Y_END_RATIO,
+        )
+        subtext_rect = fitz.Rect(
+            content_rect.x0,
+            frame_rect.y0 + frame_rect.height * CAROUSEL_SUBTEXT_Y_START_RATIO,
+            content_rect.x1,
+            frame_rect.y0 + frame_rect.height * CAROUSEL_SUBTEXT_Y_END_RATIO,
+        )
+
+        key_message_top = frame_rect.y1 - frame_rect.height * CAROUSEL_KEY_MESSAGE_Y_OFFSET_RATIO
+        key_message_bottom = key_message_top + frame_rect.height * CAROUSEL_KEY_MESSAGE_HEIGHT_RATIO
+        key_message_rect = fitz.Rect(
+            frame_rect.x0 + frame_rect.width * CAROUSEL_KEY_MESSAGE_X_INSET_RATIO,
+            key_message_top,
+            frame_rect.x1 - frame_rect.width * CAROUSEL_KEY_MESSAGE_X_INSET_RATIO,
+            min(key_message_bottom, page_rect.y1 - 8),
+        )
         if idx >= output.page_count - 1:
             break
         page = output.load_page(idx)
@@ -722,7 +756,11 @@ def _build_carousel_pdf(pages: list[dict]) -> Path:
             min_size=20,
             line_height=CAROUSEL_LINE_HEIGHT,
             align=1,
-            color=CAROUSEL_SUBTEXT_COLOR,
+            color=(
+                CAROUSEL_SUBTEXT_DARK_COLOR
+                if selected_template == CAROUSEL_TEMPLATE_DARK
+                else CAROUSEL_SUBTEXT_COLOR
+            ),
         )
         _insert_text_block(
             page,
@@ -742,7 +780,7 @@ def _build_carousel_pdf(pages: list[dict]) -> Path:
     output.save(output_path)
     output.close()
     template.close()
-    return output_path
+    return output_path, selected_template
 
 
 def _normalize_carousel_pages(payload: dict) -> list[dict]:
@@ -2193,7 +2231,7 @@ def run_scheduled_carousel_publication(
 
     carousel_payload = generate_linkedin_carousel(subject, question)
     pages = _normalize_carousel_pages(carousel_payload)
-    pdf_path = _build_carousel_pdf(pages)
+    pdf_path, selected_template = _build_carousel_pdf(pages)
 
     _mark_carousel_topic_processed(topic_id)
 
@@ -2214,6 +2252,7 @@ def run_scheduled_carousel_publication(
         "linkedin_result": linkedin_result,
         "topic_id": topic_id,
         "topic": subject,
+        "template": selected_template,
     }
 
 
@@ -2285,6 +2324,7 @@ def generate_carousel():
     subject = (data.get("subject") or "").strip()
     question = (data.get("question") or "").strip()
     topic_id = data.get("topic_id")
+    template_name = data.get("template")
 
     if not subject or not question:
         return jsonify({"error": "Le sujet et la question sont requis."}), 400
@@ -2299,9 +2339,11 @@ def generate_carousel():
     try:
         carousel_payload = generate_linkedin_carousel(subject, question)
         pages = _normalize_carousel_pages(carousel_payload)
-        pdf_path = _build_carousel_pdf(pages)
+        pdf_path, selected_template = _build_carousel_pdf(pages, template_name)
         if topic_id_int is not None:
             _mark_carousel_topic_processed(topic_id_int)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     except Exception as exc:  # pragma: no cover - external API issues
         return jsonify({"error": str(exc)}), 500
 
@@ -2309,6 +2351,7 @@ def generate_carousel():
         {
             "carousel": carousel_payload,
             "pdf_url": url_for("articles.download_carousel", filename=pdf_path.name),
+            "template": selected_template,
         }
     )
 
