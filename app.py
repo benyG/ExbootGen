@@ -548,7 +548,7 @@ _schedule_entry_jobs: Dict[str, str] = {}
 AUTOPLAN_SUBJECT_RULES: Dict[str, Dict[str, object]] = {
     "certification_presentation": {"add_image": False, "link_mode": "slug"},
     "preparation_methodology": {"add_image": True, "link_mode": "generated_test"},
-    "career_impact": {"add_image": True, "link_mode": "slug"},
+    "career_impact": {"add_image": False, "link_mode": "slug"},
     "experience_testimony": {"add_image": True, "link_mode": "generated_test"},
     "engagement_community": {"add_image": False, "link_mode": "generated_test"},
 }
