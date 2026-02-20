@@ -137,6 +137,8 @@
     .status-autorun .status-dot { background: #f87171; box-shadow: 0 0 0 4px rgba(248,113,113,0.2); }
     .status-update { border-color: rgba(251,146,60,0.55); color: #fb923c; }
     .status-update .status-dot { background: #fb923c; box-shadow: 0 0 0 4px rgba(251,146,60,0.22); }
+    .status-ready { border-color: rgba(59,130,246,0.55); color: #3b82f6; }
+    .status-ready .status-dot { background: #3b82f6; box-shadow: 0 0 0 4px rgba(59,130,246,0.24); }
     .status-retired { border-color: rgba(168,85,247,0.55); color: #a855f7; }
     .status-retired .status-dot { background: #a855f7; box-shadow: 0 0 0 4px rgba(168,85,247,0.24); }
 
@@ -208,9 +210,10 @@
           <select id="pubFilter">
             <option value="all">Tous les statuts</option>
             <option value="0">Offline</option>
-            <option value="1">Online</option>
+            <option value="4">Ready</option>
             <option value="2">Autorun</option>
-            <option value="3">Update</option>
+            <option value="3">Updated</option>
+            <option value="1">Online</option>
             <option value="5">Retired</option>
           </select>
         </div>
@@ -218,16 +221,17 @@
 
       <div class="filter-actions">
         <button class="filter-button" id="filterAutorun">Voir la pile Autorun</button>
-        <button class="filter-button" id="filterUpdate">Voir les statuts Update</button>
+        <button class="filter-button" id="filterUpdate">Voir les statuts Updated</button>
         <button class="filter-button" id="filterRetired">Voir les statuts Retired</button>
         <span class="status-note" id="filterStatus">Aucun provider sélectionné.</span>
       </div>
 
       <div class="status-legend">
         <span class="legend-item"><span class="legend-dot"></span> Offline</span>
-        <span class="legend-item"><span class="legend-dot" style="background:#22c55e;border-color:rgba(34,197,94,0.5);"></span> Online</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#3b82f6;border-color:rgba(59,130,246,0.55);"></span> Ready</span>
         <span class="legend-item"><span class="legend-dot" style="background:#f87171;border-color:rgba(248,113,113,0.5);"></span> Autorun</span>
-        <span class="legend-item"><span class="legend-dot" style="background:#fb923c;border-color:rgba(251,146,60,0.55);"></span> Update</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#fb923c;border-color:rgba(251,146,60,0.55);"></span> Updated</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#22c55e;border-color:rgba(34,197,94,0.5);"></span> Online</span>
         <span class="legend-item"><span class="legend-dot" style="background:#a855f7;border-color:rgba(168,85,247,0.55);"></span> Retired</span>
       </div>
 
@@ -250,12 +254,13 @@
 
     const pubLabels = {
       0: { label: 'Offline', className: 'status-offline' },
-      1: { label: 'Online', className: 'status-online' },
+      4: { label: 'Ready', className: 'status-ready' },
       2: { label: 'Autorun', className: 'status-autorun' },
-      3: { label: 'Update', className: 'status-update' },
+      3: { label: 'Updated', className: 'status-update' },
+      1: { label: 'Online', className: 'status-online' },
       5: { label: 'Retired', className: 'status-retired' }
     };
-    const pubOrder = [0, 1, 2, 3, 5];
+    const pubOrder = [0, 4, 2, 3, 1, 5];
 
     const providerSearch = document.getElementById('providerSearch');
     const providerSelect = document.getElementById('providerSelect');
