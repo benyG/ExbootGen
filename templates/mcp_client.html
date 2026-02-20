@@ -339,6 +339,13 @@
           <label for="planSearchRoot">search_root</label>
           <input id="planSearchRoot" type="text" placeholder="C:\dumps\dumps" value="C:\dumps\dumps">
         </div>
+        <div>
+          <label for="planBreakLine">Mode Break line</label>
+          <label style="display: flex; align-items: center; gap: .45rem; margin-top: .35rem;">
+            <input id="planBreakLine" type="checkbox">
+            <span>Sauter relocate/fix si aucun PDF, puis continuer (populate IA).</span>
+          </label>
+        </div>
       </div>
       <div class="progress-panel" id="planProgress" style="margin-top: 1.2rem;">
         <div class="progress-header">
@@ -1097,6 +1104,7 @@
         workers: 4,
         fix_action: 'assign',
         blueprint_mode: 'missing',
+        break_line: document.getElementById('planBreakLine').checked,
         search_root: document.getElementById('planSearchRoot').value.trim() || 'C:\\\\dumps\\\\dumps',
         file_paths: parseLineList(document.getElementById('planFilePaths').value || ''),
       };
