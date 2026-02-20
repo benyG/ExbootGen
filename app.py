@@ -3772,6 +3772,8 @@ def _execute_mcp_plan(
     total_steps = len(steps)
     failed_steps: list[int] = []
     skipped_certifications: dict[int, dict] = {}
+    skipped_step_endpoints: dict[int, set[str]] = {}
+    break_line_mode = bool(payload.get("break_line"))
     context.update_counters(
         total_steps=total_steps,
         completed_steps=0,
@@ -3786,8 +3788,23 @@ def _execute_mcp_plan(
         method = step.get("method", "POST")
         step_payload = step.get("payload") or {}
         cert_id = step.get("cert_id")
-        if cert_id and cert_id in skipped_certifications:
-            skipped_info = skipped_certifications[cert_id]
+        skip_for_cert = cert_id and cert_id in skipped_certifications
+        skip_for_step = (
+            cert_id
+            and cert_id in skipped_step_endpoints
+            and endpoint in skipped_step_endpoints[cert_id]
+        )
+        if skip_for_cert or skip_for_step:
+            skipped_info = (
+                skipped_certifications.get(cert_id)
+                or {
+                    "message": "Étape ignorée (mode Break line).",
+                    "reason": "Mode Break line actif après échec import PDF.",
+                    "blocked_by": {
+                        "endpoint": "/pdf/api/mcp/import-local",
+                    },
+                }
+            )
             entry = {
                 "step": step.get("step"),
                 "name": step.get("name"),
@@ -3838,6 +3855,7 @@ def _execute_mcp_plan(
         if status >= 400:
             failed_steps.append(idx)
             skip_reason = "Étape ignorée après l'échec d'une étape précédente."
+            skip_only_relocate_and_fix = False
             if (
                 endpoint == "/pdf/api/mcp/import-local"
                 and status == 404
@@ -3845,21 +3863,34 @@ def _execute_mcp_plan(
             ):
                 message = str(data.get("message") or "")
                 if "Aucun PDF trouvé" in message or "Fichier introuvable" in message:
-                    skip_reason = (
-                        "Import PDF local: aucun fichier trouvé, "
-                        "les étapes suivantes pour cette certification sont ignorées."
-                    )
+                    if break_line_mode:
+                        skip_reason = (
+                            "Import PDF local: aucun fichier trouvé, mode Break line actif, "
+                            "les étapes relocate/fix sont ignorées pour cette certification."
+                        )
+                        skip_only_relocate_and_fix = True
+                    else:
+                        skip_reason = (
+                            "Import PDF local: aucun fichier trouvé, "
+                            "les étapes suivantes pour cette certification sont ignorées."
+                        )
             if cert_id:
-                skipped_certifications[cert_id] = {
-                    "message": skip_reason,
-                    "reason": diagnostic_message,
-                    "blocked_by": {
-                        "step": step.get("step"),
-                        "name": step.get("name"),
-                        "endpoint": endpoint,
-                        "status_code": status,
-                    },
-                }
+                if skip_only_relocate_and_fix:
+                    skipped_step_endpoints[cert_id] = {
+                        "/reloc/api/mcp/relocate",
+                        "/api/mcp/fix",
+                    }
+                else:
+                    skipped_certifications[cert_id] = {
+                        "message": skip_reason,
+                        "reason": diagnostic_message,
+                        "blocked_by": {
+                            "step": step.get("step"),
+                            "name": step.get("name"),
+                            "endpoint": endpoint,
+                            "status_code": status,
+                        },
+                    }
                 context.log(f"Certification {cert_id}: {skip_reason}")
         if step.get("finalize_pub") and step.get("cert_id") and status < 400:
             cert_id = step.get("cert_id")
