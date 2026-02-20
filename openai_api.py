@@ -2135,7 +2135,7 @@ Return ONLY valid JSON following exactly this structure:
 {{
   "prerequisites": ["text1", "text2", "text3"],
   "targeted_profession": ["job title1", "job title2", "job title3"],
-  "studytip": "20-25 words"
+  "studytip": "20-40 words"
 }}
 
 Rules:
