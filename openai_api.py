@@ -2129,13 +2129,13 @@ Return only the structured content.
 
 
 COURSE_ART_PROMPT_TEMPLATE = """
-Generate a concise JSON profile for the certification exam {certification} from vendor {vendor}.
+Generate a concise JSON profile for the certification exam [[CERTIFICATION]] from vendor [[VENDOR]].
 Return ONLY valid JSON following exactly this structure:
-{{
+{
   "prerequisites": ["text1", "text2", "text3"],
   "targeted_profession": ["job title1", "job title2", "job title3"],
   "studytip": "20-25 words"
-}}
+}
 
 Rules:
 - Output must be strictly valid JSON (no markdown, no code fences, no trailing commas).
@@ -2158,9 +2158,10 @@ Rules:
 def _build_course_art_prompt(certification: str, vendor: str) -> str:
     """Build the course art prompt from the static template."""
 
-    return COURSE_ART_PROMPT_TEMPLATE.format(
-        certification=certification,
-        vendor=vendor,
+    return (
+        COURSE_ART_PROMPT_TEMPLATE
+        .replace("[[CERTIFICATION]]", certification)
+        .replace("[[VENDOR]]", vendor)
     )
 
 def generate_certification_course_art(certification: str, vendor: str) -> dict:
