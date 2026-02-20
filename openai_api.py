@@ -2043,6 +2043,7 @@ def generate_carousel_linkedin_post(subject: str, question: str, exam_url: str) 
         f"Question to address: {question_clean}\n"
         "Requirements:\n"
         "- 50 to 100 words.\n"
+        "- Avoid using the first person, as you are writing on behalf of an organization.\n"
         "- Hook + practical value + short CTA.\n"
         "- Use hashtags (max 4).\n"
         "- Keep a professional, educational tone.\n"
