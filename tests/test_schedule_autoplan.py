@@ -6,7 +6,7 @@ import sys
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from app import _generate_auto_schedule  # noqa: E402
+from app import _autoplan_subject_rule, _generate_auto_schedule  # noqa: E402
 
 
 def _sample_certifications():
@@ -20,6 +20,7 @@ def _sample_certifications():
 def test_generate_auto_schedule_respects_quotas_and_cadence():
     entries = _generate_auto_schedule(
         _sample_certifications(),
+        carousel_topics=[],
         today=date(2024, 1, 15),
         rng=random.Random(123),
     )
@@ -48,6 +49,58 @@ def test_generate_auto_schedule_respects_quotas_and_cadence():
     for key in ("certification_presentation", "preparation_methodology", "career_impact"):
         assert subject_counts[key] >= 1
 
-    # Automatic plan enforces image flag and leaves link blank for generation time.
-    assert all(entry.get("addImage") for entry in entries)
-    assert all(not entry.get("link") for entry in entries)
+    # Automatic plan keeps social/article links deferred until runtime.
+    assert all(not entry.get("link") for entry in social_entries + article_entries)
+
+    # Subject policy controls auto image insertion for LinkedIn/X publications.
+    for entry in social_entries:
+        if entry["subject"] in {"certification_presentation", "engagement_community"}:
+            assert entry.get("addImage") is False
+        else:
+            assert entry.get("addImage") is True
+
+
+def test_generate_auto_schedule_adds_one_carousel_per_week_when_topics_available():
+    carousel_topics = [
+        {"id": idx, "topic": f"Sujet {idx}", "question_to_address": f"Question {idx}"}
+        for idx in range(1, 8)
+    ]
+
+    entries = _generate_auto_schedule(
+        _sample_certifications(),
+        carousel_topics=carousel_topics,
+        today=date(2024, 1, 15),
+        rng=random.Random(321),
+    )
+
+    carousel_entries = [entry for entry in entries if entry.get("channels") == ["carousel"]]
+    week_keys = {
+        (date.fromisoformat(entry["day"]).isocalendar().year, date.fromisoformat(entry["day"]).isocalendar().week)
+        for entry in carousel_entries
+    }
+
+    assert len(carousel_entries) == len(week_keys)
+    assert len(carousel_entries) == 5  # January 2024 spans five ISO weeks.
+    assert all(entry.get("contentType") == "carousel_pdf" for entry in carousel_entries)
+    assert all(entry.get("carouselTopicId") for entry in carousel_entries)
+    assert all(entry.get("addImage") is False for entry in carousel_entries)
+    assert all(entry.get("link") == "https://examboot.net" for entry in carousel_entries)
+
+
+def test_generate_auto_schedule_skips_carousel_when_no_topics_available():
+    entries = _generate_auto_schedule(
+        _sample_certifications(),
+        carousel_topics=[],
+        today=date(2024, 1, 15),
+        rng=random.Random(123),
+    )
+
+    assert not [entry for entry in entries if entry.get("channels") == ["carousel"]]
+
+
+def test_autoplan_subject_rules_match_expected_table():
+    assert _autoplan_subject_rule("certification_presentation") == {"add_image": False, "link_mode": "slug"}
+    assert _autoplan_subject_rule("preparation_methodology") == {"add_image": True, "link_mode": "generated_test"}
+    assert _autoplan_subject_rule("career_impact") == {"add_image": True, "link_mode": "slug"}
+    assert _autoplan_subject_rule("experience_testimony") == {"add_image": True, "link_mode": "generated_test"}
+    assert _autoplan_subject_rule("engagement_community") == {"add_image": False, "link_mode": "generated_test"}
