@@ -67,6 +67,7 @@ writing_rules = """
 - Include one contrarian insight or unexpected perspective.
 - Use transition sentences that create logical flow between sections.
 - Avoid repeating ideas in different wording.
+- Avoid using the first person, as you are writing on behalf of an organization.
 - Avoid generic advice like “study consistently” or “practice regularly” without depth.
 - Provide actionable insights or frameworks where relevant.
 - Target length: 1,000–1,400 words.
@@ -93,7 +94,7 @@ writing_rules_linkedin = """
 - No buzzword overload.
 - Emojis: optional, max 3 total, placed at line breaks only.
 - Hashtags: 3–5 relevant ones at the end.
-- Always tag vendor as @VendorName.
+- Always tag the certification vendor with @ everywhere you use his name.
 - End with a question that sparks discussion (not a sales push).
 - Soft transition to ExamBoot (subtle positioning, not aggressive promotion).
 - Remove anything that sounds like corporate filler.
@@ -105,11 +106,11 @@ writing_rules_tweet = """
 - Max 220–260 characters preferred (do not force 280).
 - First line must create tension, contrast, or a bold insight.
 - Focus on ONE sharp idea only.
-- Write like a human expert, not a marketing account.
+- Write like a human expert, not a marketing account. Avoid using the first person, as you are writing on behalf of an organization.
 - No corporate filler.
 - No stacked claims.
 - Avoid mechanical structures (no obvious template feel).
-- If tagging vendor, use @VendorName naturally in the sentence (not forced).
+- Always tag the certification vendor with @ everywhere you use his name.
 - Emojis: 0–2 max, placed at line breaks only (never mid-sentence).
 - Hashtags: exactly 2 relevant hashtags at the end.
 - CTA must feel optional and light, not salesy.
@@ -297,11 +298,11 @@ Add the link {{exam_url}} at the begining.
 }
 
 LINKEDIN_CAROUSEL_PROMPT_TEMPLATE = """
-You are a LinkedIn growth strategist specialized in B2B education and certification markets.
+You are a LinkedIn growth strategist specialized in the domain covered by the question to address.
 Objective:
 Create a 5-page LinkedIn carousel that feels sharp, modern, insightful — not generic, not corporate.
 
-User input:
+Question to address:
 [QUESTION_TO_ADDRESS]
 
 Audience:
@@ -2041,9 +2042,9 @@ def generate_carousel_linkedin_post(subject: str, question: str, exam_url: str) 
         f"Carousel topic: {subject_clean}\n"
         f"Question to address: {question_clean}\n"
         "Requirements:\n"
-        "- 120 to 220 words.\n"
+        "- 50 to 100 words.\n"
         "- Hook + practical value + short CTA.\n"
-        "- Do not use hashtags spam (max 4).\n"
+        "- Use hashtags (max 4).\n"
         "- Keep a professional, educational tone.\n"
     )
     return _run_completion(prompt)
@@ -2131,11 +2132,11 @@ Return only the structured content.
 COURSE_ART_PROMPT_TEMPLATE = """
 Generate a concise JSON profile for the certification exam [[CERTIFICATION]] from vendor [[VENDOR]].
 Return ONLY valid JSON following exactly this structure:
-{
+{{
   "prerequisites": ["text1", "text2", "text3"],
   "targeted_profession": ["job title1", "job title2", "job title3"],
   "studytip": "20-25 words"
-}
+}}
 
 Rules:
 - Output must be strictly valid JSON (no markdown, no code fences, no trailing commas).
