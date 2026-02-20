@@ -7,7 +7,7 @@ import uuid
 import hashlib
 import hmac
 from collections import deque
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from textwrap import dedent
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -121,6 +121,7 @@ from articles import (
     run_scheduled_carousel_publication,
     run_scheduled_publication,
     SocialPostResult,
+    _fetch_carousel_topics,
     ensure_exam_url,
     ExambootTestGenerationError,
 )
@@ -543,6 +544,14 @@ job_store = create_job_store()
 _schedule_reports_lock = Lock()
 _schedule_reports: Dict[str, Dict[str, object]] = {}
 _schedule_entry_jobs: Dict[str, str] = {}
+
+AUTOPLAN_SUBJECT_RULES: Dict[str, Dict[str, object]] = {
+    "certification_presentation": {"add_image": False, "link_mode": "slug"},
+    "preparation_methodology": {"add_image": True, "link_mode": "generated_test"},
+    "career_impact": {"add_image": True, "link_mode": "slug"},
+    "experience_testimony": {"add_image": True, "link_mode": "generated_test"},
+    "engagement_community": {"add_image": False, "link_mode": "generated_test"},
+}
 
 QUEUE_EXCEPTIONS = (CeleryError, OperationalError, ConnectionError, OSError, RedisError)
 
@@ -1267,17 +1276,51 @@ def _schedule_entry_datetime(entry: Dict[str, object]) -> datetime | None:
     return datetime.combine(planned_day, planned_time)
 
 
+def _autoplan_subject_rule(subject: str | None) -> Dict[str, object]:
+    """Return scheduling policy for a social subject."""
+
+    default_rule: Dict[str, object] = {"add_image": True, "link_mode": "generated_test"}
+    if not subject:
+        return default_rule
+    return AUTOPLAN_SUBJECT_RULES.get(subject, default_rule)
+
+
+def _build_examboot_slug_url(provider_id: int, certification_id: int) -> str:
+    """Build https://examboot.net/en/{provider_name}/{course_slug} from DB values."""
+
+    conn = db.get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """
+            SELECT p.name AS provider_name, c.slug AS course_slug
+            FROM courses c
+            JOIN provs p ON p.id = c.prov
+            WHERE c.id = %s AND p.id = %s
+            """,
+            (certification_id, provider_id),
+        )
+        row = cursor.fetchone()
+    finally:
+        cursor.close()
+        conn.close()
+
+    provider_name = (row or {}).get("provider_name") if isinstance(row, dict) else None
+    course_slug = (row or {}).get("course_slug") if isinstance(row, dict) else None
+    if not provider_name or not course_slug:
+        raise ValueError("Impossible de construire le lien slug (provider/slug introuvable).")
+
+    return f"https://examboot.net/en/{quote(str(provider_name).strip())}/{quote(str(course_slug).strip())}"
+
+
 def _generate_auto_schedule(
     certifications: List[dict],
     *,
+    carousel_topics: List[dict] | None = None,
     today: date | None = None,
     rng: random.Random | None = None,
 ) -> List[dict]:
-    """Create a full-month social + article plan following subject quotas.
-
-    Each day receives a LinkedIn+X publication; an article is added every two
-    days (and on mandatory subject days) to satisfy cadence requirements.
-    """
+    """Create a full-month plan with social, article and weekly carousel slots."""
 
     if not certifications:
         raise ValueError("Au moins une certification publiée est requise.")
@@ -1299,7 +1342,6 @@ def _generate_auto_schedule(
     subject_caps = {"experience_testimony": 2, "engagement_community": 3}
     subject_counts = {key: 0 for key in subject_labels}
 
-    # Plan articles every other day; mandatory subject days always carry an article.
     article_days: set[date] = {day for idx, day in enumerate(days) if idx % 2 == 0}
     forced_subjects: dict[date, str] = {}
     candidate_days = list(article_days) or list(days)
@@ -1346,6 +1388,7 @@ def _generate_auto_schedule(
         cert_id = cert.get("id") or cert.get("certId")
         cert_name = cert.get("name") or cert.get("certName") or "Certification"
 
+        subject_rule = _autoplan_subject_rule(subject)
         entries.append(
             {
                 "id": uuid.uuid4().hex,
@@ -1362,7 +1405,7 @@ def _generate_auto_schedule(
                 "channels": ["linkedin", "x"],
                 "link": "",
                 "note": f"Planification automatique ({subject_labels[subject]}).",
-                "addImage": True,
+                "addImage": bool(subject_rule.get("add_image", True)),
                 "status": "queued",
             }
         )
@@ -1385,6 +1428,59 @@ def _generate_auto_schedule(
                     "link": "",
                     "note": "Planification automatique – article long.",
                     "addImage": True,
+                    "status": "queued",
+                }
+            )
+
+    available_topics = list(carousel_topics or [])
+    randomizer.shuffle(available_topics)
+    if available_topics:
+        weeks: dict[tuple[int, int], list[date]] = {}
+        for day in days:
+            weeks.setdefault((day.isocalendar().year, day.isocalendar().week), []).append(day)
+
+        carousel_time_slots = ["09:15", "13:30", "16:45"]
+        for _week_key, week_days in sorted(weeks.items(), key=lambda item: item[1][0]):
+            if not available_topics:
+                break
+            topic = available_topics.pop()
+            chosen_day = randomizer.choice(week_days)
+            cert = _choose_certification()
+            provider_id = (
+                cert.get("provider_id")
+                or cert.get("providerId")
+                or cert.get("prov")
+                or cert.get("provider")
+            )
+            provider_name = cert.get("provider_name") or cert.get("providerName") or cert.get("provider") or "Provider"
+            cert_id = cert.get("id") or cert.get("certId")
+            cert_name = cert.get("name") or cert.get("certName") or "Certification"
+            topic_label = (topic.get("topic") or "").strip()
+            question = (topic.get("question_to_address") or "").strip()
+            topic_id = topic.get("id")
+            if not topic_label or not question or topic_id is None:
+                continue
+
+            entries.append(
+                {
+                    "id": uuid.uuid4().hex,
+                    "day": chosen_day.isoformat(),
+                    "time": randomizer.choice(carousel_time_slots),
+                    "providerId": provider_id,
+                    "providerName": provider_name,
+                    "certId": cert_id,
+                    "certName": cert_name,
+                    "subject": "preparation_methodology",
+                    "subjectLabel": "Méthodologie & préparation",
+                    "contentType": "carousel_pdf",
+                    "contentTypeLabel": "Carousel PDF (LinkedIn)",
+                    "channels": ["carousel"],
+                    "carouselTopicId": topic_id,
+                    "carouselTopicLabel": topic_label,
+                    "carouselQuestion": question,
+                    "link": "https://examboot.net",
+                    "note": f"Planification automatique – carousel: {topic_label}.",
+                    "addImage": False,
                     "status": "queued",
                 }
             )
@@ -1451,7 +1547,13 @@ def schedule_auto_plan():
         return jsonify({"error": "Aucune certification publiée disponible pour l'auto-planification."}), 400
 
     try:
-        generated_entries = _generate_auto_schedule(public_certs)
+        carousel_topics = _fetch_carousel_topics(only_available=True)
+    except Exception:
+        app.logger.exception("Echec de récupération des sujets carousel disponibles")
+        carousel_topics = []
+
+    try:
+        generated_entries = _generate_auto_schedule(public_certs, carousel_topics=carousel_topics)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:  # pragma: no cover - defensive path
@@ -1461,10 +1563,19 @@ def schedule_auto_plan():
     persisted = 0
     planned_days: set[str] = set()
     for entry in generated_entries:
+        add_image = bool(entry.get("addImage", True))
         payload = {
             **entry,
-            "addImage": True,
-            "note": _serialise_schedule_note(entry.get("note") or "", True),
+            "addImage": add_image,
+            "note": _serialise_schedule_note(
+                entry.get("note") or "",
+                add_image,
+                {
+                    "carousel_topic_id": entry.get("carouselTopicId"),
+                    "carousel_topic_label": entry.get("carouselTopicLabel"),
+                    "carousel_question": entry.get("carouselQuestion"),
+                },
+            ),
         }
         try:
             db.upsert_schedule_entry(payload)
@@ -1730,6 +1841,11 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         allowed_channels = {"article", "linkedin", "x", "carousel"}
         channels = [channel for channel in (entry.get("channels") or []) if channel in allowed_channels]
         attach_image = bool(entry.get("addImage", True))
+        if "linkedin" in channels or "x" in channels:
+            subject_rule = _autoplan_subject_rule(str(entry.get("subject") or ""))
+            attach_image = bool(subject_rule.get("add_image", attach_image))
+        elif "carousel" in channels:
+            attach_image = False
         entry_id = entry.get("id")
 
         context.log(
@@ -1737,8 +1853,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
             f"({subject} – {content_label}) à {time_of_day}"
         )
         context.log(f"Canaux : {', '.join(channels) if channels else 'aucun canal spécifié'}")
-        include_image = entry.get("addImage", True)
-        context.log(f"Visuel : {'avec image' if include_image else 'sans image'}")
+        context.log(f"Visuel : {'avec image' if attach_image else 'sans image'}")
         note = entry.get("note")
         if note:
             context.log(f"Note interne : {note}")
@@ -1777,8 +1892,20 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
             continue
 
         generated_link = False
+        link_mode = "generated_test"
+        if "carousel" in channels:
+            link_mode = "homepage"
+        elif "linkedin" in channels or "x" in channels:
+            subject_rule = _autoplan_subject_rule(str(entry.get("subject") or ""))
+            link_mode = str(subject_rule.get("link_mode") or "generated_test")
+
         try:
-            link, generated_link = ensure_exam_url(cert_id, link)
+            if link_mode == "homepage":
+                link = "https://examboot.net"
+            elif link_mode == "slug":
+                link = _build_examboot_slug_url(provider_id, cert_id)
+            else:
+                link, generated_link = ensure_exam_url(cert_id, link)
         except ExambootTestGenerationError as exc:
             counters["failed"] += 1
             _update_entry_status(entry_id, "failed", stamp=True)
@@ -1792,11 +1919,30 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
             counters["processed"] += 1
             context.update_counters(**counters, date=date)
             continue
+        except ValueError as exc:
+            counters["failed"] += 1
+            _update_entry_status(entry_id, "failed", stamp=True)
+            context.log(str(exc))
+            _update_schedule_report(
+                date,
+                entry,
+                "failed",
+                message=str(exc),
+            )
+            counters["processed"] += 1
+            context.update_counters(**counters, date=date)
+            continue
 
         entry["link"] = link
         if generated_link:
             _persist_generated_link(entry, link)
             context.log(f"Lien de test généré automatiquement : {link}")
+        elif link_mode == "slug":
+            _persist_generated_link(entry, link)
+            context.log(f"Lien slug appliqué automatiquement : {link}")
+        elif link_mode == "homepage":
+            _persist_generated_link(entry, link)
+            context.log("Lien homepage appliqué automatiquement pour carousel.")
 
         display_link = link or "Lien non fourni"
         context.log(f"Lien/source : {display_link}")

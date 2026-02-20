@@ -996,22 +996,22 @@ def _get_linkedin_access_token(force_refresh: bool = False) -> str:
     return token
 
 
-def _upload_linkedin_image(image_path: Path) -> str:
-    """Upload an image to LinkedIn and return the asset URN."""
+def _upload_linkedin_asset(file_path: Path, *, recipe: str, label: str) -> str:
+    """Upload a media asset to LinkedIn and return the asset URN."""
 
-    if not image_path.exists():
+    if not file_path.exists():
         raise SocialPublishError(
-            f"Le fichier image '{image_path}' est introuvable.", status_code=400
+            f"Le fichier {label} '{file_path}' est introuvable.", status_code=400
         )
 
     if not LINKEDIN_ORGANIZATION_URN:
         raise SocialPublishError(
-            "LINKEDIN_ORGANIZATION_URN doit être configuré pour envoyer des images LinkedIn.",
+            "LINKEDIN_ORGANIZATION_URN doit être configuré pour envoyer des médias LinkedIn.",
             status_code=400,
         )
 
-    image_bytes = image_path.read_bytes()
-    mime_type, _ = mimetypes.guess_type(str(image_path))
+    file_bytes = file_path.read_bytes()
+    mime_type, _ = mimetypes.guess_type(str(file_path))
     content_type = mime_type or "application/octet-stream"
 
     last_error: Optional[SocialPublishError] = None
@@ -1027,7 +1027,7 @@ def _upload_linkedin_image(image_path: Path) -> str:
             headers=headers,
             json={
                 "registerUploadRequest": {
-                    "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
+                    "recipes": [recipe],
                     "owner": LINKEDIN_ORGANIZATION_URN,
                     "serviceRelationships": [
                         {
@@ -1044,7 +1044,7 @@ def _upload_linkedin_image(image_path: Path) -> str:
             continue
         if register_response.status_code >= 400:
             last_error = SocialPublishError(
-                "Erreur lors de l'enregistrement de l'image LinkedIn "
+                f"Erreur lors de l'enregistrement LinkedIn ({label}) "
                 f"({register_response.status_code}): {register_response.text}",
                 status_code=register_response.status_code,
             )
@@ -1060,7 +1060,7 @@ def _upload_linkedin_image(image_path: Path) -> str:
 
         if not asset_urn or not upload_url:
             last_error = SocialPublishError(
-                "Réponse LinkedIn invalide lors de l'enregistrement de l'image.",
+                f"Réponse LinkedIn invalide lors de l'enregistrement du média ({label}).",
                 status_code=register_response.status_code or 500,
             )
             break
@@ -1072,7 +1072,7 @@ def _upload_linkedin_image(image_path: Path) -> str:
         upload_response = requests.put(
             upload_url,
             headers=upload_headers,
-            data=image_bytes,
+            data=file_bytes,
             timeout=30,
         )
 
@@ -1080,7 +1080,7 @@ def _upload_linkedin_image(image_path: Path) -> str:
             continue
         if upload_response.status_code >= 400:
             last_error = SocialPublishError(
-                "Erreur lors du téléversement de l'image sur LinkedIn "
+                f"Erreur lors du téléversement LinkedIn ({label}) "
                 f"({upload_response.status_code}): {upload_response.text}",
                 status_code=upload_response.status_code,
             )
@@ -1092,12 +1092,32 @@ def _upload_linkedin_image(image_path: Path) -> str:
         raise last_error
 
     raise SocialPublishError(
-        "Impossible de téléverser l'image sur LinkedIn après nouvelle tentative.",
+        f"Impossible de téléverser le média LinkedIn ({label}) après nouvelle tentative.",
         status_code=500,
     )
 
 
-def _publish_linkedin_post(text: str, media_asset: Optional[str] = None) -> dict:
+def _upload_linkedin_image(image_path: Path) -> str:
+    """Upload an image to LinkedIn and return the asset URN."""
+
+    return _upload_linkedin_asset(
+        image_path,
+        recipe="urn:li:digitalmediaRecipe:feedshare-image",
+        label="image",
+    )
+
+
+def _upload_linkedin_document(document_path: Path) -> str:
+    """Upload a PDF document to LinkedIn and return the asset URN."""
+
+    return _upload_linkedin_asset(
+        document_path,
+        recipe="urn:li:digitalmediaRecipe:feedshare-document",
+        label="document",
+    )
+
+
+def _publish_linkedin_post(text: str, media_asset: Optional[str] = None, media_category: str = "IMAGE") -> dict:
     """Publish a post to the configured LinkedIn organisation page."""
 
     if not text.strip():
@@ -1114,9 +1134,10 @@ def _publish_linkedin_post(text: str, media_asset: Optional[str] = None) -> dict
             "Content-Type": "application/json",
             "X-Restli-Protocol-Version": "2.0.0",
         }
+        category = media_category if media_asset else "NONE"
         share_content = {
             "shareCommentary": {"text": text},
-            "shareMediaCategory": "IMAGE" if media_asset else "NONE",
+            "shareMediaCategory": category,
         }
         if media_asset:
             share_content["media"] = [
@@ -2149,6 +2170,7 @@ def _run_linkedin_workflow(
     topic_type: str,
     attach_image: bool = False,
     linkedin_post: Optional[str] = None,
+    document_path: Optional[Path] = None,
 ) -> SocialPostResult:
     """Generate and publish the LinkedIn announcement post."""
 
@@ -2164,7 +2186,21 @@ def _run_linkedin_workflow(
     )
     media_asset: Optional[str] = None
     media_filename: Optional[str] = None
-    if attach_image:
+    media_category = "IMAGE"
+    if document_path is not None:
+        try:
+            media_filename = document_path.name
+            media_asset = _upload_linkedin_document(document_path)
+            media_category = "DOCUMENT"
+        except SocialPublishError as exc:
+            return SocialPostResult(
+                text=linkedin_body,
+                published=False,
+                status_code=exc.status_code,
+                error=str(exc),
+                media_filename=media_filename,
+            )
+    elif attach_image:
         try:
             media_path = _pick_random_social_image()
             media_filename = media_path.name
@@ -2186,7 +2222,9 @@ def _run_linkedin_workflow(
             )
     try:
         linkedin_response = _publish_linkedin_post(
-            linkedin_body, media_asset=media_asset
+            linkedin_body,
+            media_asset=media_asset,
+            media_category=media_category,
         )
     except SocialPublishError as exc:
         return SocialPostResult(
@@ -2240,8 +2278,9 @@ def run_scheduled_carousel_publication(
         selection,
         exam_url,
         "preparation_methodology",
-        attach_image=attach_image,
+        attach_image=False,
         linkedin_post=linkedin_text,
+        document_path=pdf_path,
     )
 
     return {
