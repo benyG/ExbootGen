@@ -137,13 +137,13 @@
     }
     .card-delete {
       position: absolute;
-      top: 0.6rem;
       right: 0.6rem;
+      bottom: 0.6rem;
       border: 1px solid rgba(248, 113, 113, 0.65);
       background: rgba(248, 113, 113, 0.16);
       color: #fecaca;
       border-radius: 10px;
-      padding: 0.25rem 0.4rem;
+      padding: 0.25rem 0.6rem;
       cursor: pointer;
       font-size: 0.85rem;
     }
@@ -158,6 +158,30 @@
       font-weight: 600;
     }
     .verify-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .card-select {
+      position: absolute;
+      top: 0.75rem;
+      left: 0.75rem;
+      width: 1.1rem;
+      height: 1.1rem;
+      accent-color: var(--accent);
+      cursor: pointer;
+      z-index: 1;
+    }
+    .result-card.has-bulk-selection strong,
+    .result-card.has-bulk-selection > div,
+    .result-card.has-bulk-selection small,
+    .result-card.has-bulk-selection .image-badge,
+    .result-card.has-bulk-selection .exact-badge {
+      padding-left: 1.6rem;
+    }
+    .bulk-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      padding: 0.2rem 0;
+    }
 
     .editor {
       background: var(--panel-soft);
@@ -402,10 +426,14 @@
       </div>
       <div class="answers" id="answers"></div>
 
-      <div style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+      <div style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
         <button class="primary" id="saveBtn" disabled>Enregistrer les modifications</button>
         <button class="primary hidden" id="addBtn">Ajouter</button>
         <button class="danger" id="deleteBtn" type="button" aria-label="Supprimer la question" title="Supprimer la question" disabled>🗑️</button>
+        <div class="bulk-actions hidden" id="bulkActions">
+          <button class="danger" id="bulkDeleteBtn" type="button" disabled>Delete la sélection</button>
+          <span class="status" id="bulkSelectionStatus">Aucune question sélectionnée.</span>
+        </div>
         <span class="status" id="saveStatus"></span>
       </div>
     </section>
@@ -438,6 +466,9 @@
     const searchText = document.getElementById('searchText');
     const searchBtn = document.getElementById('searchBtn');
     const verifyDuplicatesBtn = document.getElementById('verifyDuplicates');
+    const bulkActions = document.getElementById('bulkActions');
+    const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+    const bulkSelectionStatus = document.getElementById('bulkSelectionStatus');
     const questionEditor = document.getElementById('questionEditor');
     const uploadStatus = document.getElementById('uploadStatus');
     const srcFileInput = document.getElementById('srcFile');
@@ -463,6 +494,7 @@
     let correctionQuestions = [];
     let correctionIndex = -1;
     let duplicateQuestions = [];
+    const selectedQuestionIds = new Set();
 
     const params = new URLSearchParams(window.location.search);
     const preselectProviderId = params.get('provider_id');
@@ -483,6 +515,25 @@
       return div.innerHTML;
     };
 
+    function updateBulkSelectionUI() {
+      if (!bulkActions || !bulkDeleteBtn || !bulkSelectionStatus) return;
+      const count = selectedQuestionIds.size;
+      bulkActions.classList.toggle('hidden', count === 0);
+      bulkDeleteBtn.disabled = count === 0;
+      bulkSelectionStatus.textContent = count
+        ? `${count} question(s) sélectionnée(s).`
+        : 'Aucune question sélectionnée.';
+      resultsContainer.querySelectorAll('.card-select').forEach(input => {
+        const questionId = String(input.dataset.id || '');
+        input.checked = selectedQuestionIds.has(questionId);
+      });
+    }
+
+    function resetBulkSelection() {
+      selectedQuestionIds.clear();
+      updateBulkSelectionUI();
+    }
+
     const getResultCardHtml = (r, extra = {}) => {
       const exactGroupId = extra.exactGroupId || null;
       const imageBadge = r.has_image ? '<span class="image-badge">image</span>' : '';
@@ -490,8 +541,9 @@
       const srcLine = r.src_file ? `src_file : ${escapeHtml(r.src_file)}` : 'src_file non renseigné';
       const metaLine = extra.metaLine ? `<small class="src">${escapeHtml(extra.metaLine)}</small>` : '';
       return `
-        <article class="result-card" data-id="${r.id}"${exactGroupId ? ` data-group="${exactGroupId}"` : ''}>
-          <button type="button" class="card-delete" data-id="${r.id}" title="Supprimer la question" aria-label="Supprimer la question">🗑️</button>
+        <article class="result-card has-bulk-selection" data-id="${r.id}"${exactGroupId ? ` data-group="${exactGroupId}"` : ''}>
+          <input type="checkbox" class="card-select" data-id="${r.id}" aria-label="Sélectionner la question ${r.id}">
+          <button type="button" class="card-delete" data-id="${r.id}" title="Supprimer la question" aria-label="Supprimer la question">Delete</button>
           <strong>#${r.id} · ${escapeHtml(r.module_name || 'Module ?')}</strong>
           <div style="margin-top: 0.3rem;">${escapeHtml(r.text_preview || '—')}</div>
           ${imageBadge}
@@ -506,6 +558,12 @@
     const resetResultsLayout = () => {
       resultsContainer.classList.remove('duplicate-groups');
     };
+
+    function refreshResultsMarkup(html) {
+      resultsContainer.innerHTML = html;
+      setActiveResultCard(currentQuestionId);
+      updateBulkSelectionUI();
+    }
 
     function setSelectOptions(selectEl, placeholder, items) {
       selectEl.innerHTML = '';
@@ -575,6 +633,7 @@
       setButtonLoading(searchBtn, true);
       searchStatus.textContent = 'Recherche en cours…';
       resultsContainer.innerHTML = '';
+      resetBulkSelection();
       resetResultsLayout();
       const params = new URLSearchParams({ q });
       if (providerSelect.value) params.append('provider_id', providerSelect.value);
@@ -586,8 +645,7 @@
         resultsCount.textContent = `${results.length} résultat(s)`;
         searchStatus.textContent = results.length ? 'Cliquez sur une carte pour charger la question.' : 'Aucun résultat pour cette recherche.';
 
-        resultsContainer.innerHTML = results.map(r => getResultCardHtml(r)).join('');
-        setActiveResultCard(currentQuestionId);
+        refreshResultsMarkup(results.map(r => getResultCardHtml(r)).join(''));
       } finally {
         setButtonLoading(searchBtn, false);
       }
@@ -606,6 +664,7 @@
       }
       searchStatus.textContent = 'Recherche des questions à corriger…';
       resultsContainer.innerHTML = '';
+      resetBulkSelection();
       const res = await fetch(`/edit-question/api/correction?certification_id=${certId}`);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -622,13 +681,12 @@
       searchStatus.textContent = correctionQuestions.length
         ? 'Utilisez NEXT / PREVIOUS pour corriger les questions.'
         : 'Aucune question à corriger pour cette certification.';
-      resultsContainer.innerHTML = correctionQuestions.map(r => {
+      refreshResultsMarkup(correctionQuestions.map(r => {
         const issue = r.answer_count === 0
           ? 'Sans réponse'
           : 'Aucune bonne réponse';
         return getResultCardHtml(r, { metaLine: issue });
-      }).join('');
-      setActiveResultCard(currentQuestionId);
+      }).join(''));
       if (correctionQuestions.length) {
         if (keepCurrent && currentQuestionId) {
           const currentIndex = correctionQuestions.findIndex(item => String(item.id) === String(currentQuestionId));
@@ -664,6 +722,7 @@
       }
       searchStatus.textContent = 'Recherche des duplicatas…';
       resultsContainer.innerHTML = '';
+      resetBulkSelection();
       resetResultsLayout();
       isDuplicateVerifyMode = false;
       const res = await fetch(`/edit-question/api/duplicates?certification_id=${certId}`);
@@ -680,10 +739,9 @@
       searchStatus.textContent = duplicateQuestions.length
         ? 'Cliquez sur une carte pour ouvrir la question et supprimer les doublons.'
         : 'Aucun duplicata détecté pour cette certification.';
-      resultsContainer.innerHTML = duplicateQuestions.map(r => getResultCardHtml(r, {
+      refreshResultsMarkup(duplicateQuestions.map(r => getResultCardHtml(r, {
         metaLine: `Duplicata (groupe ${r.duplicate_count})`,
-      })).join('');
-      setActiveResultCard(currentQuestionId);
+      })).join(''));
     }
 
     async function verifyExactDuplicates() {
@@ -696,6 +754,7 @@
       setButtonLoading(verifyDuplicatesBtn, true);
       searchStatus.textContent = 'Vérification des duplicatas exacts…';
       resultsContainer.innerHTML = '';
+      resetBulkSelection();
       resultsContainer.classList.add('duplicate-groups');
       try {
         const res = await fetch(`/edit-question/api/duplicates/verify?certification_id=${certId}`);
@@ -715,7 +774,7 @@
           resultsContainer.innerHTML = '<div class="status">Aucun duplicata exact détecté.</div>';
           return;
         }
-        resultsContainer.innerHTML = groups.map(group => `
+        refreshResultsMarkup(groups.map(group => `
           <div class="duplicate-group" data-group="${group.group_id}">
             <div class="duplicate-group-header">
               <span class="duplicate-group-title">Duplicata ${group.group_id}</span>
@@ -727,8 +786,7 @@
               })).join('')}
             </div>
           </div>
-        `).join('');
-        setActiveResultCard(currentQuestionId);
+        `).join(''));
       } finally {
         setButtonLoading(verifyDuplicatesBtn, false);
       }
@@ -826,6 +884,7 @@
       searchText.disabled = enabled;
       resultsContainer.classList.toggle('hidden', enabled);
       resultsCount.classList.toggle('hidden', enabled);
+      bulkActions.classList.toggle('hidden', enabled);
       if (enabled) {
         currentQuestionId = null;
         questionEditor.innerHTML = '';
@@ -1029,6 +1088,18 @@
     document.getElementById('addAnswer').addEventListener('click', () => addAnswerField());
 
     resultsContainer.addEventListener('click', async (e) => {
+      const selectionToggle = e.target.closest('.card-select');
+      if (selectionToggle?.dataset.id) {
+        e.stopPropagation();
+        const questionId = String(selectionToggle.dataset.id);
+        if (selectionToggle.checked) {
+          selectedQuestionIds.add(questionId);
+        } else {
+          selectedQuestionIds.delete(questionId);
+        }
+        updateBulkSelectionUI();
+        return;
+      }
       const deleteButton = e.target.closest('.card-delete');
       if (deleteButton?.dataset.id) {
         e.stopPropagation();
@@ -1041,6 +1112,8 @@
           const res = await fetch(`/edit-question/api/questions/${questionId}`, { method: 'DELETE' });
           if (res.ok) {
             saveStatus.textContent = 'Question supprimée.';
+            selectedQuestionIds.delete(String(questionId));
+            updateBulkSelectionUI();
             if (String(currentQuestionId) === String(questionId)) {
               currentQuestionId = null;
               questionEditor.innerHTML = '';
@@ -1208,6 +1281,8 @@
         });
         if (res.ok) {
           saveStatus.textContent = 'Question supprimée.';
+          selectedQuestionIds.delete(String(currentQuestionId));
+          updateBulkSelectionUI();
           currentQuestionId = null;
           questionEditor.innerHTML = '';
           srcFileInput.value = '';
@@ -1297,6 +1372,56 @@
         }
       } finally {
         setButtonLoading(addBtn, false);
+      }
+    });
+
+
+    bulkDeleteBtn?.addEventListener('click', async () => {
+      const ids = Array.from(selectedQuestionIds);
+      if (!ids.length) return;
+      const confirmDelete = window.confirm(`Supprimer définitivement ${ids.length} question(s) sélectionnée(s) ?`);
+      if (!confirmDelete) return;
+      setButtonLoading(bulkDeleteBtn, true);
+      saveStatus.textContent = 'Suppression du lot en cours…';
+      try {
+        const res = await fetch('/edit-question/api/questions/bulk-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question_ids: ids.map(id => Number(id)) }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          ids.forEach(id => selectedQuestionIds.delete(String(id)));
+          if (currentQuestionId && ids.includes(String(currentQuestionId))) {
+            currentQuestionId = null;
+            questionEditor.innerHTML = '';
+            srcFileInput.value = '';
+            descrInput.value = '';
+            natureSelect.value = '1';
+            renderAnswers([]);
+            editorStatus.textContent = 'Sélectionnez une question pour l\'éditer.';
+            contextInfo.textContent = '';
+            saveBtn.disabled = true;
+            deleteBtn.disabled = true;
+          }
+          updateBulkSelectionUI();
+          saveStatus.textContent = `${data.deleted_count || ids.length} question(s) supprimée(s).`;
+          if (isCorrectionMode) {
+            await loadCorrectionList();
+          } else if (isDuplicateMode) {
+            if (isDuplicateVerifyMode) {
+              await verifyExactDuplicates();
+            } else {
+              await loadDuplicateList();
+            }
+          } else {
+            await searchQuestions();
+          }
+        } else {
+          saveStatus.textContent = data.error || 'Erreur pendant la suppression du lot.';
+        }
+      } finally {
+        setButtonLoading(bulkDeleteBtn, false);
       }
     });
 

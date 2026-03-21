@@ -789,21 +789,35 @@ def api_update_question(question_id: int):
     return jsonify({'status': 'updated', 'answers': len(answers)})
 
 
-@edit_question_bp.route('/api/questions/<int:question_id>', methods=['DELETE'])
-def api_delete_question(question_id: int):
+def delete_questions(question_ids: list[int]) -> tuple[list[int], list[str]]:
+    unique_ids = []
+    seen_ids = set()
+    for question_id in question_ids:
+        try:
+            normalized_id = int(question_id)
+        except (TypeError, ValueError):
+            continue
+        if normalized_id <= 0 or normalized_id in seen_ids:
+            continue
+        seen_ids.add(normalized_id)
+        unique_ids.append(normalized_id)
+
+    if not unique_ids:
+        return [], []
+
     db = get_db()
     cur = db.cursor()
-    cur.execute("SELECT text FROM questions WHERE id = %s", (question_id,))
-    row = cur.fetchone()
-    if not row:
-        cur.close()
-        return jsonify({'error': 'Question introuvable'}), 404
-    question_text = row[0] or ''
-    image_urls = extract_image_urls(question_text)
+    placeholders = ', '.join(['%s'] * len(unique_ids))
+    cur.execute(f"SELECT id, text FROM questions WHERE id IN ({placeholders})", tuple(unique_ids))
+    rows = cur.fetchall()
+    found_ids = {int(row[0]) for row in rows}
+    image_urls = []
+    for _, question_text in rows:
+        image_urls.extend(extract_image_urls(question_text or ''))
 
     try:
-        cur.execute("DELETE FROM quest_ans WHERE question = %s", (question_id,))
-        cur.execute("DELETE FROM questions WHERE id = %s", (question_id,))
+        cur.execute(f"DELETE FROM quest_ans WHERE question IN ({placeholders})", tuple(unique_ids))
+        cur.execute(f"DELETE FROM questions WHERE id IN ({placeholders})", tuple(unique_ids))
         db.commit()
     except Exception:
         db.rollback()
@@ -812,6 +826,35 @@ def api_delete_question(question_id: int):
 
     cur.close()
     delete_gcs_images(image_urls)
+    missing_ids = [str(question_id) for question_id in unique_ids if question_id not in found_ids]
+    deleted_ids = [question_id for question_id in unique_ids if question_id in found_ids]
+    return deleted_ids, missing_ids
+
+
+@edit_question_bp.route('/api/questions/bulk-delete', methods=['POST'])
+def api_bulk_delete_questions():
+    payload = request.get_json(silent=True) or {}
+    raw_ids = payload.get('question_ids')
+    if not isinstance(raw_ids, list):
+        return jsonify({'error': 'La liste question_ids est requise.'}), 400
+
+    deleted_ids, missing_ids = delete_questions(raw_ids)
+    if not deleted_ids:
+        return jsonify({'error': 'Aucune question valide à supprimer.', 'missing_ids': missing_ids}), 400
+
+    return jsonify({
+        'status': 'deleted',
+        'deleted_ids': deleted_ids,
+        'deleted_count': len(deleted_ids),
+        'missing_ids': missing_ids,
+    })
+
+
+@edit_question_bp.route('/api/questions/<int:question_id>', methods=['DELETE'])
+def api_delete_question(question_id: int):
+    deleted_ids, _ = delete_questions([question_id])
+    if not deleted_ids:
+        return jsonify({'error': 'Question introuvable'}), 404
     return jsonify({'status': 'deleted', 'id': question_id})
 
 
