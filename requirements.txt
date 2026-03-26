@@ -3,7 +3,7 @@ openai==0.27.0
 requests==2.31.0
 mysql-connector-python==8.4.0
 Werkzeug==2.2.3
-streamlit==1.38.0
+streamlit==1.54.0
 pymysql==1.1.1
 PyMuPDF==1.24.9
 pdf2image==1.17.0
