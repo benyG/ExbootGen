@@ -211,6 +211,7 @@
         <div>
           <label for="action">Type de traitement</label>
           <select name="action" id="action">
+            <option value="auto" {% if selected_action == 'auto' %}selected{% endif %}>Correction complète automatique</option>
             <option value="assign" {% if selected_action == 'assign' %}selected{% endif %}>Attribuer réponse juste</option>
             <option value="drag" {% if selected_action == 'drag' %}selected{% endif %}>Compléter drag-n-drop</option>
             <option value="matching" {% if selected_action == 'matching' %}selected{% endif %}>Compléter matching</option>

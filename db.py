@@ -1590,6 +1590,48 @@ def count_questions_without_answers_by_nature(cert_id, nature_code):
     return int(total)
 
 
+def get_questions_without_answers(cert_id):
+    """Retourne toutes les questions d'une certification sans aucune réponse.
+
+    Contrairement à ``get_questions_without_answers_by_nature``, cette
+    fonction cible TOUTES les natures de questions (QCM, drag-n-drop,
+    matching, etc.).  Elle est utilisée par l'action ``'auto'`` pour
+    identifier les questions dont les choix doivent être générés ou extraits
+    par Vision AI.
+    """
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    query = """
+        SELECT q.id AS question_id, q.text AS qtext, q.nature AS nature
+        FROM questions q
+        JOIN modules m ON q.module = m.id
+        WHERE m.course = %s
+          AND NOT EXISTS (SELECT 1 FROM quest_ans qa WHERE qa.question = q.id)
+        ORDER BY q.id
+    """
+    cursor.execute(query, (cert_id,))
+    rows = cursor.fetchall()
+    cursor.close(); conn.close()
+    return [{"id": r['question_id'], "text": r['qtext'], "nature": r['nature']} for r in rows]
+
+
+def count_questions_without_answers(cert_id):
+    """Compte les questions sans aucune réponse pour une certification."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT COUNT(*)
+        FROM questions q
+        JOIN modules m ON q.module = m.id
+        WHERE m.course = %s
+          AND NOT EXISTS (SELECT 1 FROM quest_ans qa WHERE qa.question = q.id)
+    """
+    cursor.execute(query, (cert_id,))
+    total = cursor.fetchone()[0] or 0
+    cursor.close(); conn.close()
+    return int(total)
+
+
 def mark_answers_correct(question_id, answer_ids):
     """Mark given answers as correct for a question."""
     if not answer_ids:

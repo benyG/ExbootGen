@@ -638,6 +638,27 @@ COMPLETE_ANSWERS_SCHEMA = {
     },
 }
 
+EXTRACT_ANSWERS_FROM_IMAGE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["question_id", "answers"],
+    "properties": {
+        "question_id": {"type": "integer"},
+        "answers": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["value", "isok"],
+                "properties": {
+                    "value": {"type": "string"},
+                    "isok": {"type": "integer"},
+                },
+            },
+        },
+    },
+}
+
 LAB_RESPONSE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -3132,6 +3153,93 @@ Certification: {certification}
     if isinstance(decoded, dict):
         return decoded
     return {}
+
+def _build_vision_payload(
+    prompt: str,
+    image_urls: list[str],
+    *,
+    model: Optional[str] = None,
+    text_format: Optional[dict] = None,
+) -> dict:
+    """Construit un payload Responses API incluant des images (vision).
+
+    Les URLs d'images sont injectées comme blocs ``input_image`` dans le
+    contenu du message utilisateur, à la suite du bloc texte.
+    """
+    content: list[dict] = [{"type": "input_text", "text": prompt}]
+    for url in image_urls:
+        content.append({"type": "input_image", "image_url": url})
+    payload: dict = {
+        "model": model or OPENAI_MODEL,
+        "input": [{"role": "user", "content": content}],
+    }
+    if text_format is not None:
+        payload["text"] = {"format": text_format}
+    return payload
+
+
+def extract_answers_from_image(
+    provider_name: str,
+    cert_name: str,
+    questions: list,
+) -> list:
+    """Extrait les choix de réponses à partir des images contenues dans les questions.
+
+    Utilise la capacité Vision du modèle pour lire les images incluses dans
+    chaque question et en déduire les propositions de réponse. Utilisé en
+    mode ``'auto'`` pour les questions dont les choix sont encodés sous forme
+    d'image plutôt qu'en texte.
+
+    Parameters
+    ----------
+    provider_name:
+        Nom du fournisseur de certification (ex. « AWS »).
+    cert_name:
+        Nom de la certification (ex. « Solutions Architect »).
+    questions:
+        Liste de dicts avec au minimum ``id``, ``text`` et ``image_urls``
+        (liste des URLs d'images extraites du texte de la question).
+
+    Returns
+    -------
+    list
+        Liste de dicts JSON décodés (``question_id``, ``answers``).
+    """
+    import re as _re
+
+    _img_tag_re = _re.compile(r"\s*<img[^>]*>\s*", _re.IGNORECASE)
+
+    results = []
+    for q in questions:
+        image_urls: list[str] = q.get('image_urls') or []
+        # Texte de la question sans les balises <img> pour alléger le prompt
+        clean_text = _img_tag_re.sub(' ', q.get('text') or '').strip()
+
+        prompt = (
+            f"You are completing exam questions for the {cert_name} certification from {provider_name}.\n"
+            f"The images attached to this message are part of the question. "
+            f"They may contain the answer choices (A, B, C, D…) or a diagram needed to answer.\n"
+            f"Extract ALL answer choices visible in the images and indicate which one(s) are correct.\n"
+            f"Return JSON only using this schema:\n"
+            f'{{"question_id": <int>, "answers": [{{"value": "...", "isok": 0_or_1}}, ...]}}\n\n'
+            f"Question ID: {q['id']}\n"
+            f"Question text: {clean_text}\n"
+            f"JSON:"
+        )
+
+        payload = _build_vision_payload(
+            prompt,
+            image_urls,
+            text_format=_json_schema_format(
+                EXTRACT_ANSWERS_FROM_IMAGE_SCHEMA, "extract_answers_from_image"
+            ),
+        )
+        response = _post_with_retry(payload)
+        content = _extract_response_text(response.json())
+        decoded = clean_and_decode_json(content)
+        results.append(decoded)
+    return results
+
 
 def correct_questions(provider_name: str, cert_name: str, questions: list, mode: str) -> list:
     """Use OpenAI to correct or complete questions.

@@ -104,6 +104,7 @@ from jobs import (
 from openai_api import (
     analyze_certif,
     correct_questions,
+    extract_answers_from_image,
     generate_code_cert_keys,
     generate_questions,
 )
@@ -2936,10 +2937,18 @@ def _compute_fix_progress(cert_id, action):
         nature_code = db.nature_mapping['drag-n-drop']
         total = db.count_questions_by_nature(cert_id, nature_code)
         remaining = db.count_questions_without_answers_by_nature(cert_id, nature_code)
-    else:
+    elif action == "matching":
         nature_code = db.nature_mapping['matching']
         total = db.count_questions_by_nature(cert_id, nature_code)
         remaining = db.count_questions_without_answers_by_nature(cert_id, nature_code)
+    else:
+        # action == "auto" : questions sans réponse + questions sans bonne réponse
+        missing_answers = db.count_questions_without_answers(cert_id)
+        missing_correct = db.count_questions_missing_correct_answer(cert_id)
+        remaining = missing_answers + missing_correct
+        # total = toutes les questions de la certification
+        total_with_answers = db.count_questions_with_answers(cert_id)
+        total = total_with_answers + missing_answers
 
     corrected = max(total - remaining, 0)
     return {"total": total, "corrected": corrected, "remaining": remaining}
@@ -3292,6 +3301,154 @@ def run_fix(context: JobContext, provider_id: int, cert_id: int, action: str) ->
         context.log("Nothing to process for the selected certification.")
         return
 
+    max_workers = _env_int(
+        "FIX_MAX_WORKERS",
+        _default_parallelism(maximum=4),
+        minimum=1,
+        maximum=32,
+    )
+    if max_workers > 1:
+        context.log(f"Exécution en parallèle avec {max_workers} worker(s).")
+
+    counters_lock = Lock()
+    state = {
+        "processed": 0,
+        "corrected": corrected,
+        "remaining": remaining,
+    }
+
+    def _run_batch(
+        questions_batch: list,
+        label: str,
+        call_ai,
+        apply_result,
+    ) -> None:
+        """Traite un lot de questions avec la fonction AI et l'applicateur fournis."""
+        batch_total = len(questions_batch)
+        if batch_total == 0:
+            context.log(f"{label} : aucune question à traiter.")
+            return
+        context.log(f"{label} : {batch_total} question(s) à traiter.")
+
+        def _process(item: Tuple[int, Dict[str, object]]) -> None:
+            index, question = item
+            context.wait_if_paused()
+            qid = question.get("id")
+            context.log(f"[{index}/{batch_total}] {label} — question {qid}.")
+            try:
+                responses = call_ai([question])
+            except Exception as exc:
+                context.log(f"Erreur OpenAI pour la question {qid}: {exc}")
+                return
+            if not responses:
+                context.log(f"Aucune réponse obtenue pour la question {qid}.")
+                return
+            result = responses[0] or {}
+            try:
+                updated = apply_result(result)
+            except Exception as exc:
+                context.log(f"Erreur base de données pour la question {qid}: {exc}")
+                return
+            with counters_lock:
+                state["processed"] += 1
+                if updated:
+                    state["corrected"] = (
+                        min(total, state["corrected"] + 1)
+                        if total
+                        else state["corrected"] + 1
+                    )
+                    state["remaining"] = max(state["remaining"] - 1, 0)
+                current_processed = state["processed"]
+                current_corrected = state["corrected"]
+                current_remaining = state["remaining"]
+            if updated:
+                context.log(f"Question {qid} mise à jour.")
+            else:
+                context.log(f"Aucune modification pour la question {qid}.")
+            context.update_counters(
+                total=total,
+                corrected=current_corrected,
+                remaining=current_remaining,
+                processed=current_processed,
+            )
+            time.sleep(API_REQUEST_DELAY)
+
+        items_list: Iterable[Tuple[int, Dict[str, object]]] = enumerate(
+            questions_batch, start=1
+        )
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(_process, item) for item in items_list]
+            for future in as_completed(futures):
+                future.result()
+
+        context.log(f"{label} terminé.")
+
+    if action == "auto":
+        # ── Phase 1 : compléter les questions sans réponse ────────────────────
+        # Pour chaque question sans réponse :
+        #   • Si elle contient des images → Vision AI pour extraire les choix
+        #   • Sinon                       → AI texte classique (mode 'matching')
+        all_missing = db.get_questions_without_answers(cert_id)
+        with_images = []
+        without_images = []
+        for q in all_missing:
+            from edit_questions import extract_image_urls as _extract_urls, IMG_SRC_RE as _IMG_RE
+            urls = _extract_urls(q.get("text") or "")
+            if urls:
+                q["image_urls"] = urls
+                with_images.append(q)
+            else:
+                without_images.append(q)
+
+        context.log(
+            f"Phase 1 – {len(all_missing)} question(s) sans réponse "
+            f"({len(with_images)} avec images, {len(without_images)} sans image)."
+        )
+
+        # Questions avec images → Vision AI
+        _run_batch(
+            with_images,
+            "Phase 1a – Extraction des réponses par Vision AI",
+            lambda qs: extract_answers_from_image(provider_name, cert_name, qs),
+            lambda result: (
+                db.add_answers(
+                    result.get("question_id"),
+                    [{"value": a["value"], "isok": a.get("isok", 0)}
+                     for a in result.get("answers", [])],
+                )
+                or bool(result.get("answers"))
+            ),
+        )
+
+        # Questions sans image → AI texte (mode matching générique)
+        _run_batch(
+            without_images,
+            "Phase 1b – Génération des réponses par AI texte",
+            lambda qs: correct_questions(provider_name, cert_name, qs, "matching"),
+            lambda result: (
+                db.add_answers(result.get("question_id"), result.get("answers", []))
+                or bool(result.get("answers"))
+            ),
+        )
+
+        # ── Phase 2 : attribuer la bonne réponse ─────────────────────────────
+        questions_to_assign = db.get_questions_without_correct_answer(cert_id)
+        _run_batch(
+            questions_to_assign,
+            "Phase 2 – Attribution des bonnes réponses",
+            lambda qs: correct_questions(provider_name, cert_name, qs, "assign"),
+            lambda result: (
+                db.mark_answers_correct(
+                    result.get("question_id"), result.get("answer_ids", [])
+                )
+                or bool(result.get("answer_ids"))
+            ),
+        )
+
+        context.log("Correction automatique complète terminée.")
+        return
+
+    # ── Actions classiques (assign / drag / matching) ────────────────────────
     if action == "assign":
         questions = db.get_questions_without_correct_answer(cert_id)
 
@@ -3324,84 +3481,11 @@ def run_fix(context: JobContext, provider_id: int, cert_id: int, action: str) ->
 
         task_label = "Compléter les questions matching"
 
-    total_to_process = len(questions)
-    context.log(f"{total_to_process} question(s) à traiter.")
-    if total_to_process == 0:
-        context.log(f"{task_label} terminé : 0 question traitée.")
-        return
-
-    max_workers = _env_int(
-        "FIX_MAX_WORKERS",
-        _default_parallelism(maximum=4),
-        minimum=1,
-        maximum=32,
-    )
-    if max_workers > 1:
-        context.log(f"Exécution en parallèle avec {max_workers} worker(s).")
-
-    counters_lock = Lock()
-    state = {
-        "processed": 0,
-        "corrected": corrected,
-        "remaining": remaining,
-    }
-
-    def _process_question(item: Tuple[int, Dict[str, object]]) -> None:
-        index, question = item
-        context.wait_if_paused()
-        qid = question.get("id")
-        context.log(f"[{index}/{total_to_process}] Traitement de la question {qid}.")
-        try:
-            responses = correct_questions(provider_name, cert_name, [question], action)
-        except Exception as exc:  # pragma: no cover - propagated to Celery
-            context.log(f"Erreur lors de l'appel OpenAI pour la question {qid}: {exc}")
-            return
-
-        if not responses:
-            context.log(f"Aucune réponse obtenue pour la question {qid}.")
-            return
-
-        result = responses[0] or {}
-        try:
-            updated = _apply_result(result)
-        except Exception as exc:  # pragma: no cover - DB errors surfaced in logs
-            context.log(f"Erreur base de données pour la question {qid}: {exc}")
-            return
-
-        with counters_lock:
-            state["processed"] += 1
-            if updated:
-                state["corrected"] = (
-                    min(total, state["corrected"] + 1)
-                    if total
-                    else state["corrected"] + 1
-                )
-                state["remaining"] = max(state["remaining"] - 1, 0)
-            current_processed = state["processed"]
-            current_corrected = state["corrected"]
-            current_remaining = state["remaining"]
-
-        if updated:
-            context.log(f"Question {qid} mise à jour.")
-        else:
-            context.log(f"Aucune modification enregistrée pour la question {qid}.")
-
-        context.update_counters(
-            total=total,
-            corrected=current_corrected,
-            remaining=current_remaining,
-            processed=current_processed,
-        )
-        time.sleep(API_REQUEST_DELAY)
-
-    items: Iterable[Tuple[int, Dict[str, object]]] = enumerate(questions, start=1)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(_process_question, item) for item in items]
-        for future in as_completed(futures):
-            future.result()
-
-    context.log(
-        f"{task_label} terminé : {state['processed']} question(s) traitée(s)."
+    _run_batch(
+        questions,
+        task_label,
+        lambda qs: correct_questions(provider_name, cert_name, qs, action),
+        _apply_result,
     )
 
 
@@ -3584,7 +3668,7 @@ def mcp_fix_process():
     except (TypeError, ValueError):
         return jsonify({"status": "error", "message": "provider_id et cert_id requis"}), 400
 
-    if action not in {"assign", "drag", "matching"}:
+    if action not in {"assign", "drag", "matching", "auto"}:
         return jsonify({"status": "error", "message": "action invalide"}), 400
 
     job_id = uuid.uuid4().hex
