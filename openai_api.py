@@ -649,9 +649,12 @@ EXTRACT_ANSWERS_FROM_IMAGE_SCHEMA = {
             "items": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["value", "isok"],
+                # target est requis mais nullable : null pour les QCM,
+                # une chaîne pour les drag-n-drop et matching.
+                "required": ["value", "target", "isok"],
                 "properties": {
                     "value": {"type": "string"},
+                    "target": {"type": ["string", "null"]},
                     "isok": {"type": "integer"},
                 },
             },
@@ -3209,23 +3212,45 @@ def extract_answers_from_image(
 
     _img_tag_re = _re.compile(r"\s*<img[^>]*>\s*", _re.IGNORECASE)
 
+    # Nature codes: 1=QCM, 2=TrueFalse, 3=ShortAnswer, 4=Matching, 5=Drag-n-drop
+    _PAIRING_NATURES = {4, 5}
+
     results = []
     for q in questions:
         image_urls: list[str] = q.get('image_urls') or []
-        # Texte de la question sans les balises <img> pour alléger le prompt
+        nature = int(q.get('nature') or 1)
         clean_text = _img_tag_re.sub(' ', q.get('text') or '').strip()
 
-        prompt = (
-            f"You are completing exam questions for the {cert_name} certification from {provider_name}.\n"
-            f"The images attached to this message are part of the question. "
-            f"They may contain the answer choices (A, B, C, D…) or a diagram needed to answer.\n"
-            f"Extract ALL answer choices visible in the images and indicate which one(s) are correct.\n"
-            f"Return JSON only using this schema:\n"
-            f'{{"question_id": <int>, "answers": [{{"value": "...", "isok": 0_or_1}}, ...]}}\n\n'
-            f"Question ID: {q['id']}\n"
-            f"Question text: {clean_text}\n"
-            f"JSON:"
-        )
+        if nature in _PAIRING_NATURES:
+            kind = "drag-and-drop" if nature == 5 else "matching"
+            prompt = (
+                f"You are completing exam questions for the {cert_name} certification from {provider_name}.\n"
+                f"This is a {kind} question. The images may contain the items to pair.\n\n"
+                f"IMPORTANT RULES for {kind} questions:\n"
+                f"- Each answer is a CORRECT PAIR: 'value' is the item to drag / left-side element,\n"
+                f"  'target' is the drop zone / right-side element it must be matched with.\n"
+                f"- There are NO wrong answers. Every pair you return is a correct association.\n"
+                f"- Therefore set isok=1 for EVERY answer.\n"
+                f"- Do NOT invent wrong options; only return the complete set of correct pairs.\n\n"
+                f"Return JSON only:\n"
+                f'{{"question_id": <int>, "answers": [{{"value": "...", "target": "...", "isok": 1}}, ...]}}\n\n'
+                f"Question ID: {q['id']}\n"
+                f"Question text: {clean_text}\n"
+                f"JSON:"
+            )
+        else:
+            prompt = (
+                f"You are completing exam questions for the {cert_name} certification from {provider_name}.\n"
+                f"The images attached contain the answer choices for this question.\n"
+                f"Extract ALL answer choices visible in the images.\n"
+                f"Set isok=1 for correct answer(s), isok=0 for wrong ones.\n"
+                f"Set target=null for every answer (not a pairing question).\n\n"
+                f"Return JSON only:\n"
+                f'{{"question_id": <int>, "answers": [{{"value": "...", "target": null, "isok": 0_or_1}}, ...]}}\n\n'
+                f"Question ID: {q['id']}\n"
+                f"Question text: {clean_text}\n"
+                f"JSON:"
+            )
 
         payload = _build_vision_payload(
             prompt,
@@ -3281,14 +3306,26 @@ Text: {q['text']}
 Answers:\n{answers_desc}
 JSON:"""
         else:
-            prompt = f"""You are completing exam questions for the {cert_name} certification from {provider_name}.
-Provide answer choices for this {mode} question.
-Return JSON only using the following schema:
-{{"question_id": <int>, "answers": [{{"value": "...", "target": "...", "isok": 1}}, ...]}}
-
-Question ID: {q['id']}
-Text: {q['text']}
-JSON:"""
+            kind = "drag-and-drop" if mode == "drag" else "matching"
+            prompt = (
+                f"You are completing exam questions for the {cert_name} certification from {provider_name}.\n"
+                f"This is a {kind} question.\n\n"
+                f"FIELD SEMANTICS:\n"
+                f"- 'value' : the item to drag / the left-side element to match "
+                f"(e.g. a service name, a concept, a port number).\n"
+                f"- 'target': the correct drop zone / the right-side element it must be associated with "
+                f"(e.g. a description, a category, a protocol name).\n\n"
+                f"IMPORTANT RULES:\n"
+                f"- Every answer you return is a CORRECT PAIR (value → target).\n"
+                f"- There are NO wrong answer options in {kind} questions.\n"
+                f"- Therefore isok MUST be 1 for every single answer.\n"
+                f"- Return the COMPLETE set of pairs needed to answer the question.\n\n"
+                f"Return JSON only:\n"
+                f'{{"question_id": <int>, "answers": [{{"value": "...", "target": "...", "isok": 1}}, ...]}}\n\n'
+                f"Question ID: {q['id']}\n"
+                f"Question text: {q['text']}\n"
+                f"JSON:"
+            )
 
         schema = ASSIGN_ANSWERS_SCHEMA if mode == "assign" else COMPLETE_ANSWERS_SCHEMA
         schema_name = "assign_answers" if mode == "assign" else "complete_answers"

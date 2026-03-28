@@ -3413,17 +3413,39 @@ def run_fix(context: JobContext, provider_id: int, cert_id: int, action: str) ->
             lambda result: (
                 db.add_answers(
                     result.get("question_id"),
-                    [{"value": a["value"], "isok": a.get("isok", 0)}
-                     for a in result.get("answers", [])],
+                    [
+                        {k: v for k, v in {
+                            "value": a.get("value", ""),
+                            "target": a.get("target") or None,
+                            "isok": a.get("isok", 0),
+                        }.items() if not (k == "target" and v is None)}
+                        for a in result.get("answers", [])
+                    ],
                 )
                 or bool(result.get("answers"))
             ),
         )
 
-        # Questions sans image → AI texte (mode matching générique)
+        # Questions sans image → AI texte, routées selon la nature de la question.
+        # nature=5 (drag-n-drop) → mode 'drag'
+        # nature=4 (matching)    → mode 'matching'
+        # Les autres natures (QCM, TrueFalse…) sans image ni réponse sont ignorées :
+        # l'IA n'a pas assez de contexte pour inventer des choix de réponse sans support visuel.
+        drag_questions    = [q for q in without_images if int(q.get('nature') or 0) == 5]
+        matching_questions = [q for q in without_images if int(q.get('nature') or 0) == 4]
+
         _run_batch(
-            without_images,
-            "Phase 1b – Génération des réponses par AI texte",
+            drag_questions,
+            "Phase 1b – Génération des réponses drag-n-drop par AI texte",
+            lambda qs: correct_questions(provider_name, cert_name, qs, "drag"),
+            lambda result: (
+                db.add_answers(result.get("question_id"), result.get("answers", []))
+                or bool(result.get("answers"))
+            ),
+        )
+        _run_batch(
+            matching_questions,
+            "Phase 1b – Génération des réponses matching par AI texte",
             lambda qs: correct_questions(provider_name, cert_name, qs, "matching"),
             lambda result: (
                 db.add_answers(result.get("question_id"), result.get("answers", []))

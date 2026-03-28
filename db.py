@@ -1480,14 +1480,16 @@ def get_questions_without_correct_answer(cert_id):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     query = """
-        SELECT q.id AS question_id, q.text AS qtext, a.id AS answer_id, a.text AS atext
-        FROM questions q
-        JOIN modules m ON q.module = m.id
-        JOIN quest_ans qa ON qa.question = q.id
-        JOIN answers a ON qa.answer = a.id
-        WHERE m.course = %s
-          AND q.id NOT IN (SELECT question FROM quest_ans WHERE isok = 1)
-        ORDER BY q.id
+        SELECT q.id AS question_id, q.text AS qtext, q.nature AS nature,
+               a.id AS answer_id, a.text AS atext
+          FROM questions q
+          JOIN modules m ON q.module = m.id
+          JOIN quest_ans qa ON qa.question = q.id
+          JOIN answers a ON qa.answer = a.id
+         WHERE m.course = %s
+           AND q.id NOT IN (SELECT question FROM quest_ans WHERE isok = 1)
+           AND q.nature NOT IN (4, 5)
+         ORDER BY q.id
     """
     cursor.execute(query, (cert_id,))
     rows = cursor.fetchall()
@@ -1496,7 +1498,12 @@ def get_questions_without_correct_answer(cert_id):
     for row in rows:
         qid = row['question_id']
         if qid not in questions:
-            questions[qid] = {"id": qid, "text": row['qtext'], "answers": []}
+            questions[qid] = {
+                "id": qid,
+                "text": row['qtext'],
+                "nature": row['nature'],
+                "answers": [],
+            }
         try:
             ans_text = json.loads(row['atext']).get('value', '')
         except Exception:
