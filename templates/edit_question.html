@@ -331,7 +331,25 @@
         </label>
         <span class="status" id="searchStatus">Saisissez au moins un mot-clé.</span>
       </div>
-    </section>
+
+      <!-- Barre d'action contextuelle : visible selon le mode actif -->
+      <div id="modeActionBar" class="hidden" style="margin-top:0.9rem; padding:0.8rem 1rem; background:rgba(71,245,192,0.05); border:1px solid rgba(71,245,192,0.18); border-radius:14px; display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+        <button type="button" id="btnVerifyAndDelete" class="hidden" style="padding:0.55rem 1.1rem; border-radius:999px; border:1px solid rgba(239,68,68,0.45); background:rgba(239,68,68,0.12); color:#fca5a5; font-weight:600; cursor:pointer; white-space:nowrap;">
+          Vérifier et supprimer les doublons
+        </button>
+        <button type="button" id="btnAutoCorrect" class="hidden" style="padding:0.55rem 1.1rem; border-radius:999px; border:1px solid rgba(71,245,192,0.45); background:rgba(71,245,192,0.12); color:#47f5c0; font-weight:600; cursor:pointer; white-space:nowrap;">
+          Corriger tout automatiquement
+        </button>
+        <div id="autoCorrectProgress" class="hidden" style="flex:1; min-width:200px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.3rem;">
+            <span id="autoCorrectStatusText" style="font-size:0.88rem; color:var(--muted);"></span>
+            <span id="autoCorrectPct" style="font-size:0.88rem; color:var(--muted);"></span>
+          </div>
+          <div style="background:rgba(8,12,24,0.72); border-radius:999px; overflow:hidden; height:8px; border:1px solid rgba(148,163,184,0.18);">
+            <div id="autoCorrectBar" style="height:100%; width:0%; background:linear-gradient(90deg,#47f5c0,#7cf7ff); transition:width 0.45s ease;"></div>
+          </div>
+        </div>
+      </div>
 
     <section class="panel">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.6rem;">
@@ -472,6 +490,13 @@
     const searchBtn = document.getElementById('searchBtn');
     const verifyDuplicatesBtn = document.getElementById('verifyDuplicates');
     const autoDeleteDuplicatesBtn = document.getElementById('autoDeleteDuplicates');
+    const modeActionBar = document.getElementById('modeActionBar');
+    const btnVerifyAndDelete = document.getElementById('btnVerifyAndDelete');
+    const btnAutoCorrect = document.getElementById('btnAutoCorrect');
+    const autoCorrectProgress = document.getElementById('autoCorrectProgress');
+    const autoCorrectBar = document.getElementById('autoCorrectBar');
+    const autoCorrectStatusText = document.getElementById('autoCorrectStatusText');
+    const autoCorrectPct = document.getElementById('autoCorrectPct');
     const bulkActions = document.getElementById('bulkActions');
     const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
     const bulkSelectionStatus = document.getElementById('bulkSelectionStatus');
@@ -498,6 +523,7 @@
     let isDuplicateMode = false;
     let isDuplicateVerifyMode = false;
     let verifiedGroups = [];
+    let autoCorrectPoller = null;
     let correctionQuestions = [];
     let correctionIndex = -1;
     let duplicateQuestions = [];
@@ -808,6 +834,89 @@
       }
     }
 
+    async function verifyAndDeleteAll() {
+      const certId = certificationSelect.value;
+      if (!certId) {
+        searchStatus.textContent = 'Sélectionnez une certification.';
+        return;
+      }
+      setButtonLoading(btnVerifyAndDelete, true);
+      searchStatus.textContent = 'Vérification des doublons exacts…';
+      try {
+        await verifyExactDuplicates();
+      } finally {
+        setButtonLoading(btnVerifyAndDelete, false);
+      }
+      if (!verifiedGroups.length) return;
+      await autoDeleteDuplicates();
+    }
+
+    async function autoCorrectAll() {
+      const certId = certificationSelect.value;
+      const providerId = providerSelect.value;
+      if (!certId || !providerId) {
+        searchStatus.textContent = 'Sélectionnez un provider et une certification.';
+        return;
+      }
+      if (autoCorrectPoller) return; // déjà en cours
+      setButtonLoading(btnAutoCorrect, true);
+      autoCorrectProgress.classList.remove('hidden');
+      autoCorrectBar.style.width = '0%';
+      autoCorrectStatusText.textContent = 'Démarrage…';
+      autoCorrectPct.textContent = '';
+      try {
+        const formData = new FormData();
+        formData.append('provider_id', providerId);
+        formData.append('cert_id', certId);
+        formData.append('action', 'auto');
+        const res = await fetch('/fix/process', { method: 'POST', body: formData });
+        if (!res.ok) {
+          autoCorrectStatusText.textContent = 'Erreur au démarrage.';
+          return;
+        }
+        const data = await res.json();
+        const jobId = data.job_id;
+        if (!jobId) {
+          autoCorrectStatusText.textContent = data.error || 'Erreur inconnue.';
+          return;
+        }
+        autoCorrectStatusText.textContent = 'Traitement en cours…';
+        let lastLogLen = 0;
+        autoCorrectPoller = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`/fix/status/${jobId}`);
+            if (!statusRes.ok) return;
+            const s = await statusRes.json();
+            const counters = s.counters || {};
+            const total = Number(counters.total) || 0;
+            const corrected = Number(counters.corrected) || 0;
+            const pct = total > 0 ? Math.round((corrected / total) * 100) : 0;
+            autoCorrectBar.style.width = pct + '%';
+            autoCorrectPct.textContent = pct + '%';
+            if (Array.isArray(s.log) && s.log.length > lastLogLen) {
+              autoCorrectStatusText.textContent = s.log[s.log.length - 1];
+              lastLogLen = s.log.length;
+            }
+            if (s.status === 'completed' || s.status === 'failed') {
+              clearInterval(autoCorrectPoller);
+              autoCorrectPoller = null;
+              setButtonLoading(btnAutoCorrect, false);
+              autoCorrectBar.style.width = s.status === 'completed' ? '100%' : autoCorrectBar.style.width;
+              autoCorrectStatusText.textContent = s.status === 'completed'
+                ? `Terminé — ${corrected} question(s) corrigée(s).`
+                : 'Erreur pendant le traitement.';
+              autoCorrectPct.textContent = s.status === 'completed' ? '100%' : '';
+              loadCorrectionList();
+            }
+          } catch (_) {}
+        }, 1500);
+      } catch (err) {
+        autoCorrectStatusText.textContent = 'Erreur : ' + err.message;
+        setButtonLoading(btnAutoCorrect, false);
+        autoCorrectPoller = null;
+      }
+    }
+
     async function autoDeleteDuplicates() {
       if (!verifiedGroups.length) return;
       const idsToDelete = [];
@@ -980,6 +1089,13 @@
       duplicateModeToggle.disabled = enabled;
       searchBtn.disabled = enabled || isAddMode;
       searchText.disabled = enabled || isAddMode;
+      modeActionBar.classList.toggle('hidden', !enabled);
+      btnAutoCorrect.classList.toggle('hidden', !enabled);
+      btnVerifyAndDelete.classList.add('hidden');
+      if (!enabled) {
+        autoCorrectProgress.classList.add('hidden');
+        if (autoCorrectPoller) { clearInterval(autoCorrectPoller); autoCorrectPoller = null; }
+      }
       if (enabled) {
         searchText.value = '';
         setUploadStatus('');
@@ -1004,6 +1120,10 @@
       searchText.disabled = enabled || isAddMode;
       verifyDuplicatesBtn.classList.toggle('hidden', !enabled);
       autoDeleteDuplicatesBtn.classList.add('hidden');
+      modeActionBar.classList.toggle('hidden', !enabled);
+      btnVerifyAndDelete.classList.toggle('hidden', !enabled);
+      btnAutoCorrect.classList.add('hidden');
+      autoCorrectProgress.classList.add('hidden');
       if (enabled) {
         searchText.value = '';
         loadDuplicateList();
@@ -1250,6 +1370,8 @@
     });
     verifyDuplicatesBtn.addEventListener('click', verifyExactDuplicates);
     autoDeleteDuplicatesBtn.addEventListener('click', autoDeleteDuplicates);
+    btnVerifyAndDelete.addEventListener('click', verifyAndDeleteAll);
+    btnAutoCorrect.addEventListener('click', autoCorrectAll);
     moduleSelect?.addEventListener('change', () => {
       saveStatus.textContent = '';
     });
