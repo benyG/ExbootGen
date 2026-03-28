@@ -3295,17 +3295,45 @@ def extract_answers_from_image(
         nature = int(q.get('nature') or 1)
         clean_text = _img_tag_re.sub(' ', q.get('text') or '').strip()
 
-        if nature in _PAIRING_NATURES:
-            kind = "drag-and-drop" if nature == 5 else "matching"
+        if nature == 5:
             prompt = (
                 f"You are completing exam questions for the {cert_name} certification from {provider_name}.\n"
-                f"This is a {kind} question. The images may contain the items to pair.\n\n"
-                f"IMPORTANT RULES for {kind} questions:\n"
-                f"- Each answer is a CORRECT PAIR: 'value' is the item to drag / left-side element,\n"
-                f"  'target' is the drop zone / right-side element it must be matched with.\n"
-                f"- There are NO wrong answers. Every pair you return is a correct association.\n"
+                f"This is a drag-and-drop question. The images may contain the items to pair.\n\n"
+                f"FIELD SEMANTICS:\n"
+                f"- 'value' : the draggable item (left-side element, e.g. a service name or concept).\n"
+                f"- 'target': the drop zone it must be placed into (right-side element, e.g. a category or slot).\n\n"
+                f"IMPORTANT RULES:\n"
+                f"- Every answer you return is a CORRECT PAIR (value → target).\n"
+                f"- There are NO wrong answers in drag-and-drop questions.\n"
                 f"- Therefore set isok=1 for EVERY answer.\n"
-                f"- Do NOT invent wrong options; only return the complete set of correct pairs.\n\n"
+                f"- Return the COMPLETE set of pairs needed to answer the question.\n\n"
+                f"Return JSON only:\n"
+                f'{{"question_id": <int>, "answers": [{{"value": "...", "target": "...", "isok": 1}}, ...]}}\n\n'
+                f"Question ID: {q['id']}\n"
+                f"Question text: {clean_text}\n"
+                f"JSON:"
+            )
+        elif nature == 4:
+            prompt = (
+                f"You are completing exam questions for the {cert_name} certification from {provider_name}.\n"
+                f"This is a matching question. The images may contain the items to pair.\n\n"
+                f"This question may appear in ONE of two formats — detect which one applies:\n\n"
+                f"FORMAT A — Yes/No matrix (common in Microsoft certifications):\n"
+                f"  The image shows a table titled 'Answer Area' with statements on the left and\n"
+                f"  'Yes' / 'No' columns on the right. Each row has a radio button under Yes or No.\n"
+                f"  → value = the statement text (left column)\n"
+                f"  → target = 'Yes' or 'No' (whichever is correct for that statement)\n"
+                f"  If the radio buttons appear empty or unclear, use your knowledge of {cert_name}\n"
+                f"  ({provider_name}) to determine whether each statement is correct (Yes) or not (No).\n\n"
+                f"FORMAT B — Classic left/right matching:\n"
+                f"  Items on the left must be matched to items on the right.\n"
+                f"  → value = left-side element (e.g. service name, concept, port)\n"
+                f"  → target = right-side element it maps to (e.g. description, category, protocol)\n\n"
+                f"RULES FOR BOTH FORMATS:\n"
+                f"- Every answer you return is a CORRECT PAIR (value → target).\n"
+                f"- There are NO wrong answers in matching questions.\n"
+                f"- Therefore set isok=1 for EVERY answer.\n"
+                f"- Return the COMPLETE set of pairs.\n\n"
                 f"Return JSON only:\n"
                 f'{{"question_id": <int>, "answers": [{{"value": "...", "target": "...", "isok": 1}}, ...]}}\n\n'
                 f"Question ID: {q['id']}\n"
@@ -3379,19 +3407,43 @@ Question ID: {q['id']}
 Text: {q['text']}
 Answers:\n{answers_desc}
 JSON:"""
-        else:
-            kind = "drag-and-drop" if mode == "drag" else "matching"
+        elif mode == "drag":
             prompt = (
                 f"You are completing exam questions for the {cert_name} certification from {provider_name}.\n"
-                f"This is a {kind} question.\n\n"
+                f"This is a drag-and-drop question.\n\n"
                 f"FIELD SEMANTICS:\n"
-                f"- 'value' : the item to drag / the left-side element to match "
-                f"(e.g. a service name, a concept, a port number).\n"
-                f"- 'target': the correct drop zone / the right-side element it must be associated with "
-                f"(e.g. a description, a category, a protocol name).\n\n"
+                f"- 'value' : the draggable item (left-side element, e.g. a service name or concept).\n"
+                f"- 'target': the drop zone it must be placed into (right-side element, e.g. a category or slot).\n\n"
                 f"IMPORTANT RULES:\n"
                 f"- Every answer you return is a CORRECT PAIR (value → target).\n"
-                f"- There are NO wrong answer options in {kind} questions.\n"
+                f"- There are NO wrong answers in drag-and-drop questions.\n"
+                f"- Therefore isok MUST be 1 for every single answer.\n"
+                f"- Return the COMPLETE set of pairs needed to answer the question.\n\n"
+                f"Return JSON only:\n"
+                f'{{"question_id": <int>, "answers": [{{"value": "...", "target": "...", "isok": 1}}, ...]}}\n\n'
+                f"Question ID: {q['id']}\n"
+                f"Question text: {q['text']}\n"
+                f"JSON:"
+            )
+        else:  # mode == "matching"
+            prompt = (
+                f"You are completing exam questions for the {cert_name} certification from {provider_name}.\n"
+                f"This is a matching question.\n\n"
+                f"This question may appear in ONE of two formats — detect which one applies:\n\n"
+                f"FORMAT A — Yes/No matrix (common in Microsoft certifications):\n"
+                f"  The question describes statements that must each be answered Yes or No.\n"
+                f"  Look for an 'Answer Area' table or a list of statements with Yes/No choices.\n"
+                f"  → value = the statement text\n"
+                f"  → target = 'Yes' or 'No' (the correct answer for that statement)\n"
+                f"  Use your knowledge of {cert_name} ({provider_name}) to determine the correct\n"
+                f"  Yes/No answer for each statement.\n\n"
+                f"FORMAT B — Classic left/right matching:\n"
+                f"  Items on the left must be matched to items on the right.\n"
+                f"  → value = left-side element (e.g. service name, concept, port)\n"
+                f"  → target = right-side element it maps to (e.g. description, category, protocol)\n\n"
+                f"RULES FOR BOTH FORMATS:\n"
+                f"- Every answer you return is a CORRECT PAIR (value → target).\n"
+                f"- There are NO wrong answers in matching questions.\n"
                 f"- Therefore isok MUST be 1 for every single answer.\n"
                 f"- Return the COMPLETE set of pairs needed to answer the question.\n\n"
                 f"Return JSON only:\n"
