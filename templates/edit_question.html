@@ -338,6 +338,7 @@
         <h2 style="margin: 0;">Résultats</h2>
         <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
           <button type="button" class="verify-btn hidden" id="verifyDuplicates">Verify</button>
+          <button type="button" class="verify-btn hidden" id="autoDeleteDuplicates" style="background:rgba(239,68,68,0.15);border-color:rgba(239,68,68,0.4);color:#fca5a5;">Supprimer les doublons</button>
           <span class="status" id="resultsCount">Aucun résultat pour le moment.</span>
         </div>
       </div>
@@ -470,6 +471,7 @@
     const searchText = document.getElementById('searchText');
     const searchBtn = document.getElementById('searchBtn');
     const verifyDuplicatesBtn = document.getElementById('verifyDuplicates');
+    const autoDeleteDuplicatesBtn = document.getElementById('autoDeleteDuplicates');
     const bulkActions = document.getElementById('bulkActions');
     const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
     const bulkSelectionStatus = document.getElementById('bulkSelectionStatus');
@@ -495,6 +497,7 @@
     let isCorrectionMode = false;
     let isDuplicateMode = false;
     let isDuplicateVerifyMode = false;
+    let verifiedGroups = [];
     let correctionQuestions = [];
     let correctionIndex = -1;
     let duplicateQuestions = [];
@@ -770,29 +773,71 @@
         }
         const data = await res.json();
         const groups = data.groups || [];
+        verifiedGroups = groups;
+        const toDeleteCount = groups.reduce((sum, g) => sum + Math.max((g.items || []).length - 1, 0), 0);
         resultsCount.textContent = `${data.total || 0} question(s) en duplicata exact`;
         searchStatus.textContent = groups.length
-          ? 'Duplicatas exacts regroupés. Cliquez sur une carte pour la traiter.'
+          ? `Duplicatas exacts regroupés. ${toDeleteCount} copie(s) supprimable(s).`
           : 'Aucun duplicata exact détecté pour cette certification.';
+        autoDeleteDuplicatesBtn.classList.toggle('hidden', !groups.length);
+        if (toDeleteCount > 0) {
+          autoDeleteDuplicatesBtn.textContent = `Supprimer ${toDeleteCount} doublon(s)`;
+        }
         if (!groups.length) {
           resultsContainer.innerHTML = '<div class="status">Aucun duplicata exact détecté.</div>';
           return;
         }
-        refreshResultsMarkup(groups.map(group => `
+        refreshResultsMarkup(groups.map(group => {
+          const sorted = [...(group.items || [])].sort((a, b) => a.id - b.id);
+          return `
           <div class="duplicate-group" data-group="${group.group_id}">
             <div class="duplicate-group-header">
               <span class="duplicate-group-title">Duplicata ${group.group_id}</span>
-              <span class="duplicate-group-count">${group.count} question(s)</span>
+              <span class="duplicate-group-count">${group.count} question(s) — conserve #${sorted[0]?.id}</span>
             </div>
             <div class="duplicate-group-grid">
-              ${(group.items || []).map(item => getResultCardHtml(item, {
+              ${sorted.map((item, idx) => getResultCardHtml(item, {
                 exactGroupId: group.group_id,
+                metaLine: idx === 0 ? '✓ Conservée' : '✗ Sera supprimée',
               })).join('')}
             </div>
-          </div>
-        `).join(''));
+          </div>`;
+        }).join(''));
       } finally {
         setButtonLoading(verifyDuplicatesBtn, false);
+      }
+    }
+
+    async function autoDeleteDuplicates() {
+      if (!verifiedGroups.length) return;
+      const idsToDelete = [];
+      for (const group of verifiedGroups) {
+        const sorted = [...(group.items || [])].sort((a, b) => a.id - b.id);
+        for (let i = 1; i < sorted.length; i++) {
+          idsToDelete.push(sorted[i].id);
+        }
+      }
+      if (!idsToDelete.length) return;
+      if (!confirm(`Supprimer définitivement ${idsToDelete.length} question(s) en double ?\nUne seule copie par groupe sera conservée (la plus ancienne).`)) return;
+      setButtonLoading(autoDeleteDuplicatesBtn, true);
+      try {
+        const res = await fetch('/edit-question/api/questions/bulk-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question_ids: idsToDelete }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          searchStatus.textContent = err.error || 'Erreur lors de la suppression.';
+          return;
+        }
+        const result = await res.json();
+        searchStatus.textContent = `${result.deleted_count || 0} doublon(s) supprimé(s). Actualisation…`;
+        autoDeleteDuplicatesBtn.classList.add('hidden');
+        verifiedGroups = [];
+        await verifyExactDuplicates();
+      } finally {
+        setButtonLoading(autoDeleteDuplicatesBtn, false);
       }
     }
 
@@ -958,11 +1003,13 @@
       searchBtn.disabled = enabled || isAddMode;
       searchText.disabled = enabled || isAddMode;
       verifyDuplicatesBtn.classList.toggle('hidden', !enabled);
+      autoDeleteDuplicatesBtn.classList.add('hidden');
       if (enabled) {
         searchText.value = '';
         loadDuplicateList();
       } else {
         duplicateQuestions = [];
+        verifiedGroups = [];
         resultsCount.textContent = 'Aucun résultat pour le moment.';
         searchStatus.textContent = 'Saisissez au moins un mot-clé.';
         resetResultsLayout();
@@ -1202,6 +1249,7 @@
       setDuplicateMode(event.target.checked);
     });
     verifyDuplicatesBtn.addEventListener('click', verifyExactDuplicates);
+    autoDeleteDuplicatesBtn.addEventListener('click', autoDeleteDuplicates);
     moduleSelect?.addEventListener('change', () => {
       saveStatus.textContent = '';
     });
