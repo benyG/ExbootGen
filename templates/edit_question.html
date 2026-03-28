@@ -814,17 +814,19 @@
           return;
         }
         refreshResultsMarkup(groups.map(group => {
-          const sorted = [...(group.items || [])].sort((a, b) => a.id - b.id);
+          const sorted = sortDuplicateGroup(group.items || []);
+          const kept = sorted[0];
+          const keptReason = kept?.has_image ? 'avec image' : 'plus ancienne';
           return `
           <div class="duplicate-group" data-group="${group.group_id}">
             <div class="duplicate-group-header">
               <span class="duplicate-group-title">Duplicata ${group.group_id}</span>
-              <span class="duplicate-group-count">${group.count} question(s) — conserve #${sorted[0]?.id}</span>
+              <span class="duplicate-group-count">${group.count} question(s) — conserve #${kept?.id} (${keptReason})</span>
             </div>
             <div class="duplicate-group-grid">
               ${sorted.map((item, idx) => getResultCardHtml(item, {
                 exactGroupId: group.group_id,
-                metaLine: idx === 0 ? '✓ Conservée' : '✗ Sera supprimée',
+                metaLine: duplicateItemLabel(item, idx),
               })).join('')}
             </div>
           </div>`;
@@ -832,6 +834,27 @@
       } finally {
         setButtonLoading(verifyDuplicatesBtn, false);
       }
+    }
+
+    /**
+     * Trie les items d'un groupe de doublons pour déterminer laquelle conserver.
+     * Règle : image > pas d'image, puis à égalité l'ID le plus bas (le plus ancien).
+     * Le premier élément du tableau retourné est celui qui sera conservé.
+     */
+    function sortDuplicateGroup(items) {
+      return [...items].sort((a, b) => {
+        const aImg = a.has_image ? 0 : 1;
+        const bImg = b.has_image ? 0 : 1;
+        if (aImg !== bImg) return aImg - bImg;   // avec image d'abord
+        return a.id - b.id;                       // puis plus ancien (ID bas)
+      });
+    }
+
+    function duplicateItemLabel(item, idx) {
+      if (idx === 0) {
+        return item.has_image ? '✓ Conservée (avec image)' : '✓ Conservée (la plus ancienne)';
+      }
+      return item.has_image ? '✗ Supprimée (doublon avec image)' : '✗ Supprimée (sans image)';
     }
 
     async function verifyAndDeleteAll() {
@@ -921,13 +944,13 @@
       if (!verifiedGroups.length) return;
       const idsToDelete = [];
       for (const group of verifiedGroups) {
-        const sorted = [...(group.items || [])].sort((a, b) => a.id - b.id);
+        const sorted = sortDuplicateGroup(group.items || []);
         for (let i = 1; i < sorted.length; i++) {
           idsToDelete.push(sorted[i].id);
         }
       }
       if (!idsToDelete.length) return;
-      if (!confirm(`Supprimer définitivement ${idsToDelete.length} question(s) en double ?\nUne seule copie par groupe sera conservée (la plus ancienne).`)) return;
+      if (!confirm(`Supprimer définitivement ${idsToDelete.length} question(s) en double ?\nPour chaque groupe : la copie avec image est conservée, sinon la plus ancienne.`)) return;
       setButtonLoading(autoDeleteDuplicatesBtn, true);
       try {
         const res = await fetch('/edit-question/api/questions/bulk-delete', {
