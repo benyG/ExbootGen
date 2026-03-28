@@ -603,6 +603,16 @@ ANALYZE_CERTIF_RESPONSE_SCHEMA = {
     },
 }
 
+QUESTION_VALIDITY_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["question_id", "is_valid"],
+    "properties": {
+        "question_id": {"type": "integer"},
+        "is_valid":    {"type": "boolean"},
+    },
+}
+
 ASSIGN_ANSWERS_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -3156,6 +3166,70 @@ Certification: {certification}
     if isinstance(decoded, dict):
         return decoded
     return {}
+
+def detect_invalid_questions(
+    provider_name: str,
+    cert_name: str,
+    questions: list,
+) -> list:
+    """Détecte les questions absurdes ou incomplètes qui doivent être supprimées.
+
+    Une question est marquée invalide (``is_valid=False``) si elle fait
+    référence à un exhibit / diagramme / scénario / tableau qui n'est pas
+    présent dans son texte et sans image attachée, rendant la question
+    incompréhensible ou inévaluable.
+
+    Exemples typiques :
+    - "With the following exhibit [Nothing] what is the correct answer?"
+    - "Refer to the diagram below. Which option is correct?"  (sans image)
+    - "Based on the scenario, choose the best action."        (sans contexte)
+
+    Parameters
+    ----------
+    provider_name, cert_name : str
+        Contexte de la certification.
+    questions : list
+        Dicts avec au minimum ``id``, ``text`` et optionnellement
+        ``has_image`` (bool).
+
+    Returns
+    -------
+    list
+        Liste de dicts ``{"question_id": int, "is_valid": bool}``.
+    """
+    results = []
+    for q in questions:
+        has_image = bool(q.get('has_image') or q.get('image_urls'))
+        prompt = (
+            f"You are auditing exam questions for the {cert_name} certification "
+            f"from {provider_name}.\n\n"
+            f"Determine whether this question is MEANINGFUL and ANSWERABLE as-is.\n\n"
+            f"Mark it INVALID (is_valid: false) if it:\n"
+            f"- References an exhibit, diagram, table, screenshot, scenario, or figure "
+            f"that is NOT provided in the question text and no image is attached.\n"
+            f"- Contains placeholder text such as [Nothing], [N/A], [image], [exhibit], "
+            f"[voir ci-dessous], etc.\n"
+            f"- Is so abstract without the missing context that it cannot be answered "
+            f"(e.g. 'With the following exhibit, what is the best option?' when no "
+            f"exhibit is present).\n\n"
+            f"Mark it VALID (is_valid: true) if it:\n"
+            f"- Can be answered based on its text alone, OR\n"
+            f"- References an image/exhibit that IS present (has_image=true below).\n\n"
+            f"Question ID : {q['id']}\n"
+            f"Has image   : {str(has_image).lower()}\n"
+            f"Question text (HTML):\n{q.get('text') or ''}\n\n"
+            f"JSON:"
+        )
+        payload = _build_response_payload(
+            prompt,
+            text_format=_json_schema_format(QUESTION_VALIDITY_SCHEMA, "question_validity"),
+        )
+        response = _post_with_retry(payload)
+        content = _extract_response_text(response.json())
+        decoded = clean_and_decode_json(content)
+        results.append(decoded)
+    return results
+
 
 def _build_vision_payload(
     prompt: str,

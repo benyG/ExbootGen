@@ -1597,6 +1597,36 @@ def count_questions_without_answers_by_nature(cert_id, nature_code):
     return int(total)
 
 
+def delete_questions_by_ids(question_ids: list) -> int:
+    """Supprime les questions et leurs liaisons de réponses.
+
+    Utilisé par le job de correction automatique pour purger les questions
+    détectées comme absurdes (référence à un exhibit absent, placeholder…).
+    Retourne le nombre de questions effectivement supprimées.
+    """
+    if not question_ids:
+        return 0
+    ids = [int(qid) for qid in question_ids]
+    placeholders = ','.join(['%s'] * len(ids))
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            f"DELETE FROM quest_ans WHERE question IN ({placeholders})",
+            tuple(ids),
+        )
+        cursor.execute(
+            f"DELETE FROM questions WHERE id IN ({placeholders})",
+            tuple(ids),
+        )
+        deleted = cursor.rowcount
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+    return deleted
+
+
 def get_questions_without_answers(cert_id):
     """Retourne toutes les questions d'une certification sans aucune réponse.
 
