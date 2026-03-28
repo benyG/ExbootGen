@@ -1,7 +1,10 @@
 from flask import Blueprint, render_template, jsonify, request, g
+import io
 import json
+import logging
 import mimetypes
 import re
+import urllib.request
 from urllib.parse import urlparse, unquote
 import mysql.connector
 from google.cloud import storage
@@ -9,7 +12,19 @@ from werkzeug.utils import secure_filename
 from uuid import uuid4
 from pathlib import Path
 
+try:
+    import imagehash
+    from PIL import Image as _PILImage
+    _PHASH_AVAILABLE = True
+except ImportError:  # pragma: no cover - optional dependency
+    _PHASH_AVAILABLE = False
+
 from config import DB_CONFIG, GCS_BUCKET_NAME, GCS_UPLOAD_FOLDER
+
+logger = logging.getLogger(__name__)
+
+# Cache des hashes perceptuels pour éviter de re-télécharger les images
+_phash_cache: dict[str, str] = {}
 
 edit_question_bp = Blueprint('edit_question', __name__)
 
@@ -107,6 +122,50 @@ def extract_image_urls(text: str) -> list[str]:
     if not text:
         return []
     return [match.group(1) for match in IMG_SRC_RE.finditer(text)]
+
+
+def _fetch_phash(url: str) -> str | None:
+    """Télécharge une image et retourne son hash perceptuel (pHash).
+
+    Retourne None si l'image est inaccessible ou si la librairie imagehash
+    n'est pas installée. Le résultat est mis en cache pour éviter de
+    re-télécharger la même URL lors d'une vérification.
+    """
+    if not _PHASH_AVAILABLE:
+        return None
+    if url in _phash_cache:
+        return _phash_cache[url]
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "ExbootGen/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = resp.read()
+        img = _PILImage.open(io.BytesIO(data)).convert("RGB")
+        h = str(imagehash.phash(img))
+        _phash_cache[url] = h
+        return h
+    except Exception as exc:
+        logger.debug("Impossible de calculer le pHash pour %s : %s", url, exc)
+        return None
+
+
+def _question_image_signature(text: str) -> str:
+    """Retourne une signature canonique des images d'une question.
+
+    Télécharge chaque image référencée dans le texte HTML, calcule son hash
+    perceptuel et les trie pour former une clé reproductible. Deux images
+    visuellement identiques (même contenu, URL différentes) produiront la
+    même signature. Retourne une chaîne vide si la question ne contient
+    aucune image ou si imagehash n'est pas disponible.
+    """
+    urls = extract_image_urls(text)
+    if not urls:
+        return ''
+    hashes = sorted(h for h in (_fetch_phash(u) for u in urls) if h is not None)
+    # Si aucun hash n'a pu être calculé on retombe sur les URLs brutes triées
+    # pour au moins différencier les questions (comportement dégradé).
+    if not hashes:
+        return '|'.join(sorted(urls))
+    return '|'.join(hashes)
 
 
 def question_has_image(text: str) -> bool:
@@ -433,10 +492,17 @@ def api_duplicate_verify():
     for items in grouped_by_text.values():
         if len(items) < 2:
             continue
+        # Clé composite : signature des réponses + signature visuelle des images.
+        # Deux questions dont le texte est identique mais dont les images sont
+        # visuellement différentes (même si l'URL diffère) ne sont PAS des doublons.
         signature_map: dict[str, list[dict]] = {}
         for item in items:
-            signature = build_answer_signature(item.get('answers', []))
-            signature_map.setdefault(signature, []).append(item)
+            answer_sig = build_answer_signature(item.get('answers', []))
+            image_sig = _question_image_signature(item.get('text') or '')
+            composite_key = json.dumps(
+                {'a': answer_sig, 'i': image_sig}, ensure_ascii=False, sort_keys=True
+            )
+            signature_map.setdefault(composite_key, []).append(item)
         for signature_items in signature_map.values():
             if len(signature_items) < 2:
                 continue
