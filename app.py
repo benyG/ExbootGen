@@ -3350,28 +3350,31 @@ def run_fix(context: JobContext, provider_id: int, cert_id: int, action: str) ->
             except Exception as exc:
                 context.log(f"Erreur base de données pour la question {qid}: {exc}")
                 return
-            with counters_lock:
-                state["processed"] += 1
+            try:
+                with counters_lock:
+                    state["processed"] += 1
+                    if updated:
+                        state["corrected"] = (
+                            min(total, state["corrected"] + 1)
+                            if total
+                            else state["corrected"] + 1
+                        )
+                        state["remaining"] = max(state["remaining"] - 1, 0)
+                    current_processed = state["processed"]
+                    current_corrected = state["corrected"]
+                    current_remaining = state["remaining"]
                 if updated:
-                    state["corrected"] = (
-                        min(total, state["corrected"] + 1)
-                        if total
-                        else state["corrected"] + 1
-                    )
-                    state["remaining"] = max(state["remaining"] - 1, 0)
-                current_processed = state["processed"]
-                current_corrected = state["corrected"]
-                current_remaining = state["remaining"]
-            if updated:
-                context.log(f"Question {qid} mise à jour.")
-            else:
-                context.log(f"Aucune modification pour la question {qid}.")
-            context.update_counters(
-                total=total,
-                corrected=current_corrected,
-                remaining=current_remaining,
-                processed=current_processed,
-            )
+                    context.log(f"Question {qid} mise à jour.")
+                else:
+                    context.log(f"Aucune modification pour la question {qid}.")
+                context.update_counters(
+                    total=total,
+                    corrected=current_corrected,
+                    remaining=current_remaining,
+                    processed=current_processed,
+                )
+            except Exception as exc:
+                context.log(f"Erreur de compteurs pour la question {qid}: {exc}")
             time.sleep(API_REQUEST_DELAY)
 
         items_list: Iterable[Tuple[int, Dict[str, object]]] = enumerate(
@@ -3380,7 +3383,10 @@ def run_fix(context: JobContext, provider_id: int, cert_id: int, action: str) ->
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(_process, item) for item in items_list]
             for future in as_completed(futures):
-                future.result()
+                try:
+                    future.result()
+                except Exception as exc:
+                    context.log(f"Erreur inattendue dans un thread de traitement: {exc}")
 
         context.log(f"{label} terminé.")
 

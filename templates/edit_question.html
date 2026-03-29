@@ -927,7 +927,7 @@
               autoCorrectBar.style.width = s.status === 'completed' ? '100%' : autoCorrectBar.style.width;
               autoCorrectStatusText.textContent = s.status === 'completed'
                 ? `Terminé — ${corrected} question(s) corrigée(s).`
-                : 'Erreur pendant le traitement.';
+                : ('Erreur : ' + (s.error || (Array.isArray(s.log) && s.log.length ? s.log[s.log.length - 1] : '') || 'Erreur pendant le traitement.'));
               autoCorrectPct.textContent = s.status === 'completed' ? '100%' : '';
               loadCorrectionList();
             }
