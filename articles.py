@@ -121,7 +121,7 @@ CAROUSEL_FRAME_X_PADDING_RATIO = 0.07
 CAROUSEL_HEADLINE_Y_START_RATIO = 0.23
 CAROUSEL_HEADLINE_Y_END_RATIO = 0.59
 CAROUSEL_SUBTEXT_Y_START_RATIO = 0.59
-CAROUSEL_SUBTEXT_Y_END_RATIO = 0.69
+CAROUSEL_SUBTEXT_Y_END_RATIO = 0.82
 CAROUSEL_KEY_MESSAGE_Y_OFFSET_RATIO = 0.025
 CAROUSEL_KEY_MESSAGE_HEIGHT_RATIO = 0.05
 CAROUSEL_KEY_MESSAGE_X_INSET_RATIO = 0.2
@@ -638,7 +638,7 @@ def _insert_text_block(
         line_height,
         align,
     )
-    page.insert_textbox(
+    result = page.insert_textbox(
         rect,
         clean_text,
         fontsize=font_size,
@@ -648,6 +648,22 @@ def _insert_text_block(
         color=color,
         lineheight=line_height,
     )
+    # If text still overflows at the computed size, shrink further until it fits
+    # (insert_textbox returns negative when content exceeds the rect).
+    if result < 0:
+        for fallback_size in range(font_size - 1, 7, -1):
+            result = page.insert_textbox(
+                rect,
+                clean_text,
+                fontsize=fallback_size,
+                fontname=fontname,
+                fontfile=str(fontfile) if fontfile else None,
+                align=align,
+                color=color,
+                lineheight=line_height,
+            )
+            if result >= 0:
+                break
 
 
 def _resolve_carousel_template(template_name: Optional[str] = None) -> tuple[str, Path]:
@@ -752,8 +768,8 @@ def _build_carousel_pdf(
             page_payload.get("subtext", ""),
             fontname=regular_fontname,
             fontfile=regular_fontfile,
-            max_size=32,
-            min_size=20,
+            max_size=20,
+            min_size=11,
             line_height=CAROUSEL_LINE_HEIGHT,
             align=1,
             color=(
