@@ -1,4 +1,5 @@
 import os
+import re
 import random
 import json
 import time
@@ -3391,6 +3392,7 @@ def run_fix(context: JobContext, provider_id: int, cert_id: int, action: str) ->
         context.log(f"{label} terminé.")
 
     if action == "auto":
+        import re as _re
         from edit_questions import extract_image_urls as _extract_urls
 
         # ── Phase 0 : détecter et supprimer les questions absurdes ───────────
@@ -3399,11 +3401,11 @@ def run_fix(context: JobContext, provider_id: int, cert_id: int, action: str) ->
         # la rendant inévaluable (ex : "With the following exhibit [Nothing]…").
         # On filtre d'abord par heuristique textuelle pour limiter les appels IA,
         # puis l'IA confirme ou infirme chaque candidat.
-        _SUSPICIOUS = re.compile(
+        _SUSPICIOUS = _re.compile(
             r"\b(exhibit|diagram|figure|scenario|table|screenshot"
             r"|refer to|as shown|following|above|below|ci-dessous|ci-contre)\b"
             r"|\[nothing\]|\[n/?a\]|\[image\]|\[exhibit\]",
-            re.IGNORECASE,
+            _re.IGNORECASE,
         )
         all_missing_raw = db.get_questions_without_answers(cert_id)
         suspicious = []
