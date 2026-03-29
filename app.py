@@ -3850,12 +3850,74 @@ def mcp_populate_questions(cert_id: int):
     return jsonify({"status": "queued", "job_id": job_id})
 
 
+@app.route("/api/mcp/certifications/<int:cert_id>/remove-duplicates", methods=["POST"])
+def mcp_remove_duplicates(cert_id: int):
+    """Detect and remove exact duplicate questions for a certification.
+
+    Uses the same perceptual-hash composite key as the UI 'Vérifier et
+    supprimer les doublons' button:
+    - Groups questions by (normalised text, answer signature, visual image hash).
+    - Within each group keeps the question that has an image; if none (or all)
+      have an image, keeps the one with the lowest id (oldest).
+    - Bulk-deletes the rest.
+
+    Returns
+    -------
+    JSON  {"status": "ok", "groups_found": int, "deleted": int}
+    """
+    # ── 1. Fetch duplicate groups via the verify endpoint ──────────────────
+    verify_data, verify_status = _call_internal(
+        "/edit-question/api/duplicates/verify",
+        "GET",
+        {"certification_id": cert_id},
+    )
+    if verify_status >= 400:
+        return jsonify(
+            {"status": "error", "message": "Échec de la vérification des doublons.", "detail": verify_data}
+        ), verify_status
+
+    groups = (verify_data or {}).get("groups") or []
+    if not groups:
+        return jsonify({"status": "ok", "groups_found": 0, "deleted": 0})
+
+    # ── 2. Determine which ids to delete (keep image > keep oldest) ────────
+    ids_to_delete: list[int] = []
+    for group in groups:
+        items = group.get("items") or []
+        if len(items) < 2:
+            continue
+        # Sort: has_image DESC (True=1 > False=0), then id ASC (oldest first)
+        sorted_items = sorted(items, key=lambda q: (-int(bool(q.get("has_image"))), q["id"]))
+        # Keep sorted_items[0], delete the rest
+        ids_to_delete.extend(item["id"] for item in sorted_items[1:])
+
+    if not ids_to_delete:
+        return jsonify({"status": "ok", "groups_found": len(groups), "deleted": 0})
+
+    # ── 3. Bulk-delete ─────────────────────────────────────────────────────
+    delete_data, delete_status = _call_internal(
+        "/edit-question/api/questions/bulk-delete",
+        "POST",
+        {"question_ids": ids_to_delete},
+    )
+    if delete_status >= 400:
+        return jsonify(
+            {"status": "error", "message": "Échec de la suppression des doublons.", "detail": delete_data}
+        ), delete_status
+
+    deleted_count = (delete_data or {}).get("deleted_count", len(ids_to_delete))
+    return jsonify({
+        "status": "ok",
+        "groups_found": len(groups),
+        "deleted": deleted_count,
+    })
+
+
 MCP_TOOLS = {
     "unpublished_certifications": {"method": "GET", "endpoint": "/api/mcp/unpublished-certifications"},
     "sync_domains": {"method": "POST", "endpoint": "/modules/api/mcp/certifications/{cert_id}/sync-domains"},
     "import_local_pdfs": {"method": "POST", "endpoint": "/pdf/api/mcp/import-local"},
     "relocate_questions": {"method": "POST", "endpoint": "/reloc/api/mcp/relocate"},
-    "fix_questions": {"method": "POST", "endpoint": "/api/mcp/fix"},
     "generate_blueprints": {
         "method": "POST",
         "endpoint": "/blueprints/api/mcp/certifications/{cert_id}/generate-blueprints",
@@ -3867,6 +3929,15 @@ MCP_TOOLS = {
     "populate_questions": {
         "method": "POST",
         "endpoint": "/api/mcp/certifications/{cert_id}/populate-questions",
+    },
+    "remove_duplicates": {
+        "method": "POST",
+        "endpoint": "/api/mcp/certifications/{cert_id}/remove-duplicates",
+    },
+    "auto_correct": {
+        "method": "POST",
+        "endpoint": "/api/mcp/fix",
+        "description": "Correction automatique complète (Phase 0: suppression absurdes, Phase 1: extraction réponses, Phase 2: assignation).",
     },
 }
 
@@ -4030,18 +4101,26 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
                 },
                 {
                     "step": 6,
-                    "name": f"fix_questions ({cert_name})" if cert_name else "fix_questions",
+                    "name": f"remove_duplicates ({cert_name})" if cert_name else "remove_duplicates",
+                    "endpoint": f"/api/mcp/certifications/{cert_id}/remove-duplicates",
+                    "method": "POST",
+                    "payload": {},
+                    "cert_id": cert_id,
+                },
+                {
+                    "step": 7,
+                    "name": f"auto_correct ({cert_name})" if cert_name else "auto_correct",
                     "endpoint": "/api/mcp/fix",
                     "method": "POST",
                     "payload": {
                         "provider_id": target_provider_id,
                         "cert_id": cert_id,
-                        "action": payload.get("fix_action", "assign"),
+                        "action": "auto",
                     },
                     "cert_id": cert_id,
                 },
                 {
-                    "step": 7,
+                    "step": 8,
                     "name": f"generate_blueprints ({cert_name})" if cert_name else "generate_blueprints",
                     "endpoint": f"/blueprints/api/mcp/certifications/{cert_id}/generate-blueprints",
                     "method": "POST",
@@ -4052,7 +4131,7 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
                     "cert_id": cert_id,
                 },
                 {
-                    "step": 8,
+                    "step": 9,
                     "name": f"publish_course_art ({cert_name})" if cert_name else "publish_course_art",
                     "endpoint": f"/articles/api/mcp/certifications/{cert_id}/course-art",
                     "method": "POST",
@@ -4063,7 +4142,7 @@ def _build_mcp_plan(payload: dict) -> tuple[dict, int]:
                     "finalize_pub": True,
                 },
                 {
-                    "step": 9,
+                    "step": 10,
                     "name": f"populate_questions ({cert_name})" if cert_name else "populate_questions",
                     "endpoint": f"/api/mcp/certifications/{cert_id}/populate-questions",
                     "method": "POST",
@@ -4203,6 +4282,7 @@ def _execute_mcp_plan(
                     skipped_step_endpoints[cert_id] = {
                         "/reloc/api/mcp/relocate",
                         "/api/mcp/fix",
+                        f"/api/mcp/certifications/{cert_id}/remove-duplicates",
                     }
                 else:
                     skipped_certifications[cert_id] = {

@@ -341,7 +341,8 @@ Important:
 - No long explanations.
 - Each page must feel punchy and scroll-stopping.
 - Avoid sounding like marketing copy.
-- Page 1 has NO  "key_message". Keep it empty
+- Page 1 has NO "key_message". Keep key_message empty for page 1 only.
+- ALL 5 pages MUST have a non-empty subtext (2 to 3 sentences). No exceptions.
 
 Required structure:
 You MUST respond only with valid JSON (no text before/after).
@@ -352,8 +353,9 @@ Expected JSON format:
     {
       "page_number": 1,
       "role": "Ultra-captivating hook (question, promise, or stat)",
-      "headline": "",
-      "subtext": ""
+      "headline": "Bold hook headline here",
+      "subtext": "2–3 sentences that set the stage and create intrigue.",
+      "key_message": ""
     },
     {
       "page_number": 2,
@@ -511,7 +513,7 @@ LINKEDIN_CAROUSEL_SCHEMA = {
                     "page_number": {"type": "integer"},
                     "role": {"type": "string"},
                     "headline": {"type": "string"},
-                    "subtext": {"type": "string"},
+                    "subtext": {"type": "string", "minLength": 20},
                     "key_message": {"type": "string"},
                 },
             },
