@@ -1480,14 +1480,16 @@ def get_questions_without_correct_answer(cert_id):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     query = """
-        SELECT q.id AS question_id, q.text AS qtext, a.id AS answer_id, a.text AS atext
-        FROM questions q
-        JOIN modules m ON q.module = m.id
-        JOIN quest_ans qa ON qa.question = q.id
-        JOIN answers a ON qa.answer = a.id
-        WHERE m.course = %s
-          AND q.id NOT IN (SELECT question FROM quest_ans WHERE isok = 1)
-        ORDER BY q.id
+        SELECT q.id AS question_id, q.text AS qtext, q.nature AS nature,
+               a.id AS answer_id, a.text AS atext
+          FROM questions q
+          JOIN modules m ON q.module = m.id
+          JOIN quest_ans qa ON qa.question = q.id
+          JOIN answers a ON qa.answer = a.id
+         WHERE m.course = %s
+           AND q.id NOT IN (SELECT question FROM quest_ans WHERE isok = 1)
+           AND q.nature NOT IN (4, 5)
+         ORDER BY q.id
     """
     cursor.execute(query, (cert_id,))
     rows = cursor.fetchall()
@@ -1496,7 +1498,12 @@ def get_questions_without_correct_answer(cert_id):
     for row in rows:
         qid = row['question_id']
         if qid not in questions:
-            questions[qid] = {"id": qid, "text": row['qtext'], "answers": []}
+            questions[qid] = {
+                "id": qid,
+                "text": row['qtext'],
+                "nature": row['nature'],
+                "answers": [],
+            }
         try:
             ans_text = json.loads(row['atext']).get('value', '')
         except Exception:
@@ -1588,6 +1595,36 @@ def count_questions_without_answers_by_nature(cert_id, nature_code):
     total = cursor.fetchone()[0] or 0
     cursor.close(); conn.close()
     return int(total)
+
+
+def delete_questions_by_ids(question_ids: list) -> int:
+    """Supprime les questions et leurs liaisons de réponses.
+
+    Utilisé par le job de correction automatique pour purger les questions
+    détectées comme absurdes (référence à un exhibit absent, placeholder…).
+    Retourne le nombre de questions effectivement supprimées.
+    """
+    if not question_ids:
+        return 0
+    ids = [int(qid) for qid in question_ids]
+    placeholders = ','.join(['%s'] * len(ids))
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            f"DELETE FROM quest_ans WHERE question IN ({placeholders})",
+            tuple(ids),
+        )
+        cursor.execute(
+            f"DELETE FROM questions WHERE id IN ({placeholders})",
+            tuple(ids),
+        )
+        deleted = cursor.rowcount
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+    return deleted
 
 
 def get_questions_without_answers(cert_id):

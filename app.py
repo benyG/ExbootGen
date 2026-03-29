@@ -104,6 +104,7 @@ from jobs import (
 from openai_api import (
     analyze_certif,
     correct_questions,
+    detect_invalid_questions,
     extract_answers_from_image,
     generate_code_cert_keys,
     generate_questions,
@@ -3384,21 +3385,84 @@ def run_fix(context: JobContext, provider_id: int, cert_id: int, action: str) ->
         context.log(f"{label} terminé.")
 
     if action == "auto":
-        # ── Phase 1 : compléter les questions sans réponse ────────────────────
-        # Pour chaque question sans réponse :
-        #   • Si elle contient des images → Vision AI pour extraire les choix
-        #   • Sinon                       → AI texte classique (mode 'matching')
-        all_missing = db.get_questions_without_answers(cert_id)
-        with_images = []
-        without_images = []
-        for q in all_missing:
-            from edit_questions import extract_image_urls as _extract_urls, IMG_SRC_RE as _IMG_RE
+        from edit_questions import extract_image_urls as _extract_urls
+
+        # ── Phase 0 : détecter et supprimer les questions absurdes ───────────
+        # Une question "absurde" est une question qui référence un exhibit /
+        # diagramme / scénario absent de son texte et sans image attachée,
+        # la rendant inévaluable (ex : "With the following exhibit [Nothing]…").
+        # On filtre d'abord par heuristique textuelle pour limiter les appels IA,
+        # puis l'IA confirme ou infirme chaque candidat.
+        _SUSPICIOUS = re.compile(
+            r"\b(exhibit|diagram|figure|scenario|table|screenshot"
+            r"|refer to|as shown|following|above|below|ci-dessous|ci-contre)\b"
+            r"|\[nothing\]|\[n/?a\]|\[image\]|\[exhibit\]",
+            re.IGNORECASE,
+        )
+        all_missing_raw = db.get_questions_without_answers(cert_id)
+        suspicious = []
+        clean_missing = []
+        for q in all_missing_raw:
             urls = _extract_urls(q.get("text") or "")
-            if urls:
-                q["image_urls"] = urls
-                with_images.append(q)
+            q["image_urls"] = urls
+            q["has_image"] = bool(urls)
+            if not urls and _SUSPICIOUS.search(q.get("text") or ""):
+                suspicious.append(q)
             else:
-                without_images.append(q)
+                clean_missing.append(q)
+
+        invalid_ids: list[int] = []
+        if suspicious:
+            context.log(
+                f"Phase 0 – {len(suspicious)} question(s) suspecte(s) soumises à validation IA."
+            )
+            phase0_lock = Lock()
+
+            def _validate_question(item: Tuple[int, Dict[str, object]]) -> None:
+                _, q = item
+                qid = q.get("id")
+                context.wait_if_paused()
+                try:
+                    results = detect_invalid_questions(provider_name, cert_name, [q])
+                except Exception as exc:
+                    context.log(f"Phase 0 – Erreur validation question {qid}: {exc}")
+                    return
+                if results and results[0].get("is_valid") is False:
+                    with phase0_lock:
+                        invalid_ids.append(qid)
+                    context.log(f"Phase 0 – Question {qid} marquée INVALIDE (sera supprimée).")
+                else:
+                    with phase0_lock:
+                        clean_missing.append(q)
+                time.sleep(API_REQUEST_DELAY)
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [
+                    executor.submit(_validate_question, item)
+                    for item in enumerate(suspicious, start=1)
+                ]
+                for future in as_completed(futures):
+                    future.result()
+
+        if invalid_ids:
+            deleted = db.delete_questions_by_ids(invalid_ids)
+            context.log(f"Phase 0 – {deleted} question(s) absurde(s) supprimée(s).")
+            with counters_lock:
+                state["remaining"] = max(state["remaining"] - deleted, 0)
+                context.update_counters(
+                    total=total,
+                    corrected=state["corrected"],
+                    remaining=state["remaining"],
+                    processed=state["processed"],
+                )
+
+        # ── Phase 1 : compléter les questions sans réponse ────────────────────
+        # Pour chaque question sans réponse valide :
+        #   • Si elle contient des images → Vision AI pour extraire les choix
+        #   • Sinon                       → AI texte selon la nature
+        all_missing = clean_missing
+        with_images = [q for q in all_missing if q.get("image_urls")]
+        without_images = [q for q in all_missing if not q.get("image_urls")]
 
         context.log(
             f"Phase 1 – {len(all_missing)} question(s) sans réponse "
@@ -3413,17 +3477,39 @@ def run_fix(context: JobContext, provider_id: int, cert_id: int, action: str) ->
             lambda result: (
                 db.add_answers(
                     result.get("question_id"),
-                    [{"value": a["value"], "isok": a.get("isok", 0)}
-                     for a in result.get("answers", [])],
+                    [
+                        {k: v for k, v in {
+                            "value": a.get("value", ""),
+                            "target": a.get("target") or None,
+                            "isok": a.get("isok", 0),
+                        }.items() if not (k == "target" and v is None)}
+                        for a in result.get("answers", [])
+                    ],
                 )
                 or bool(result.get("answers"))
             ),
         )
 
-        # Questions sans image → AI texte (mode matching générique)
+        # Questions sans image → AI texte, routées selon la nature de la question.
+        # nature=5 (drag-n-drop) → mode 'drag'
+        # nature=4 (matching)    → mode 'matching'
+        # Les autres natures (QCM, TrueFalse…) sans image ni réponse sont ignorées :
+        # l'IA n'a pas assez de contexte pour inventer des choix de réponse sans support visuel.
+        drag_questions    = [q for q in without_images if int(q.get('nature') or 0) == 5]
+        matching_questions = [q for q in without_images if int(q.get('nature') or 0) == 4]
+
         _run_batch(
-            without_images,
-            "Phase 1b – Génération des réponses par AI texte",
+            drag_questions,
+            "Phase 1b – Génération des réponses drag-n-drop par AI texte",
+            lambda qs: correct_questions(provider_name, cert_name, qs, "drag"),
+            lambda result: (
+                db.add_answers(result.get("question_id"), result.get("answers", []))
+                or bool(result.get("answers"))
+            ),
+        )
+        _run_batch(
+            matching_questions,
+            "Phase 1b – Génération des réponses matching par AI texte",
             lambda qs: correct_questions(provider_name, cert_name, qs, "matching"),
             lambda result: (
                 db.add_answers(result.get("question_id"), result.get("answers", []))
