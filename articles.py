@@ -2191,7 +2191,7 @@ def _run_linkedin_workflow(
         try:
             media_filename = document_path.name
             media_asset = _upload_linkedin_document(document_path)
-            media_category = "DOCUMENT"
+            media_category = "NATIVE_DOCUMENT"
         except SocialPublishError as exc:
             return SocialPostResult(
                 text=linkedin_body,
