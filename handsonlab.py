@@ -11,7 +11,9 @@ from flask import Blueprint, jsonify, render_template, request
 
 import db
 from config import API_REQUEST_DELAY
-from openai_api import analyze_certif, generate_lab_blueprint
+import logging
+
+from openai_api import analyze_certif, generate_asset_content, generate_lab_blueprint
 
 
 hol_bp = Blueprint("hol", __name__)
@@ -46,13 +48,13 @@ def _flatten_analysis(
 
 def _map_step_types(analysis: Dict[str, str]) -> Dict[str, str]:
     scenario_to_steps = {
-        "case": ["quiz", "anticipation", "inspect_file"],
+        "case": ["quiz", "anticipation", "free_input", "inspect_file"],
         "archi": ["architecture"],
         "config": ["terminal", "console_form"],
         "console": ["terminal", "console_form"],
         "code": ["terminal", "inspect_file"],
     }
-    step_flags = {key: "0" for key in ["quiz", "anticipation", "architecture", "terminal", "console_form", "inspect_file"]}
+    step_flags = {key: "0" for key in ["quiz", "anticipation", "free_input", "architecture", "terminal", "console_form", "inspect_file"]}
     for scenario, steps in scenario_to_steps.items():
         if analysis.get(scenario) == "1":
             for step in steps:
@@ -88,6 +90,27 @@ def _estimate_duration(min_steps: int) -> int:
     return max(30, min_steps * 8)
 
 
+def _enrich_lab_assets(lab_payload: dict) -> None:
+    """Phase 2 — fill content_b64 for inline assets referenced by inspect_file steps."""
+    lab = lab_payload.get("lab", {})
+    steps = lab.get("steps", [])
+    referenced_ids = {s.get("file_ref") for s in steps if s.get("file_ref")}
+    queue = [
+        a for a in lab.get("assets", [])
+        if a.get("inline") and a.get("id") in referenced_ids and not a.get("content_b64")
+    ]
+    if not queue:
+        return
+    with ThreadPoolExecutor(max_workers=min(4, len(queue))) as ex:
+        futures = {ex.submit(generate_asset_content, a, lab): a for a in queue}
+        for fut in as_completed(futures):
+            asset = futures[fut]
+            try:
+                asset["content_b64"] = fut.result()
+            except Exception as exc:
+                logging.warning("Asset %s content generation failed: %s", asset.get("id"), exc)
+
+
 def _generate_single_lab(
     index: int,
     provider: str,
@@ -112,6 +135,7 @@ def _generate_single_lab(
     )
     if not isinstance(lab_payload, dict):
         raise TypeError("Réponse inattendue lors de la génération du lab.")
+    _enrich_lab_assets(lab_payload)
     if API_REQUEST_DELAY:
         time.sleep(API_REQUEST_DELAY)
     lab_object = lab_payload.setdefault("lab", {})

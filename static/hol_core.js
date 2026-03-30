@@ -599,10 +599,64 @@ function renderStep(){
     };
   }
   else if(r.type==='quiz' || r.type==='anticipation'){
-    const wrap=document.createElement('div'); let selected=null;
-    (r.choices||[]).forEach(c=>{ const ch=document.createElement('div'); ch.className='choice'; ch.textContent=c.text; ch.onclick=()=>{ selected=c.id; Array.from(wrap.children).forEach(x=>x.classList.remove('selected')); ch.classList.add('selected'); }; wrap.appendChild(ch); });
+    const wrap=document.createElement('div');
+    const multi=(r.correct||[]).length>1;
+    if(multi){const hint=document.createElement('div');hint.style.cssText='font-size:0.82em;opacity:0.7;margin-bottom:6px';hint.textContent='Select all that apply.';body.appendChild(hint);}
+    let selected=multi?[]:null;
+    (r.choices||[]).forEach(c=>{
+      const ch=document.createElement('div'); ch.className='choice'; ch.textContent=c.text;
+      ch.onclick=()=>{
+        if(multi){
+          const i=selected.indexOf(c.id);
+          if(i===-1){selected.push(c.id);ch.classList.add('selected');}
+          else{selected.splice(i,1);ch.classList.remove('selected');}
+        } else {
+          selected=c.id;
+          Array.from(wrap.children).forEach(x=>x.classList.remove('selected'));
+          ch.classList.add('selected');
+        }
+      };
+      wrap.appendChild(ch);
+    });
     body.appendChild(wrap);
-    state.validateCurrent=()=>{ if((r.correct||[]).includes(selected)){ state.errorById[r.id]=''; success(r); } else { handleStepFailure(r, 'Wrong answer', '<div class="ko">Wrong answer. Try again.</div>'); } };
+    state.validateCurrent=()=>{
+      const correct=r.correct||[];
+      const ok=multi
+        ? correct.length===selected.length && correct.every(id=>selected.includes(id))
+        : correct.includes(selected);
+      if(ok){state.errorById[r.id]=''; success(r);}
+      else{handleStepFailure(r,'Wrong answer','<div class="ko">Wrong answer. Try again.</div>');}
+    };
+  }
+  else if(r.type==='free_input'){
+    const wrap=document.createElement('div'); wrap.className='free-input-wrap';
+    const lbl=document.createElement('label'); lbl.textContent=r.input?.label||'Your answer:';
+    const row=document.createElement('div'); row.style.cssText='display:flex;gap:6px;align-items:center;margin-top:6px';
+    const field=document.createElement('input');
+    field.type=r.input?.input_type||'text'; field.placeholder=r.input?.placeholder||''; field.className='terminal-input';
+    row.appendChild(field);
+    if(r.input?.unit){const u=document.createElement('span');u.textContent=' '+r.input.unit;row.appendChild(u);}
+    wrap.appendChild(lbl); wrap.appendChild(row); body.appendChild(wrap);
+    state.validateCurrent=()=>{
+      const raw=field.value.trim();
+      if(!raw){handleStepFailure(r,'Empty','<div class="ko">Please enter an answer.</div>');return;}
+      for(const v of (r.validators||[])){
+        if(v.kind==='exact'){
+          const cs=!!v.case_sensitive;
+          const a=cs?raw:raw.toLowerCase(); const e=cs?String(v.expect||''):String(v.expect||'').toLowerCase();
+          if(a!==e){handleStepFailure(r,'Wrong',`<div class="ko">${v.message||'Incorrect answer. Try again.'}</div>`);return;}
+        } else if(v.kind==='numeric_range'){
+          const n=parseFloat(raw.replace(/[^\d.\-]/g,''));
+          if(isNaN(n)||(v.min!==undefined&&n<v.min)||(v.max!==undefined&&n>v.max)){
+            handleStepFailure(r,'Range',`<div class="ko">${v.message||'Value out of expected range.'}</div>`);return;
+          }
+        } else if(v.kind==='regex'){
+          try{if(!new RegExp(v.pattern,v.flags||'i').test(raw)){handleStepFailure(r,'Format',`<div class="ko">${v.message||'Incorrect format. Try again.'}</div>`);return;}}
+          catch{handleStepFailure(r,'Config','<div class="ko">Validator misconfigured.</div>');return;}
+        }
+      }
+      success(r);
+    };
   }
   else {
     const msg=document.createElement('div'); msg.className='ko'; msg.textContent=`Unknown step type: "${r.type}". This step cannot be rendered.`; body.appendChild(msg);

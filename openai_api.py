@@ -1,5 +1,6 @@
 # openai_api.py
 
+import base64
 import requests
 import logging
 import re
@@ -754,6 +755,7 @@ LAB_RESPONSE_SCHEMA = {
                             "mime": {"type": "string"},
                             "inline": {"type": "boolean"},
                             "content_b64": {"type": "string"},
+                            "description": {"type": "string"},
                         },
                     },
                 },
@@ -1845,6 +1847,99 @@ LAB_RESPONSE_SCHEMA = {
                                     },
                                 },
                             },
+                            {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": [
+                                    "id",
+                                    "type",
+                                    "title",
+                                    "instructions_md",
+                                    "points",
+                                    "hints",
+                                    "transitions",
+                                    "validators",
+                                    "world_patch",
+                                    "input",
+                                ],
+                                "properties": {
+                                    "id": {"type": "string"},
+                                    "type": {"type": "string", "const": "free_input"},
+                                    "title": {"type": "string"},
+                                    "instructions_md": {"type": "string"},
+                                    "points": {"type": "integer"},
+                                    "hints": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                    },
+                                    "transitions": {
+                                        "type": "object",
+                                        "additionalProperties": False,
+                                        "required": ["on_success", "on_failure"],
+                                        "properties": {
+                                            "on_success": {"type": "string"},
+                                            "on_failure": {
+                                                "type": "object",
+                                                "additionalProperties": False,
+                                                "required": ["action"],
+                                                "properties": {
+                                                    "action": {"type": "string"}
+                                                },
+                                            },
+                                        },
+                                    },
+                                    "validators": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "additionalProperties": False,
+                                            "required": ["kind"],
+                                            "properties": {
+                                                "kind": {"type": "string"},
+                                                "expect": {"type": "string"},
+                                                "case_sensitive": {"type": "boolean"},
+                                                "min": {"type": "number"},
+                                                "max": {"type": "number"},
+                                                "pattern": {"type": "string"},
+                                                "flags": {"type": "string"},
+                                                "message": {"type": "string"},
+                                            },
+                                        },
+                                    },
+                                    "world_patch": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "additionalProperties": False,
+                                            "required": ["op", "path", "value"],
+                                            "properties": {
+                                                "op": {"type": "string"},
+                                                "path": {"type": "string"},
+                                                "value": {
+                                                    "type": [
+                                                        "string",
+                                                        "number",
+                                                        "boolean",
+                                                        "array",
+                                                        "null",
+                                                    ]
+                                                },
+                                            },
+                                        },
+                                    },
+                                    "input": {
+                                        "type": "object",
+                                        "additionalProperties": False,
+                                        "required": ["label"],
+                                        "properties": {
+                                            "label": {"type": "string"},
+                                            "placeholder": {"type": "string"},
+                                            "input_type": {"type": "string"},
+                                            "unit": {"type": "string"},
+                                        },
+                                    },
+                                },
+                            },
                         ]
                     },
                 },
@@ -2783,6 +2878,52 @@ RULES:
 
     return {"questions": all_questions}
 
+
+def generate_asset_content(asset: dict, lab_context: dict) -> str:
+    """Phase 2 — generate realistic base64-encoded text content for a single lab asset.
+
+    Parameters
+    ----------
+    asset : dict
+        Asset metadata from the lab JSON (id, filename, mime, description, …).
+    lab_context : dict
+        The ``lab`` sub-object from the lab JSON (title, subtitle, scenario_md, …).
+
+    Returns
+    -------
+    str
+        Base64-encoded UTF-8 content suitable for ``content_b64``.
+    """
+    if not OPENAI_API_KEY:
+        raise Exception("OPENAI_API_KEY n'est pas configurée.")
+
+    scenario = (lab_context.get("scenario_md") or "")[:600]
+    purpose = asset.get("description") or f"A realistic {asset.get('mime', 'text')} file for this lab."
+
+    prompt = (
+        "You are generating a realistic file for a hands-on lab.\n"
+        f"Lab: {lab_context.get('title', '')} — {lab_context.get('subtitle', '')}\n"
+        f"Scenario context: {scenario}\n\n"
+        f"File to generate: {asset.get('filename')} (MIME: {asset.get('mime')})\n"
+        f"Purpose: {purpose}\n\n"
+        "Rules:\n"
+        "- Return ONLY the raw file content as plain text.\n"
+        "- For CSV: include a header row + at least 15 realistic data rows with specific values.\n"
+        "- For JSON: a well-structured JSON object or array with realistic, specific data.\n"
+        "- For plain text or markdown: realistic document content with paragraphs and details.\n"
+        "- Use specific, realistic values — real-looking names, dates, IDs, monetary amounts.\n"
+        "- Do NOT include code fences, base64 encoding, or any surrounding text.\n"
+        "Return ONLY the file content, nothing else."
+    )
+    payload = _build_response_payload(prompt)
+    temperature = _model_temperature_override(OPENAI_MODEL)
+    if temperature is not None:
+        payload["temperature"] = temperature
+    response = _post_with_retry(payload)
+    content = _extract_response_text(response.json())
+    return base64.b64encode(content.encode("utf-8")).decode("ascii")
+
+
 def generate_lab_blueprint(
     provider: str,
     certification: str,
@@ -2893,19 +3034,22 @@ def generate_lab_blueprint(
       "filename": "<FILENAME>",
       "mime": "<MIME_TYPE>",
       "inline": true,
-      "content_b64": "<BASE64>"
+      "content_b64": "",
+      "description": "20-row CSV risk register with Asset ID, AV (€), EF (%), ARO, ALE (€), Controls columns"
     }
-    Requirements: Generate a realistic file appropriate for technical analysis for labs or CTF.
+    Requirements:
     - id: Arbitrary identifier for the asset.
     - kind: Asset type. "file" indicates a downloadable/generated file.
     - filename: Name of the generated file, including extension.
-    - mime: MIME type describing the file format.
-    - content_b64: Base64-encoded content of the file. Ensure Base64 decoding produces a valid file.
+    - mime: MIME type describing the file format (text/csv, application/json, text/plain, text/markdown).
+    - content_b64: Leave as "" — file content will be generated in a separate pass.
+    - description: One precise sentence describing EXACTLY what the file must contain
+      (columns, row count, data types, realistic values expected). Be specific — this drives generation.
         
     ## Common Step schema (lab.steps[i])
     {
      "id": "unique-step-id",
-     "type": "terminal | console_form | inspect_file | architecture | quiz | anticipation",
+     "type": "terminal | console_form | inspect_file | architecture | quiz | anticipation | free_input",
      "title": "...",
      "instructions_md": "...",
      "points": 10,
@@ -3091,7 +3235,23 @@ def generate_lab_blueprint(
     Use this type to ask the learner to PREDICT an outcome or reason about what would happen
     next given the scenario context (e.g., "What will happen if...?", "Which service will be
     affected when...?"). Do NOT use it for recall questions — those belong to quiz type.
-    
+    #7. free_input
+    Specific block: input property.
+    Use this type when the learner must TYPE or COMPUTE a specific value
+    (e.g., ALE, SLE, ARO, RTO, a policy term, an IP address, a numeric threshold).
+    Do NOT use quiz/anticipation when the answer requires calculation — use free_input instead.
+    "input": {{
+      "label": "Enter the Annual Loss Expectancy (ALE):",
+      "placeholder": "e.g. 50000",
+      "input_type": "number",
+      "unit": "€"
+    }}
+    validators — include at least one:
+      {{"kind":"exact","expect":"<value>","case_sensitive":false,"message":"Hint about the expected value."}}
+      {{"kind":"numeric_range","min":<lo>,"max":<hi>,"message":"Value out of range."}}
+      {{"kind":"regex","pattern":"<pattern>","flags":"i","message":"Incorrect format."}}
+    For computed numeric values (ALE, SLE, ARO) use numeric_range with ±10% tolerance window.
+
     ### RULES AND COMPATIBILITY
     All steps must follow the scenario_md narrative and the learning goal for the chosen certification domains. Each step must update or check the world state (world_patch, form.model_path, architecture.world_path, etc.).
     Hints must be progressive and in context.
