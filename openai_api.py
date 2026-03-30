@@ -675,6 +675,473 @@ EXTRACT_ANSWERS_FROM_IMAGE_SCHEMA = {
     },
 }
 
+# ─── Shared building blocks ───────────────────────────────────────────────────
+
+_WP_ITEM = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["op", "path", "value"],
+    "properties": {
+        "op": {"type": "string"},
+        "path": {"type": "string"},
+        "value": {"anyOf": [
+            {"type": "string"},
+            {"type": "number"},
+            {"type": "boolean"},
+            {"type": "null"},
+        ]},
+    },
+}
+_WORLD_PATCH = {"type": "array", "items": _WP_ITEM}
+
+_TRANSITIONS = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["on_success", "on_failure"],
+    "properties": {
+        "on_success": {"type": "string"},
+        "on_failure": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["action"],
+            "properties": {"action": {"type": "string"}},
+        },
+    },
+}
+
+# ─── Terminal ─────────────────────────────────────────────────────────────────
+
+_TERMINAL_TOPLEVEL_VALIDATOR = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["kind", "path", "equals", "expr", "message"],
+    "properties": {
+        "kind": {"type": "string"},
+        "path": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "equals": {"anyOf": [{"type": "string"}, {"type": "number"}, {"type": "boolean"}, {"type": "null"}]},
+        "expr": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "message": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+    },
+}
+
+_TERMINAL_INNER_VALIDATOR = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["kind", "match", "response"],
+    "properties": {
+        "kind": {"type": "string"},
+        "match": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["program", "subcommand", "flags", "args"],
+            "properties": {
+                "program": {"type": "string"},
+                "subcommand": {"type": "array", "items": {"type": "string"}},
+                "flags": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["required", "aliases"],
+                    "properties": {
+                        "required": {"type": "array", "items": {"type": "string"}},
+                        "aliases": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "patternProperties": {"^.*$": {"type": "string"}},
+                        },
+                    },
+                },
+                "args": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["flag", "expect"],
+                        "properties": {
+                            "flag": {"type": "string"},
+                            "expect": {"type": "string"},
+                        },
+                    },
+                },
+            },
+        },
+        "response": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["stdout_template", "world_patch"],
+            "properties": {
+                "stdout_template": {"type": "string"},
+                "world_patch": _WORLD_PATCH,
+            },
+        },
+    },
+}
+
+_TERMINAL_STEP = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["id", "type", "title", "instructions_md", "points", "hints",
+                 "transitions", "validators", "world_patch", "terminal"],
+    "properties": {
+        "id": {"type": "string"},
+        "type": {"type": "string", "const": "terminal"},
+        "title": {"type": "string"},
+        "instructions_md": {"type": "string"},
+        "points": {"type": "integer"},
+        "hints": {"type": "array", "items": {"type": "string"}},
+        "transitions": _TRANSITIONS,
+        "validators": {"type": "array", "items": _TERMINAL_TOPLEVEL_VALIDATOR},
+        "world_patch": _WORLD_PATCH,
+        "terminal": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["prompt", "environment", "history", "validators"],
+            "properties": {
+                "prompt": {"type": "string"},
+                "environment": {"type": "string"},
+                "history": {"type": "array", "items": {"type": "string"}},
+                "validators": {"type": "array", "items": _TERMINAL_INNER_VALIDATOR},
+            },
+        },
+    },
+}
+
+# ─── Console form ─────────────────────────────────────────────────────────────
+
+_CONSOLE_FORM_VALIDATOR = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["kind", "path", "equals", "expect", "expr", "message"],
+    "properties": {
+        "kind": {"type": "string"},
+        "path": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "equals": {"anyOf": [{"type": "string"}, {"type": "number"}, {"type": "boolean"}, {"type": "null"}]},
+        "expect": {"anyOf": [
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["path", "pattern"],
+                "properties": {
+                    "path": {"type": "string"},
+                    "pattern": {"type": "string"},
+                },
+            },
+            {"type": "null"},
+        ]},
+        "expr": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "message": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+    },
+}
+
+_CONSOLE_FORM_FIELD = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["id", "label", "widget", "options", "required", "placeholder", "helptext"],
+    "properties": {
+        "id": {"type": "string"},
+        "label": {"type": "string"},
+        "widget": {"type": "string"},
+        "options": {"anyOf": [{"type": "array", "items": {"type": "string"}}, {"type": "null"}]},
+        "required": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+        "placeholder": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "helptext": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+    },
+}
+
+_CONSOLE_FORM_STEP = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["id", "type", "title", "instructions_md", "points", "hints",
+                 "transitions", "validators", "world_patch", "form"],
+    "properties": {
+        "id": {"type": "string"},
+        "type": {"type": "string", "const": "console_form"},
+        "title": {"type": "string"},
+        "instructions_md": {"type": "string"},
+        "points": {"type": "integer"},
+        "hints": {"type": "array", "items": {"type": "string"}},
+        "transitions": _TRANSITIONS,
+        "validators": {"type": "array", "items": _CONSOLE_FORM_VALIDATOR},
+        "world_patch": _WORLD_PATCH,
+        "form": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["model_path", "schema"],
+            "properties": {
+                "model_path": {"type": "string"},
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["fields"],
+                    "properties": {
+                        "fields": {"type": "array", "items": _CONSOLE_FORM_FIELD},
+                    },
+                },
+            },
+        },
+    },
+}
+
+# ─── Inspect file ─────────────────────────────────────────────────────────────
+
+_INSPECT_VALIDATOR = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["kind", "jsonpath", "equals", "expr", "message"],
+    "properties": {
+        "kind": {"type": "string"},
+        "jsonpath": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "equals": {"anyOf": [{"type": "string"}, {"type": "number"}, {"type": "boolean"}, {"type": "null"}]},
+        "expr": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "message": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+    },
+}
+
+_INSPECT_FILE_STEP = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["id", "type", "title", "instructions_md", "points", "hints",
+                 "transitions", "validators", "world_patch", "file_ref", "input"],
+    "properties": {
+        "id": {"type": "string"},
+        "type": {"type": "string", "const": "inspect_file"},
+        "title": {"type": "string"},
+        "instructions_md": {"type": "string"},
+        "points": {"type": "integer"},
+        "hints": {"type": "array", "items": {"type": "string"}},
+        "transitions": _TRANSITIONS,
+        "validators": {"type": "array", "items": _INSPECT_VALIDATOR},
+        "world_patch": _WORLD_PATCH,
+        "file_ref": {"type": "string"},
+        "input": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["mode", "prompt", "placeholder", "language"],
+            "properties": {
+                "mode": {"type": "string"},
+                "prompt": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                "placeholder": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                "language": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+            },
+        },
+    },
+}
+
+# ─── Architecture ─────────────────────────────────────────────────────────────
+
+_ARCH_VALIDATOR = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["kind", "path", "equals", "expr", "message"],
+    "properties": {
+        "kind": {"type": "string"},
+        "path": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "equals": {"anyOf": [{"type": "integer"}, {"type": "string"}, {"type": "null"}]},
+        "expr": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "message": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+    },
+}
+
+_PALETTE_ITEM = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["id", "label", "icon", "is_decoy"],
+    "properties": {
+        "id": {"type": "string"},
+        "label": {"type": "string"},
+        "icon": {"type": "string"},
+        "is_decoy": {"type": "boolean"},
+    },
+}
+
+_ARCH_NODE = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["id", "palette_id", "x", "y", "label"],
+    "properties": {
+        "id": {"type": "string"},
+        "palette_id": {"type": "string"},
+        "x": {"type": "number"},
+        "y": {"type": "number"},
+        "label": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+    },
+}
+
+_ARCH_EXPECTED_NODE = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["count", "match"],
+    "properties": {
+        "count": {"type": "integer"},
+        "match": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+    },
+}
+
+_ARCH_EXPECTED_LINK = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["from", "to", "direction"],
+    "properties": {
+        "from": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "to": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "direction": {"type": "string"},
+    },
+}
+
+_ARCHITECTURE_STEP = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["id", "type", "title", "instructions_md", "points", "hints",
+                 "transitions", "validators", "world_patch", "architecture"],
+    "properties": {
+        "id": {"type": "string"},
+        "type": {"type": "string", "const": "architecture"},
+        "title": {"type": "string"},
+        "instructions_md": {"type": "string"},
+        "points": {"type": "integer"},
+        "hints": {"type": "array", "items": {"type": "string"}},
+        "transitions": _TRANSITIONS,
+        "validators": {"type": "array", "items": _ARCH_VALIDATOR},
+        "world_patch": _WORLD_PATCH,
+        "architecture": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["mode", "palette", "initial_nodes", "world_path", "help", "expected_world"],
+            "properties": {
+                "mode": {"type": "string"},
+                "palette": {"type": "array", "items": _PALETTE_ITEM},
+                "initial_nodes": {"type": "array", "items": _ARCH_NODE},
+                "world_path": {"type": "string"},
+                "help": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                "expected_world": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["allow_extra_nodes", "nodes", "links"],
+                    "properties": {
+                        "allow_extra_nodes": {"type": "boolean"},
+                        "nodes": {"type": "array", "items": _ARCH_EXPECTED_NODE},
+                        "links": {"type": "array", "items": _ARCH_EXPECTED_LINK},
+                    },
+                },
+            },
+        },
+    },
+}
+
+# ─── Quiz / Anticipation ──────────────────────────────────────────────────────
+
+_QUIZ_CHOICE = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["id", "text"],
+    "properties": {
+        "id": {"type": "string"},
+        "text": {"type": "string"},
+    },
+}
+
+_QUIZ_VALIDATOR = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["kind", "expect"],
+    "properties": {
+        "kind": {"type": "string"},
+        "expect": {"type": "array", "items": {"type": "string"}},
+    },
+}
+
+_EXPLANATIONS = {
+    "type": "object",
+    "additionalProperties": False,
+    "patternProperties": {"^.*$": {"type": "string"}},
+}
+
+def _quiz_step(type_const):
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["id", "type", "title", "instructions_md", "points", "hints",
+                     "transitions", "validators", "world_patch",
+                     "question_md", "choices", "correct", "explanations"],
+        "properties": {
+            "id": {"type": "string"},
+            "type": {"type": "string", "const": type_const},
+            "title": {"type": "string"},
+            "instructions_md": {"type": "string"},
+            "points": {"type": "integer"},
+            "hints": {"type": "array", "items": {"type": "string"}},
+            "transitions": _TRANSITIONS,
+            "validators": {"type": "array", "items": _QUIZ_VALIDATOR},
+            "world_patch": _WORLD_PATCH,
+            "question_md": {"type": "string"},
+            "choices": {"type": "array", "items": _QUIZ_CHOICE},
+            "correct": {"type": "array", "items": {"type": "string"}},
+            "explanations": _EXPLANATIONS,
+        },
+    }
+
+# ─── Free input ───────────────────────────────────────────────────────────────
+
+_FREE_INPUT_VALIDATOR = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["kind", "expect", "case_sensitive", "min", "max", "pattern", "flags", "message"],
+    "properties": {
+        "kind": {"type": "string"},
+        "expect": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "case_sensitive": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+        "min": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "max": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "pattern": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "flags": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "message": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+    },
+}
+
+_FREE_INPUT_STEP = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["id", "type", "title", "instructions_md", "points", "hints",
+                 "transitions", "validators", "world_patch", "input"],
+    "properties": {
+        "id": {"type": "string"},
+        "type": {"type": "string", "const": "free_input"},
+        "title": {"type": "string"},
+        "instructions_md": {"type": "string"},
+        "points": {"type": "integer"},
+        "hints": {"type": "array", "items": {"type": "string"}},
+        "transitions": _TRANSITIONS,
+        "validators": {"type": "array", "items": _FREE_INPUT_VALIDATOR},
+        "world_patch": _WORLD_PATCH,
+        "input": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["label", "placeholder", "input_type", "unit"],
+            "properties": {
+                "label": {"type": "string"},
+                "placeholder": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                "input_type": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                "unit": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+            },
+        },
+    },
+}
+
+# ─── Variable definition ──────────────────────────────────────────────────────
+
+_VARIABLE_DEF = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["type", "choices", "min", "max"],
+    "properties": {
+        "type": {"type": "string"},
+        "choices": {"anyOf": [{"type": "array", "items": {"type": "string"}}, {"type": "null"}]},
+        "min": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "max": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+    },
+}
+
+# ─── Root schema ──────────────────────────────────────────────────────────────
+
 LAB_RESPONSE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -684,17 +1151,8 @@ LAB_RESPONSE_SCHEMA = {
         "lab": {
             "type": "object",
             "additionalProperties": False,
-            "required": [
-                "id",
-                "title",
-                "subtitle",
-                "scenario_md",
-                "variables",
-                "scoring",
-                "timer",
-                "assets",
-                "steps",
-            ],
+            "required": ["id", "title", "subtitle", "scenario_md",
+                         "variables", "scoring", "timer", "assets", "steps"],
             "properties": {
                 "id": {"type": "string"},
                 "title": {"type": "string"},
@@ -703,22 +1161,7 @@ LAB_RESPONSE_SCHEMA = {
                 "variables": {
                     "type": "object",
                     "additionalProperties": False,
-                    "patternProperties": {
-                        "^.*$": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "required": ["type"],
-                            "properties": {
-                                "type": {"type": "string"},
-                                "choices": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                },
-                                "min": {"type": "number"},
-                                "max": {"type": "number"},
-                            },
-                        }
-                    },
+                    "patternProperties": {"^.*$": _VARIABLE_DEF},
                 },
                 "scoring": {
                     "type": "object",
@@ -740,15 +1183,7 @@ LAB_RESPONSE_SCHEMA = {
                     "items": {
                         "type": "object",
                         "additionalProperties": False,
-                        "required": [
-                            "id",
-                            "kind",
-                            "filename",
-                            "mime",
-                            "inline",
-                            "content_b64",
-                            "description",
-                        ],
+                        "required": ["id", "kind", "filename", "mime", "inline", "content_b64", "description"],
                         "properties": {
                             "id": {"type": "string"},
                             "kind": {"type": "string"},
@@ -756,7 +1191,7 @@ LAB_RESPONSE_SCHEMA = {
                             "mime": {"type": "string"},
                             "inline": {"type": "boolean"},
                             "content_b64": {"type": "string"},
-                            "description": {"type": ["string", "null"]},
+                            "description": {"anyOf": [{"type": "string"}, {"type": "null"}]},
                         },
                     },
                 },
@@ -764,1174 +1199,13 @@ LAB_RESPONSE_SCHEMA = {
                     "type": "array",
                     "items": {
                         "anyOf": [
-                            {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "required": [
-                                    "id",
-                                    "type",
-                                    "title",
-                                    "instructions_md",
-                                    "points",
-                                    "hints",
-                                    "transitions",
-                                    "validators",
-                                    "world_patch",
-                                    "terminal",
-                                ],
-                                "properties": {
-                                    "id": {"type": "string"},
-                                    "type": {"type": "string", "const": "terminal"},
-                                    "title": {"type": "string"},
-                                    "instructions_md": {"type": "string"},
-                                    "points": {"type": "integer"},
-                                    "hints": {
-                                        "type": "array",
-                                        "items": {"type": "string"},
-                                    },
-                                    "transitions": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "required": ["on_success", "on_failure"],
-                                        "properties": {
-                                            "on_success": {"type": "string"},
-                                            "on_failure": {
-                                                "type": "object",
-                                                "additionalProperties": False,
-                                                "required": ["action"],
-                                                "properties": {
-                                                    "action": {"type": "string"}
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "validators": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["kind"],
-                                            "properties": {
-                                                "kind": {"type": "string"},
-                                                "path": {"type": "string"},
-                                                "equals": {
-                                                    "type": [
-                                                        "string",
-                                                        "number",
-                                                        "boolean",
-                                                    ]
-                                                },
-                                                "expect": {
-                                                    "type": "object",
-                                                    "additionalProperties": False,
-                                                    "required": ["path", "pattern"],
-                                                    "properties": {
-                                                        "path": {"type": "string"},
-                                                        "pattern": {"type": "string"},
-                                                    },
-                                                },
-                                                "expr": {"type": "string"},
-                                                "message": {"type": "string"},
-                                                "schema": {
-                                                    "type": "object",
-                                                    "additionalProperties": False,
-                                                },
-                                                "match": {
-                                                    "type": "object",
-                                                    "additionalProperties": False,
-                                                    "required": [
-                                                        "program",
-                                                        "subcommand",
-                                                        "flags",
-                                                        "args",
-                                                    ],
-                                                    "properties": {
-                                                        "program": {"type": "string"},
-                                                        "subcommand": {
-                                                            "type": "array",
-                                                            "items": {
-                                                                "type": "string"
-                                                            },
-                                                        },
-                                                        "flags": {
-                                                            "type": "object",
-                                                            "additionalProperties": False,
-                                                            "required": [
-                                                                "required",
-                                                                "aliases",
-                                                            ],
-                                                            "properties": {
-                                                                "required": {
-                                                                    "type": "array",
-                                                                    "items": {
-                                                                        "type": "string"
-                                                                    },
-                                                                },
-                                                                "aliases": {
-                                                                    "type": "object",
-                                                                    "additionalProperties": False,
-                                                                    "patternProperties": {
-                                                                        "^.*$": {
-                                                                            "type": "string"
-                                                                        }
-                                                                    },
-                                                                },
-                                                            },
-                                                        },
-                                                        "args": {
-                                                            "type": "array",
-                                                            "items": {
-                                                                "type": "object",
-                                                                "additionalProperties": False,
-                                                                "required": [
-                                                                    "flag",
-                                                                    "expect",
-                                                                ],
-                                                                "properties": {
-                                                                    "flag": {
-                                                                        "type": "string"
-                                                                    },
-                                                                    "expect": {
-                                                                        "type": "string"
-                                                                    },
-                                                                },
-                                                            },
-                                                        },
-                                                    },
-                                                },
-                                                "response": {
-                                                    "type": "object",
-                                                    "additionalProperties": False,
-                                                    "required": [
-                                                        "stdout_template",
-                                                        "stderr_template",
-                                                        "world_patch",
-                                                    ],
-                                                    "properties": {
-                                                        "stdout_template": {
-                                                            "type": "string"
-                                                        },
-                                                        "stderr_template": {
-                                                            "type": "string"
-                                                        },
-                                                        "world_patch": {
-                                                            "type": "array",
-                                                            "items": {
-                                                                "type": "object",
-                                                                "additionalProperties": False,
-                                                                "required": [
-                                                                    "op",
-                                                                    "path",
-                                                                    "value",
-                                                                ],
-                                                                "properties": {
-                                                                    "op": {
-                                                                        "type": "string"
-                                                                    },
-                                                                    "path": {
-                                                                        "type": "string"
-                                                                    },
-                                                                    "value": {
-                                                                        "type": [
-                                                                            "string",
-                                                                            "number",
-                                                                            "boolean",
-                                                                            "null",
-                                                                        ]
-                                                                    },
-                                                                },
-                                                            },
-                                                        },
-                                                    },
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "world_patch": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["op", "path", "value"],
-                                            "properties": {
-                                                "op": {"type": "string"},
-                                                "path": {"type": "string"},
-                                                "value": {
-                                                    "type": [
-                                                        "string",
-                                                        "number",
-                                                        "boolean",
-                                                        "null",
-                                                    ]
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "terminal": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "required": ["prompt", "environment", "validators"],
-                                        "properties": {
-                                            "prompt": {"type": "string"},
-                                            "environment": {"type": "string"},
-                                            "history": {
-                                                "type": "array",
-                                                "items": {"type": "string"},
-                                            },
-                                            "validators": {
-                                                "type": "array",
-                                                "items": {
-                                                    "type": "object",
-                                                    "additionalProperties": False,
-                                                    "required": ["kind"],
-                                                    "properties": {
-                                                        "kind": {"type": "string"},
-                                                        "match": {
-                                                            "type": "object",
-                                                            "additionalProperties": False,
-                                                            "required": [
-                                                                "program",
-                                                                "subcommand",
-                                                                "flags",
-                                                                "args",
-                                                            ],
-                                                            "properties": {
-                                                                "program": {
-                                                                    "type": "string"
-                                                                },
-                                                                "subcommand": {
-                                                                    "type": "array",
-                                                                    "items": {
-                                                                        "type": "string"
-                                                                    },
-                                                                },
-                                                                "flags": {
-                                                                    "type": "object",
-                                                                    "additionalProperties": False,
-                                                                    "required": [
-                                                                        "required",
-                                                                        "aliases",
-                                                                    ],
-                                                                    "properties": {
-                                                                        "required": {
-                                                                            "type": "array",
-                                                                            "items": {
-                                                                                "type": "string"
-                                                                            },
-                                                                        },
-                                                                        "aliases": {
-                                                                            "type": "object",
-                                                                            "additionalProperties": False,
-                                                                            "patternProperties": {
-                                                                                "^.*$": {
-                                                                                    "type": "string"
-                                                                                }
-                                                                            },
-                                                                        },
-                                                                    },
-                                                                },
-                                                                "args": {
-                                                                    "type": "array",
-                                                                    "items": {
-                                                                        "type": "object",
-                                                                        "additionalProperties": False,
-                                                                        "required": [
-                                                                            "flag",
-                                                                            "expect",
-                                                                        ],
-                                                                        "properties": {
-                                                                            "flag": {
-                                                                                "type": "string"
-                                                                            },
-                                                                            "expect": {
-                                                                                "type": "string"
-                                                                            },
-                                                                        },
-                                                                    },
-                                                                },
-                                                            },
-                                                        },
-                                                        "response": {
-                                                            "type": "object",
-                                                            "additionalProperties": False,
-                                                            "required": [
-                                                                "stdout_template",
-                                                                "stderr_template",
-                                                                "world_patch",
-                                                            ],
-                                                            "properties": {
-                                                                "stdout_template": {
-                                                                    "type": "string"
-                                                                },
-                                                                "stderr_template": {
-                                                                    "type": "string"
-                                                                },
-                                                                "world_patch": {
-                                                                    "type": "array",
-                                                                    "items": {
-                                                                        "type": "object",
-                                                                        "additionalProperties": False,
-                                                                        "required": [
-                                                                            "op",
-                                                                            "path",
-                                                                            "value",
-                                                                        ],
-                                                                        "properties": {
-                                                                            "op": {
-                                                                                "type": "string"
-                                                                            },
-                                                                            "path": {
-                                                                                "type": "string"
-                                                                            },
-                                                                            "value": {
-                                                                                "type": [
-                                                                                    "string",
-                                                                                    "number",
-                                                                                    "boolean",
-                                                                                    "null",
-                                                                                ]
-                                                                            },
-                                                                        },
-                                                                    },
-                                                                },
-                                                            },
-                                                        },
-                                                    },
-                                                },
-                                            },
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "required": [
-                                    "id",
-                                    "type",
-                                    "title",
-                                    "instructions_md",
-                                    "points",
-                                    "hints",
-                                    "transitions",
-                                    "validators",
-                                    "world_patch",
-                                    "form",
-                                ],
-                                "properties": {
-                                    "id": {"type": "string"},
-                                    "type": {"type": "string", "const": "console_form"},
-                                    "title": {"type": "string"},
-                                    "instructions_md": {"type": "string"},
-                                    "points": {"type": "integer"},
-                                    "hints": {
-                                        "type": "array",
-                                        "items": {"type": "string"},
-                                    },
-                                    "transitions": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "required": ["on_success", "on_failure"],
-                                        "properties": {
-                                            "on_success": {"type": "string"},
-                                            "on_failure": {
-                                                "type": "object",
-                                                "additionalProperties": False,
-                                                "required": ["action"],
-                                                "properties": {
-                                                    "action": {"type": "string"}
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "validators": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["kind"],
-                                            "properties": {
-                                                "kind": {"type": "string"},
-                                                "path": {"type": "string"},
-                                                "equals": {
-                                                    "type": [
-                                                        "string",
-                                                        "number",
-                                                        "boolean",
-                                                    ]
-                                                },
-                                                "expect": {
-                                                    "type": "object",
-                                                    "additionalProperties": False,
-                                                    "required": ["path", "pattern"],
-                                                    "properties": {
-                                                        "path": {"type": "string"},
-                                                        "pattern": {"type": "string"},
-                                                    },
-                                                },
-                                                "expr": {"type": "string"},
-                                                "message": {"type": "string"},
-                                                "schema": {
-                                                    "type": "object",
-                                                    "additionalProperties": False,
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "world_patch": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["op", "path", "value"],
-                                            "properties": {
-                                                "op": {"type": "string"},
-                                                "path": {"type": "string"},
-                                                "value": {
-                                                    "type": [
-                                                        "string",
-                                                        "number",
-                                                        "boolean",
-                                                        "null",
-                                                    ]
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "form": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "required": ["model_path", "schema"],
-                                        "properties": {
-                                            "model_path": {"type": "string"},
-                                            "schema": {
-                                                "type": "object",
-                                                "additionalProperties": False,
-                                                "required": ["layout", "fields"],
-                                                "properties": {
-                                                    "layout": {"type": "string"},
-                                                    "fields": {
-                                                        "type": "array",
-                                                        "items": {
-                                                            "type": "object",
-                                                            "additionalProperties": False,
-                                                            "required": [
-                                                                "key",
-                                                                "label",
-                                                                "widget",
-                                                            ],
-                                                            "properties": {
-                                                                "key": {
-                                                                    "type": "string"
-                                                                },
-                                                                "label": {
-                                                                    "type": "string"
-                                                                },
-                                                                "widget": {
-                                                                    "type": "string"
-                                                                },
-                                                                "options": {
-                                                                    "type": "array",
-                                                                    "items": {
-                                                                        "type": "string"
-                                                                    },
-                                                                },
-                                                                "required": {
-                                                                    "type": "boolean"
-                                                                },
-                                                                "placeholder": {
-                                                                    "type": "string"
-                                                                },
-                                                                "helptext": {
-                                                                    "type": "string"
-                                                                },
-                                                            },
-                                                        },
-                                                    },
-                                                },
-                                            },
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "required": [
-                                    "id",
-                                    "type",
-                                    "title",
-                                    "instructions_md",
-                                    "points",
-                                    "hints",
-                                    "transitions",
-                                    "validators",
-                                    "world_patch",
-                                    "file_ref",
-                                    "input",
-                                ],
-                                "properties": {
-                                    "id": {"type": "string"},
-                                    "type": {"type": "string", "const": "inspect_file"},
-                                    "title": {"type": "string"},
-                                    "instructions_md": {"type": "string"},
-                                    "points": {"type": "integer"},
-                                    "hints": {
-                                        "type": "array",
-                                        "items": {"type": "string"},
-                                    },
-                                    "transitions": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "required": ["on_success", "on_failure"],
-                                        "properties": {
-                                            "on_success": {"type": "string"},
-                                            "on_failure": {
-                                                "type": "object",
-                                                "additionalProperties": False,
-                                                "required": ["action"],
-                                                "properties": {
-                                                    "action": {"type": "string"}
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "validators": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["kind"],
-                                            "properties": {
-                                                "kind": {"type": "string"},
-                                                "path": {"type": "string"},
-                                                "equals": {
-                                                    "type": [
-                                                        "string",
-                                                        "number",
-                                                        "boolean",
-                                                    ]
-                                                },
-                                                "expect": {
-                                                    "type": "object",
-                                                    "additionalProperties": False,
-                                                    "required": ["path", "pattern"],
-                                                    "properties": {
-                                                        "path": {"type": "string"},
-                                                        "pattern": {"type": "string"},
-                                                    },
-                                                },
-                                                "expr": {"type": "string"},
-                                                "message": {"type": "string"},
-                                                "schema": {
-                                                    "type": "object",
-                                                    "additionalProperties": False,
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "world_patch": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["op", "path", "value"],
-                                            "properties": {
-                                                "op": {"type": "string"},
-                                                "path": {"type": "string"},
-                                                "value": {
-                                                    "type": [
-                                                        "string",
-                                                        "number",
-                                                        "boolean",
-                                                        "null",
-                                                    ]
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "file_ref": {"type": "string"},
-                                    "input": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "required": ["mode", "prompt", "placeholder", "language"],
-                                        "properties": {
-                                            "mode": {"type": "string"},
-                                            "prompt": {"type": "string"},
-                                            "placeholder": {"type": "string"},
-                                            "language": {"type": "string"},
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "required": [
-                                    "id",
-                                    "type",
-                                    "title",
-                                    "instructions_md",
-                                    "points",
-                                    "hints",
-                                    "transitions",
-                                    "validators",
-                                    "world_patch",
-                                    "architecture",
-                                ],
-                                "properties": {
-                                    "id": {"type": "string"},
-                                    "type": {"type": "string", "const": "architecture"},
-                                    "title": {"type": "string"},
-                                    "instructions_md": {"type": "string"},
-                                    "points": {"type": "integer"},
-                                    "hints": {
-                                        "type": "array",
-                                        "items": {"type": "string"},
-                                    },
-                                    "transitions": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "required": ["on_success", "on_failure"],
-                                        "properties": {
-                                            "on_success": {"type": "string"},
-                                            "on_failure": {
-                                                "type": "object",
-                                                "additionalProperties": False,
-                                                "required": ["action"],
-                                                "properties": {
-                                                    "action": {"type": "string"}
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "validators": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["kind"],
-                                            "properties": {
-                                                "kind": {"type": "string"},
-                                                "path": {"type": "string"},
-                                                "equals": {
-                                                    "type": [
-                                                        "string",
-                                                        "number",
-                                                        "boolean",
-                                                    ]
-                                                },
-                                                "expect": {
-                                                    "type": "object",
-                                                    "additionalProperties": False,
-                                                    "required": ["path", "pattern"],
-                                                    "properties": {
-                                                        "path": {"type": "string"},
-                                                        "pattern": {"type": "string"},
-                                                    },
-                                                },
-                                                "expr": {"type": "string"},
-                                                "message": {"type": "string"},
-                                                "schema": {
-                                                    "type": "object",
-                                                    "additionalProperties": False,
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "world_patch": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["op", "path", "value"],
-                                            "properties": {
-                                                "op": {"type": "string"},
-                                                "path": {"type": "string"},
-                                                "value": {
-                                                    "type": [
-                                                        "string",
-                                                        "number",
-                                                        "boolean",
-                                                        "null",
-                                                    ]
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "architecture": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "required": [
-                                            "mode",
-                                            "palette_title",
-                                            "palette_caption",
-                                            "palette",
-                                            "initial_nodes",
-                                            "world_path",
-                                            "help",
-                                            "expected_world",
-                                        ],
-                                        "properties": {
-                                            "mode": {"type": "string"},
-                                            "palette_title": {"type": "string"},
-                                            "palette_caption": {"type": "string"},
-                                            "palette": {
-                                                "type": "array",
-                                                "items": {
-                                                    "type": "object",
-                                                    "additionalProperties": False,
-                                                    "required": [
-                                                        "id",
-                                                        "label",
-                                                        "icon",
-                                                        "tags",
-                                                    ],
-                                                    "properties": {
-                                                        "id": {
-                                                            "type": "string"
-                                                        },
-                                                        "label": {
-                                                            "type": "string"
-                                                        },
-                                                        "icon": {
-                                                            "type": "string"
-                                                        },
-                                                        "tags": {
-                                                            "type": "array",
-                                                            "items": {
-                                                                "type": "string"
-                                                            },
-                                                        },
-                                                        "meta": {
-                                                            "type": "object",
-                                                            "additionalProperties": False,
-                                                            "patternProperties": {
-                                                                "^.*$": {
-                                                                    "type": "string"
-                                                                }
-                                                            },
-                                                        },
-                                                        "is_decoy": {
-                                                            "type": "boolean"
-                                                        },
-                                                    },
-                                                },
-                                            },
-                                            "initial_nodes": {
-                                                "type": "array",
-                                                "items": {
-                                                    "type": "object",
-                                                    "additionalProperties": False,
-                                                },
-                                            },
-                                            "world_path": {"type": "string"},
-                                            "help": {"type": "string"},
-                                            "expected_world": {
-                                                "type": "object",
-                                                "additionalProperties": False,
-                                                "required": [
-                                                    "allow_extra_nodes",
-                                                    "nodes",
-                                                    "links",
-                                                ],
-                                                "properties": {
-                                                    "allow_extra_nodes": {
-                                                        "type": "boolean"
-                                                    },
-                                                    "nodes": {
-                                                        "type": "array",
-                                                        "items": {
-                                                            "type": "object",
-                                                            "additionalProperties": False,
-                                                            "required": [
-                                                                "count",
-                                                                "match",
-                                                            ],
-                                                            "properties": {
-                                                                "count": {
-                                                                    "type": "integer"
-                                                                },
-                                                                "match": {
-                                                                    "type": "object",
-                                                                    "additionalProperties": False,
-                                                                    "properties": {
-                                                                        "palette_id": {
-                                                                            "type": "string"
-                                                                        },
-                                                                        "label": {
-                                                                            "type": "string"
-                                                                        },
-                                                                        "config_contains": {
-                                                                            "type": "array",
-                                                                            "items": {
-                                                                                "type": "string"
-                                                                            },
-                                                                        },
-                                                                        "commands": {
-                                                                            "type": "array",
-                                                                            "items": {
-                                                                                "type": "string"
-                                                                            },
-                                                                        },
-                                                                    },
-                                                                },
-                                                            },
-                                                        },
-                                                    },
-                                                    "links": {
-                                                        "type": "array",
-                                                        "items": {
-                                                            "type": "object",
-                                                            "additionalProperties": False,
-                                                            "required": [
-                                                                "from",
-                                                                "to",
-                                                                "count",
-                                                                "bidirectional",
-                                                            ],
-                                                            "properties": {
-                                                                "from": {
-                                                                    "type": "object",
-                                                                    "additionalProperties": False,
-                                                                    "properties": {
-                                                                        "label": {
-                                                                            "type": "string"
-                                                                        },
-                                                                        "palette_id": {
-                                                                            "type": "string"
-                                                                        },
-                                                                    },
-                                                                },
-                                                                "to": {
-                                                                    "type": "object",
-                                                                    "additionalProperties": False,
-                                                                    "properties": {
-                                                                        "label": {
-                                                                            "type": "string"
-                                                                        },
-                                                                        "palette_id": {
-                                                                            "type": "string"
-                                                                        },
-                                                                    },
-                                                                },
-                                                                "count": {
-                                                                    "type": "integer"
-                                                                },
-                                                                "bidirectional": {
-                                                                    "type": "boolean"
-                                                                },
-                                                            },
-                                                        },
-                                                    },
-                                                },
-                                            },
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "required": [
-                                    "id",
-                                    "type",
-                                    "title",
-                                    "instructions_md",
-                                    "points",
-                                    "hints",
-                                    "transitions",
-                                    "validators",
-                                    "world_patch",
-                                    "question_md",
-                                    "choices",
-                                    "correct",
-                                    "explanations",
-                                ],
-                                "properties": {
-                                    "id": {"type": "string"},
-                                    "type": {"type": "string", "const": "quiz"},
-                                    "title": {"type": "string"},
-                                    "instructions_md": {"type": "string"},
-                                    "points": {"type": "integer"},
-                                    "hints": {
-                                        "type": "array",
-                                        "items": {"type": "string"},
-                                    },
-                                    "transitions": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "required": ["on_success", "on_failure"],
-                                        "properties": {
-                                            "on_success": {"type": "string"},
-                                            "on_failure": {
-                                                "type": "object",
-                                                "additionalProperties": False,
-                                                "required": ["action"],
-                                                "properties": {
-                                                    "action": {"type": "string"}
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "validators": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["kind"],
-                                            "properties": {
-                                                "kind": {"type": "string"},
-                                                "expect": {
-                                                    "type": "array",
-                                                    "items": {"type": "string"},
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "world_patch": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["op", "path", "value"],
-                                            "properties": {
-                                                "op": {"type": "string"},
-                                                "path": {"type": "string"},
-                                                "value": {
-                                                    "type": [
-                                                        "string",
-                                                        "number",
-                                                        "boolean",
-                                                        "null",
-                                                    ]
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "question_md": {"type": "string"},
-                                    "choices": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["id", "text"],
-                                            "properties": {
-                                                "id": {"type": "string"},
-                                                "text": {"type": "string"},
-                                            },
-                                        },
-                                    },
-                                    "correct": {
-                                        "type": "array",
-                                        "items": {"type": "string"},
-                                    },
-                                    "explanations": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "patternProperties": {
-                                            "^.*$": {"type": "string"}
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "required": [
-                                    "id",
-                                    "type",
-                                    "title",
-                                    "instructions_md",
-                                    "points",
-                                    "hints",
-                                    "transitions",
-                                    "validators",
-                                    "world_patch",
-                                    "question_md",
-                                    "choices",
-                                    "correct",
-                                    "explanations",
-                                ],
-                                "properties": {
-                                    "id": {"type": "string"},
-                                    "type": {"type": "string", "const": "anticipation"},
-                                    "title": {"type": "string"},
-                                    "instructions_md": {"type": "string"},
-                                    "points": {"type": "integer"},
-                                    "hints": {
-                                        "type": "array",
-                                        "items": {"type": "string"},
-                                    },
-                                    "transitions": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "required": ["on_success", "on_failure"],
-                                        "properties": {
-                                            "on_success": {"type": "string"},
-                                            "on_failure": {
-                                                "type": "object",
-                                                "additionalProperties": False,
-                                                "required": ["action"],
-                                                "properties": {
-                                                    "action": {"type": "string"}
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "validators": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["kind"],
-                                            "properties": {
-                                                "kind": {"type": "string"},
-                                                "expect": {
-                                                    "type": "array",
-                                                    "items": {"type": "string"},
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "world_patch": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["op", "path", "value"],
-                                            "properties": {
-                                                "op": {"type": "string"},
-                                                "path": {"type": "string"},
-                                                "value": {
-                                                    "type": [
-                                                        "string",
-                                                        "number",
-                                                        "boolean",
-                                                        "null",
-                                                    ]
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "question_md": {"type": "string"},
-                                    "choices": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["id", "text"],
-                                            "properties": {
-                                                "id": {"type": "string"},
-                                                "text": {"type": "string"},
-                                            },
-                                        },
-                                    },
-                                    "correct": {
-                                        "type": "array",
-                                        "items": {"type": "string"},
-                                    },
-                                    "explanations": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "patternProperties": {
-                                            "^.*$": {"type": "string"}
-                                        },
-                                    },
-                                },
-                            },
-                            {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "required": [
-                                    "id",
-                                    "type",
-                                    "title",
-                                    "instructions_md",
-                                    "points",
-                                    "hints",
-                                    "transitions",
-                                    "validators",
-                                    "world_patch",
-                                    "input",
-                                ],
-                                "properties": {
-                                    "id": {"type": "string"},
-                                    "type": {"type": "string", "const": "free_input"},
-                                    "title": {"type": "string"},
-                                    "instructions_md": {"type": "string"},
-                                    "points": {"type": "integer"},
-                                    "hints": {
-                                        "type": "array",
-                                        "items": {"type": "string"},
-                                    },
-                                    "transitions": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "required": ["on_success", "on_failure"],
-                                        "properties": {
-                                            "on_success": {"type": "string"},
-                                            "on_failure": {
-                                                "type": "object",
-                                                "additionalProperties": False,
-                                                "required": ["action"],
-                                                "properties": {
-                                                    "action": {"type": "string"}
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "validators": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["kind"],
-                                            "properties": {
-                                                "kind": {"type": "string"},
-                                                "expect": {"type": "string"},
-                                                "case_sensitive": {"type": "boolean"},
-                                                "min": {"type": "number"},
-                                                "max": {"type": "number"},
-                                                "pattern": {"type": "string"},
-                                                "flags": {"type": "string"},
-                                                "message": {"type": "string"},
-                                            },
-                                        },
-                                    },
-                                    "world_patch": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "object",
-                                            "additionalProperties": False,
-                                            "required": ["op", "path", "value"],
-                                            "properties": {
-                                                "op": {"type": "string"},
-                                                "path": {"type": "string"},
-                                                "value": {
-                                                    "type": [
-                                                        "string",
-                                                        "number",
-                                                        "boolean",
-                                                        "null",
-                                                    ]
-                                                },
-                                            },
-                                        },
-                                    },
-                                    "input": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "required": ["label"],
-                                        "properties": {
-                                            "label": {"type": "string"},
-                                            "placeholder": {"type": "string"},
-                                            "input_type": {"type": "string"},
-                                            "unit": {"type": "string"},
-                                        },
-                                    },
-                                },
-                            },
+                            _TERMINAL_STEP,
+                            _CONSOLE_FORM_STEP,
+                            _INSPECT_FILE_STEP,
+                            _ARCHITECTURE_STEP,
+                            _quiz_step("quiz"),
+                            _quiz_step("anticipation"),
+                            _FREE_INPUT_STEP,
                         ]
                     },
                 },
