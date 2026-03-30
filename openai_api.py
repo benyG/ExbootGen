@@ -936,7 +936,6 @@ LAB_RESPONSE_SCHEMA = {
                                                                             "string",
                                                                             "number",
                                                                             "boolean",
-                                                                            "array",
                                                                             "null",
                                                                         ]
                                                                     },
@@ -962,7 +961,6 @@ LAB_RESPONSE_SCHEMA = {
                                                         "string",
                                                         "number",
                                                         "boolean",
-                                                        "array",
                                                         "null",
                                                     ]
                                                 },
@@ -1090,7 +1088,6 @@ LAB_RESPONSE_SCHEMA = {
                                                                                     "string",
                                                                                     "number",
                                                                                     "boolean",
-                                                                                    "array",
                                                                                     "null",
                                                                                 ]
                                                                             },
@@ -1195,7 +1192,6 @@ LAB_RESPONSE_SCHEMA = {
                                                         "string",
                                                         "number",
                                                         "boolean",
-                                                        "array",
                                                         "null",
                                                     ]
                                                 },
@@ -1348,7 +1344,6 @@ LAB_RESPONSE_SCHEMA = {
                                                         "string",
                                                         "number",
                                                         "boolean",
-                                                        "array",
                                                         "null",
                                                     ]
                                                 },
@@ -1458,7 +1453,6 @@ LAB_RESPONSE_SCHEMA = {
                                                         "string",
                                                         "number",
                                                         "boolean",
-                                                        "array",
                                                         "null",
                                                     ]
                                                 },
@@ -1709,7 +1703,6 @@ LAB_RESPONSE_SCHEMA = {
                                                         "string",
                                                         "number",
                                                         "boolean",
-                                                        "array",
                                                         "null",
                                                     ]
                                                 },
@@ -1815,7 +1808,6 @@ LAB_RESPONSE_SCHEMA = {
                                                         "string",
                                                         "number",
                                                         "boolean",
-                                                        "array",
                                                         "null",
                                                     ]
                                                 },
@@ -1921,7 +1913,6 @@ LAB_RESPONSE_SCHEMA = {
                                                         "string",
                                                         "number",
                                                         "boolean",
-                                                        "array",
                                                         "null",
                                                     ]
                                                 },
