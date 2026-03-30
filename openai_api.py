@@ -857,8 +857,7 @@ LAB_RESPONSE_SCHEMA = {
                                                             "type": "object",
                                                             "additionalProperties": False,
                                                             "required": [
-                                                                "required",
-                                                                "aliases",
+                                                                "required"
                                                             ],
                                                             "properties": {
                                                                 "required": {
@@ -1011,8 +1010,7 @@ LAB_RESPONSE_SCHEMA = {
                                                                     "type": "object",
                                                                     "additionalProperties": False,
                                                                     "required": [
-                                                                        "required",
-                                                                        "aliases",
+                                                                        "required"
                                                                     ],
                                                                     "properties": {
                                                                         "required": {
