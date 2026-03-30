@@ -931,15 +931,11 @@ LAB_RESPONSE_SCHEMA = {
                                                                         "type": "string"
                                                                     },
                                                                     "value": {
-                                                                        "anyOf": [
-                                                                            {"type": "string"},
-                                                                            {"type": "number"},
-                                                                            {"type": "boolean"},
-                                                                            {"type": "null"},
-                                                                            {
-                                                                                "type": "array",
-                                                                                "items": {},
-                                                                            },
+                                                                        "type": [
+                                                                            "string",
+                                                                            "number",
+                                                                            "boolean",
+                                                                            "null",
                                                                         ]
                                                                     },
                                                                 },
@@ -960,15 +956,11 @@ LAB_RESPONSE_SCHEMA = {
                                                 "op": {"type": "string"},
                                                 "path": {"type": "string"},
                                                 "value": {
-                                                    "anyOf": [
-                                                        {"type": "string"},
-                                                        {"type": "number"},
-                                                        {"type": "boolean"},
-                                                        {"type": "null"},
-                                                        {
-                                                            "type": "array",
-                                                            "items": {},
-                                                        },
+                                                    "type": [
+                                                        "string",
+                                                        "number",
+                                                        "boolean",
+                                                        "null",
                                                     ]
                                                 },
                                             },
@@ -1090,15 +1082,11 @@ LAB_RESPONSE_SCHEMA = {
                                                                                 "type": "string"
                                                                             },
                                                                             "value": {
-                                                                                "anyOf": [
-                                                                                    {"type": "string"},
-                                                                                    {"type": "number"},
-                                                                                    {"type": "boolean"},
-                                                                                    {"type": "null"},
-                                                                                    {
-                                                                                        "type": "array",
-                                                                                        "items": {},
-                                                                                    },
+                                                                                "type": [
+                                                                                    "string",
+                                                                                    "number",
+                                                                                    "boolean",
+                                                                                    "null",
                                                                                 ]
                                                                             },
                                                                         },
@@ -1198,15 +1186,11 @@ LAB_RESPONSE_SCHEMA = {
                                                 "op": {"type": "string"},
                                                 "path": {"type": "string"},
                                                 "value": {
-                                                    "anyOf": [
-                                                        {"type": "string"},
-                                                        {"type": "number"},
-                                                        {"type": "boolean"},
-                                                        {"type": "null"},
-                                                        {
-                                                            "type": "array",
-                                                            "items": {},
-                                                        },
+                                                    "type": [
+                                                        "string",
+                                                        "number",
+                                                        "boolean",
+                                                        "null",
                                                     ]
                                                 },
                                             },
@@ -1354,15 +1338,11 @@ LAB_RESPONSE_SCHEMA = {
                                                 "op": {"type": "string"},
                                                 "path": {"type": "string"},
                                                 "value": {
-                                                    "anyOf": [
-                                                        {"type": "string"},
-                                                        {"type": "number"},
-                                                        {"type": "boolean"},
-                                                        {"type": "null"},
-                                                        {
-                                                            "type": "array",
-                                                            "items": {},
-                                                        },
+                                                    "type": [
+                                                        "string",
+                                                        "number",
+                                                        "boolean",
+                                                        "null",
                                                     ]
                                                 },
                                             },
@@ -1467,15 +1447,11 @@ LAB_RESPONSE_SCHEMA = {
                                                 "op": {"type": "string"},
                                                 "path": {"type": "string"},
                                                 "value": {
-                                                    "anyOf": [
-                                                        {"type": "string"},
-                                                        {"type": "number"},
-                                                        {"type": "boolean"},
-                                                        {"type": "null"},
-                                                        {
-                                                            "type": "array",
-                                                            "items": {},
-                                                        },
+                                                    "type": [
+                                                        "string",
+                                                        "number",
+                                                        "boolean",
+                                                        "null",
                                                     ]
                                                 },
                                             },
@@ -1721,15 +1697,11 @@ LAB_RESPONSE_SCHEMA = {
                                                 "op": {"type": "string"},
                                                 "path": {"type": "string"},
                                                 "value": {
-                                                    "anyOf": [
-                                                        {"type": "string"},
-                                                        {"type": "number"},
-                                                        {"type": "boolean"},
-                                                        {"type": "null"},
-                                                        {
-                                                            "type": "array",
-                                                            "items": {},
-                                                        },
+                                                    "type": [
+                                                        "string",
+                                                        "number",
+                                                        "boolean",
+                                                        "null",
                                                     ]
                                                 },
                                             },
@@ -1830,15 +1802,11 @@ LAB_RESPONSE_SCHEMA = {
                                                 "op": {"type": "string"},
                                                 "path": {"type": "string"},
                                                 "value": {
-                                                    "anyOf": [
-                                                        {"type": "string"},
-                                                        {"type": "number"},
-                                                        {"type": "boolean"},
-                                                        {"type": "null"},
-                                                        {
-                                                            "type": "array",
-                                                            "items": {},
-                                                        },
+                                                    "type": [
+                                                        "string",
+                                                        "number",
+                                                        "boolean",
+                                                        "null",
                                                     ]
                                                 },
                                             },
@@ -1939,15 +1907,11 @@ LAB_RESPONSE_SCHEMA = {
                                                 "op": {"type": "string"},
                                                 "path": {"type": "string"},
                                                 "value": {
-                                                    "anyOf": [
-                                                        {"type": "string"},
-                                                        {"type": "number"},
-                                                        {"type": "boolean"},
-                                                        {"type": "null"},
-                                                        {
-                                                            "type": "array",
-                                                            "items": {},
-                                                        },
+                                                    "type": [
+                                                        "string",
+                                                        "number",
+                                                        "boolean",
+                                                        "null",
                                                     ]
                                                 },
                                             },
