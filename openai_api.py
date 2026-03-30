@@ -756,7 +756,7 @@ LAB_RESPONSE_SCHEMA = {
                             "mime": {"type": "string"},
                             "inline": {"type": "boolean"},
                             "content_b64": {"type": "string"},
-                            "description": {"type": ["string", "null"]},
+                            "description": {"anyOf": [{"type": "string"}, {"type": "null"}]},
                         },
                     },
                 },
@@ -857,8 +857,7 @@ LAB_RESPONSE_SCHEMA = {
                                                             "type": "object",
                                                             "additionalProperties": False,
                                                             "required": [
-                                                                "required",
-                                                                "aliases",
+                                                                "required"
                                                             ],
                                                             "properties": {
                                                                 "required": {
@@ -1009,8 +1008,7 @@ LAB_RESPONSE_SCHEMA = {
                                                                     "type": "object",
                                                                     "additionalProperties": False,
                                                                     "required": [
-                                                                        "required",
-                                                                        "aliases",
+                                                                        "required"
                                                                     ],
                                                                     "properties": {
                                                                         "required": {
