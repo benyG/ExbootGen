@@ -747,6 +747,7 @@ LAB_RESPONSE_SCHEMA = {
                             "mime",
                             "inline",
                             "content_b64",
+                            "description",
                         ],
                         "properties": {
                             "id": {"type": "string"},
@@ -755,7 +756,7 @@ LAB_RESPONSE_SCHEMA = {
                             "mime": {"type": "string"},
                             "inline": {"type": "boolean"},
                             "content_b64": {"type": "string"},
-                            "description": {"type": "string"},
+                            "description": {"type": ["string", "null"]},
                         },
                     },
                 },
