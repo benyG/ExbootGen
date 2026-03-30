@@ -598,11 +598,14 @@ function renderStep(){
       if(localBtn) localBtn.click();
     };
   }
-  else if(r.type==='quiz'){
+  else if(r.type==='quiz' || r.type==='anticipation'){
     const wrap=document.createElement('div'); let selected=null;
     (r.choices||[]).forEach(c=>{ const ch=document.createElement('div'); ch.className='choice'; ch.textContent=c.text; ch.onclick=()=>{ selected=c.id; Array.from(wrap.children).forEach(x=>x.classList.remove('selected')); ch.classList.add('selected'); }; wrap.appendChild(ch); });
     body.appendChild(wrap);
     state.validateCurrent=()=>{ if((r.correct||[]).includes(selected)){ state.errorById[r.id]=''; success(r); } else { handleStepFailure(r, 'Wrong answer', '<div class="ko">Wrong answer. Try again.</div>'); } };
+  }
+  else {
+    const msg=document.createElement('div'); msg.className='ko'; msg.textContent=`Unknown step type: "${r.type}". This step cannot be rendered.`; body.appendChild(msg);
   }
 
   document.getElementById('btn-restart').onclick = ()=>{ state.world={}; state.score=0; state.statusById={}; state.errorById={}; state.currentId=state.lab.lab.steps[0].id; setScore(); setWorld(); renderStep(); };

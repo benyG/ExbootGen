@@ -46,13 +46,13 @@ def _flatten_analysis(
 
 def _map_step_types(analysis: Dict[str, str]) -> Dict[str, str]:
     scenario_to_steps = {
-        "case": ["quiz", "inspect_file"],
+        "case": ["quiz", "anticipation", "inspect_file"],
         "archi": ["architecture"],
         "config": ["terminal", "console_form"],
         "console": ["terminal", "console_form"],
         "code": ["terminal", "inspect_file"],
     }
-    step_flags = {key: "0" for key in ["quiz", "architecture", "terminal", "console_form", "inspect_file"]}
+    step_flags = {key: "0" for key in ["quiz", "anticipation", "architecture", "terminal", "console_form", "inspect_file"]}
     for scenario, steps in scenario_to_steps.items():
         if analysis.get(scenario) == "1":
             for step in steps:

@@ -2836,7 +2836,7 @@ def generate_lab_blueprint(
     prompt_template = """You are an expert in creating interactive labs in JSON for a tool.
     These labs simulate practical scenarios tied to specific certification exam domains.
     TASK:
-    For certification exam: {certification} from vendor {vendor}.
+    For certification exam: {certification} from vendor {provider}.
     Retrieve the official course content for the domains "{domains_label}" and generate a practical lab with at least {min_steps} steps.
     If direct browsing is not available, rely on your most up-to-date knowledge of the vendor's official exam outline to provide accurate informations.
     - Main domain description: {domain_descr}
@@ -3087,7 +3087,10 @@ def generate_lab_blueprint(
     explanations (optional): feedback per choice.
     validators: may include {"kind":"quiz","expect":["a","c"]}.
     #6. anticipation
-    keep the quiz structure but focus questions on projection or prospective analysis.
+    Same structure as quiz (question_md, choices, correct, explanations).
+    Use this type to ask the learner to PREDICT an outcome or reason about what would happen
+    next given the scenario context (e.g., "What will happen if...?", "Which service will be
+    affected when...?"). Do NOT use it for recall questions — those belong to quiz type.
     
     ### RULES AND COMPATIBILITY
     All steps must follow the scenario_md narrative and the learning goal for the chosen certification domains. Each step must update or check the world state (world_patch, form.model_path, architecture.world_path, etc.).
