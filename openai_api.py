@@ -744,9 +744,16 @@ _TERMINAL_INNER_VALIDATOR = {
                     "properties": {
                         "required": {"type": "array", "items": {"type": "string"}},
                         "aliases": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "patternProperties": {"^.*$": {"type": "string"}},
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": ["from_flag", "to_flag"],
+                                "properties": {
+                                    "from_flag": {"type": "string"},
+                                    "to_flag": {"type": "string"},
+                                },
+                            },
                         },
                     },
                 },
@@ -1050,9 +1057,16 @@ _QUIZ_VALIDATOR = {
 }
 
 _EXPLANATIONS = {
-    "type": "object",
-    "additionalProperties": False,
-    "patternProperties": {"^.*$": {"type": "string"}},
+    "type": "array",
+    "items": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["id", "text"],
+        "properties": {
+            "id": {"type": "string"},
+            "text": {"type": "string"},
+        },
+    },
 }
 
 def _quiz_step(type_const):
@@ -1131,8 +1145,9 @@ _FREE_INPUT_STEP = {
 _VARIABLE_DEF = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["type", "choices", "min", "max"],
+    "required": ["name", "type", "choices", "min", "max"],
     "properties": {
+        "name": {"type": "string"},
         "type": {"type": "string"},
         "choices": {"anyOf": [{"type": "array", "items": {"type": "string"}}, {"type": "null"}]},
         "min": {"anyOf": [{"type": "number"}, {"type": "null"}]},
@@ -1159,9 +1174,8 @@ LAB_RESPONSE_SCHEMA = {
                 "subtitle": {"type": "string"},
                 "scenario_md": {"type": "string"},
                 "variables": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "patternProperties": {"^.*$": _VARIABLE_DEF},
+                    "type": "array",
+                    "items": _VARIABLE_DEF,
                 },
                 "scoring": {
                     "type": "object",
@@ -2267,7 +2281,7 @@ def generate_lab_blueprint(
     id (unique kebab-case): stable lab identifier.
     title, subtitle: main and short titles.
     scenario_md: 2–3 Markdown paragraphs describing lab scenario context, mission, and objectives related to {provider}/{certification}.
-    variables (optional): reusable definitions (type: "choice"|"string"|"number", with possible choices, min, max, etc.). Use via {{variable}}.
+    variables (optional): array of reusable definitions (name, type: "choice"|"number", choices, min, max). Use via {{{{variable}}}}. Empty array if none needed.
     scoring: {"max_points": <sum of step points>}.
     {timer_clause}
     assets: array of realistic downloadable or inline resources (id, kind, filename, mime, inline:true, content_b64).
@@ -2280,12 +2294,9 @@ def generate_lab_blueprint(
         "title": "...",
         "subtitle": "...",
         "scenario_md": "Paragraphs ...",
-        "variables": {
-          "example_var": {
-            "type": "choice",
-            "choices": ["option A", "option B"]
-          }
-        },
+        "variables": [
+          { "name": "example_var", "type": "choice", "choices": ["option A", "option B"], "min": null, "max": null }
+        ],
         "scoring": { "max_points": x },
         "timer": { "mode": "countdown", "seconds": x },
         "assets": [],
@@ -2351,7 +2362,7 @@ def generate_lab_blueprint(
             "subcommand": ["ec2", ...],
             "flags": {
               "required": ["--group-ids"],
-              "aliases": { "-g": "--group-ids" }
+              "aliases": [ { "from_flag": "-g", "to_flag": "--group-ids" } ]
             },
             "args": [
               { "flag": "--group-ids", "expect": "sg-{{expected_group}}" }
@@ -2488,13 +2499,13 @@ def generate_lab_blueprint(
         {{ "id": "d", "text": "answer4" }}
     ],
     "correct": ["a", "c"],
-    "explanations": {{
-    "a": "...",
-    "c": "..."
-    }}
+    "explanations": [
+      {{ "id": "a", "text": "..." }},
+      {{ "id": "c", "text": "..." }}
+    ]
     choices: array of {id, text} objects.
     correct: list of one or more correct IDs.
-    explanations (optional): feedback per choice.
+    explanations: array of {id, text} feedback objects (one per choice, always provide all choices).
     validators: may include {"kind":"quiz","expect":["a","c"]}.
     #6. anticipation
     Same structure as quiz (question_md, choices, correct, explanations).
