@@ -740,7 +740,7 @@ _TERMINAL_INNER_VALIDATOR = {
                 "flags": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["required", "aliases"],
+                    "required": ["required"],
                     "properties": {
                         "required": {"type": "array", "items": {"type": "string"}},
                         "aliases": {
@@ -1075,7 +1075,7 @@ def _quiz_step(type_const):
         "additionalProperties": False,
         "required": ["id", "type", "title", "instructions_md", "points", "hints",
                      "transitions", "validators", "world_patch",
-                     "question_md", "choices", "correct", "explanations"],
+                     "question_md", "choices", "correct"],
         "properties": {
             "id": {"type": "string"},
             "type": {"type": "string", "const": type_const},
@@ -1157,6 +1157,10 @@ _VARIABLE_DEF = {
 
 # ─── Root schema ──────────────────────────────────────────────────────────────
 
+# Note: free-form/dynamic object properties used by the OpenAI strict schema validator
+# (e.g. patternProperties/additionalProperties maps such as aliases, explanations,
+# and variables) are intentionally not listed in parent "required" arrays.
+
 LAB_RESPONSE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -1167,7 +1171,7 @@ LAB_RESPONSE_SCHEMA = {
             "type": "object",
             "additionalProperties": False,
             "required": ["id", "title", "subtitle", "scenario_md",
-                         "variables", "scoring", "timer", "assets", "steps"],
+                         "scoring", "timer", "assets", "steps"],
             "properties": {
                 "id": {"type": "string"},
                 "title": {"type": "string"},
