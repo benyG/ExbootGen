@@ -246,10 +246,10 @@ const DEMO = {
     title: "Secure an S3 bucket (demo)",
     subtitle: "Terminal + Console + Inspect + Quiz",
     scenario_md: "This demo scenario shows how the player orchestrates a sequence of complementary steps.\n\nYou are a cloud engineer tasked with securing an exposed S3 bucket. Each phase shows how validations update the simulated state and unlock the next step.",
-    variables: {
-      bucket_name: { type: "choice", choices: ["acme-audit","contoso-audit","globex-audit"] },
-      region: { type: "choice", choices: ["us-east-1","eu-west-1"] }
-    },
+    variables: [
+      { name: "bucket_name", type: "choice", choices: ["acme-audit","contoso-audit","globex-audit"], min: null, max: null },
+      { name: "region", type: "choice", choices: ["us-east-1","eu-west-1"], min: null, max: null }
+    ],
     scoring: { max_points: 80 },
     timer: { mode: "countdown", seconds: 900 },
     assets: [
@@ -294,7 +294,7 @@ const state = {
   consoleLibrary: {}
 };
 
-function drawVariables(varsSpec, seed){ const rnd=seededRandom(seed); const v={}; for(const [k,s] of Object.entries(varsSpec||{})){ if(s.type==='choice'){ const choices=s.choices; v[k]=choices[Math.floor(rnd()*choices.length)]; } else if(s.type==='number'){ v[k]=Math.floor(s.min + rnd()*(s.max-s.min+1)); } } return v; }
+function drawVariables(varsSpec, seed){ const rnd=seededRandom(seed); const v={}; for(const s of (varsSpec||[])){ const k=s.name; if(!k) continue; if(s.type==='choice'){ const choices=s.choices||[]; v[k]=choices[Math.floor(rnd()*choices.length)]; } else if(s.type==='number'){ v[k]=Math.floor(s.min + rnd()*(s.max-s.min+1)); } } return v; }
 function resolve(obj){ return templateAny(obj, state.vars); }
 
 
@@ -694,7 +694,7 @@ function validateTerminal(r, line){
   if(!rule || rule.kind!=="command") return { ok:false, message:"No validator configured." };
   if(cmd.program !== rule.match.program) return { ok:false, message:`Expected program: ${rule.match.program}` };
   const sub = rule.match.subcommand||[]; for(let i=0;i<sub.length;i++){ if(cmd.subcmd[i]!==sub[i]) return { ok:false, message:`Expected subcommand: ${sub.join(' ')}` }; }
-  const aliases = (rule.match.flags&&rule.match.flags.aliases)||{}; const flags={}; for(const [k,v] of Object.entries(cmd.flags)){ flags[aliases[k]||k]=v; }
+  const aliasesArr = (rule.match.flags&&rule.match.flags.aliases)||[]; const aliasMap={}; for(const a of aliasesArr){ aliasMap[a.from_flag]=a.to_flag; } const flags={}; for(const [k,v] of Object.entries(cmd.flags)){ flags[aliasMap[k]||k]=v; }
   for(const req of (rule.match.flags?.required||[])){ if(!(req in flags)) return { ok:false, message:`Missing required flag: ${req}` }; }
   for(const a of (rule.match.args||[])){ const got = flags[a.flag]; const expect = templateString(a.expect, state.vars); if(String(got)!==String(expect)) return { ok:false, message:`Expected value for ${a.flag}: ${expect}` }; }
   applyWorldPatch(state.world, rule.response?.world_patch||[], state.vars); setWorld();
