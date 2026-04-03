@@ -472,9 +472,33 @@
       });
 
       const selectForm = document.getElementById('select-form');
-      selectForm?.addEventListener('submit', () => {
+      selectForm?.addEventListener('submit', (event) => {
         const submitButton = selectForm.querySelector('button[type="submit"]');
+
+        // Toujours synchroniser les options de distribution avant soumission
+        // (même si l'utilisateur n'a pas cliqué sur "Enregistrer").
+        distributionState = collectDistribution();
+        distributionInput.value = JSON.stringify(distributionState);
+        applyAdditionState = !!applyAdditionCheckbox?.checked;
+        applyAdditionInput.value = applyAdditionState ? 'true' : 'false';
+
+        const providerValue = String(providerEl?.value || '').trim();
+        const certValue = String(certEl?.value || '').trim();
+        if (!providerValue || !certValue) {
+          event.preventDefault();
+          setButtonLoading(submitButton, false);
+          return;
+        }
+
         setButtonLoading(submitButton, true);
+
+        // Filet de sécurité UX : si la navigation ne démarre pas (validation
+        // navigateur, interruption JS, etc.), on réactive le bouton.
+        window.setTimeout(() => {
+          if (document.contains(selectForm)) {
+            setButtonLoading(submitButton, false);
+          }
+        }, 2000);
       });
 
       document.getElementById('cancelDistribution').addEventListener('click', () => {
