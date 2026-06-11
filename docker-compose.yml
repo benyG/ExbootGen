@@ -1,0 +1,57 @@
+services:
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Remplacer ce service par CELERY_BROKER_URL/CELERY_RESULT_BACKEND/JOB_STORE_URL
+    # pointant vers Redis Cloud si vous préférez ne pas héberger Redis localement.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    command: gunicorn -w 4 -k gthread --bind 0.0.0.0:8000 app:app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      JOB_STORE_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+
+  celery-worker:
+    build: .
+    command: celery -A app.celery_app worker --loglevel=info
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      JOB_STORE_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+
+  celery-beat:
+    build: .
+    command: celery -A app.celery_app beat --loglevel=info
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      JOB_STORE_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
