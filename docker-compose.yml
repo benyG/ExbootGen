@@ -34,7 +34,7 @@ services:
     restart: unless-stopped
     ports:
       - "8800:8800"   # HTTPS public
-      - "80:80"        # HTTP → redirect HTTPS (ACME HTTP-01 challenge)
+      # Port 80 non requis avec tls internal (pas de challenge ACME)
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

@@ -1,3 +1,4 @@
 factory.cisspbootcamp.online:8800 {
+	tls internal
 	reverse_proxy web:8800
 }
