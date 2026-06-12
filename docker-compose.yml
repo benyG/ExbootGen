@@ -13,10 +13,11 @@ services:
 
   web:
     build: .
-    command: gunicorn -w 4 -k gthread --bind 0.0.0.0:8000 app:app
+    command: gunicorn -w 4 -k gthread --bind 0.0.0.0:8800 app:app
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    # Port interne uniquement — Caddy expose le HTTPS sur 8800 côté hôte.
+    expose:
+      - "8800"
     env_file: .env
     environment:
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -27,6 +28,19 @@ services:
         condition: service_healthy
     volumes:
       - ./uploads:/app/uploads
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "8800:8800"   # HTTPS public
+      # Port 80 non requis avec tls internal (pas de challenge ACME)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
 
   celery-worker:
     build: .
@@ -55,3 +69,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:
