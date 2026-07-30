@@ -477,6 +477,7 @@
     .chip.linkedin { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #e2e8f0; }
     .chip.article { background: linear-gradient(135deg, #a855f7, #7c3aed); color: #f8fafc; }
     .chip.carousel { background: linear-gradient(135deg, #22c55e, #16a34a); color: #052e16; border: 1px solid rgba(34,197,94,0.45); box-shadow: 0 8px 25px rgba(34,197,94,0.16); }
+    .chip.video { background: linear-gradient(135deg, #f472b6, #db2777); color: #2b0714; border: 1px solid rgba(244,114,182,0.45); box-shadow: 0 8px 25px rgba(244,114,182,0.16); }
 
     .count {
       position: absolute;
@@ -1054,6 +1055,7 @@
           <label class="checkbox-pill"><input type="checkbox" value="x" class="channel-checkbox"> Twitter</label>
           <label class="checkbox-pill"><input type="checkbox" value="article" class="channel-checkbox"> Article long</label>
           <label class="checkbox-pill"><input type="checkbox" value="carousel" class="channel-checkbox"> Carousel</label>
+          <label class="checkbox-pill"><input type="checkbox" value="video" class="channel-checkbox"> Vidéo quiz</label>
         </div>
         <div>
           <label for="carouselTopicSelect">Sujet carousel disponible</label>
@@ -1148,7 +1150,7 @@
     let viewDate = new Date();
     let selectedDate = new Date();
 
-    const channelLabels = { linkedin: 'LinkedIn', x: 'Twitter', article: 'Article', carousel: 'Carousel' };
+    const channelLabels = { linkedin: 'LinkedIn', x: 'Twitter', article: 'Article', carousel: 'Carousel', video: 'Vidéo quiz' };
 
     async function fetchCarouselTopics() {
       try {

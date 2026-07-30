@@ -524,11 +524,13 @@ def get_public_certifications():
 
     conn = get_connection()
     cursor = conn.cursor()
+    # owner IS NULL keeps this to the licensed catalogue: a trainer's own
+    # certifications are private to their academy and must never be published.
     query = """
         SELECT c.id, c.name, c.prov AS provider_id, p.name AS provider_name
         FROM courses c
         LEFT JOIN provs p ON p.id = c.prov
-        WHERE c.pub = 1
+        WHERE c.pub = 1 AND c.owner IS NULL
         ORDER BY c.name
     """
     cursor.execute(query)
@@ -1080,9 +1082,9 @@ def get_unpublished_certifications_report(include_all_unpublished: bool = False)
     conn = get_connection()
     cursor = conn.cursor()
     if include_all_unpublished:
-        where_clause = "WHERE c.pub IS NULL OR c.pub <> 1"
+        where_clause = "WHERE c.owner IS NULL AND (c.pub IS NULL OR c.pub <> 1)"
     else:
-        where_clause = "WHERE c.pub = 2"
+        where_clause = "WHERE c.owner IS NULL AND c.pub = 2"
     query = """
         SELECT
             p.id AS provider_id,
@@ -2488,3 +2490,871 @@ def get_dashboard_snapshot(start_dt, end_dt, plan=None, cert_id=None, user_query
             "completed_exams": guest_completed_exams,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Growth reporting: what each channel actually produced
+#
+# The platform tags leads and accounts with the campaign that brought them in
+# (see attribution.py and the Laravel CaptureAttribution middleware). These
+# queries join that attribution to real revenue, which is the only way to tell
+# a channel that publishes a lot from a channel that earns.
+# ---------------------------------------------------------------------------
+
+_ATTRIBUTION_READY: bool | None = None
+
+#: Written by the platform on both leads and users.
+_ATTRIBUTION_COLUMNS = ("utm_source", "utm_medium", "utm_campaign", "utm_content")
+
+
+def attribution_available() -> bool:
+    """Whether the platform has already deployed its attribution columns.
+
+    The admin app and the platform deploy independently, so the dashboard must
+    degrade to an explanatory message instead of a stack trace when the Laravel
+    migration has not run yet.
+    """
+
+    global _ATTRIBUTION_READY
+    if _ATTRIBUTION_READY is not None:
+        return _ATTRIBUTION_READY
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SHOW COLUMNS FROM leads")
+        lead_columns = {row[0] for row in cursor.fetchall()}
+        cursor.execute("SHOW COLUMNS FROM users")
+        user_columns = {row[0] for row in cursor.fetchall()}
+    except Exception:
+        _ATTRIBUTION_READY = False
+        return False
+    finally:
+        cursor.close()
+        conn.close()
+
+    needed = set(_ATTRIBUTION_COLUMNS)
+    _ATTRIBUTION_READY = needed.issubset(lead_columns) and needed.issubset(user_columns)
+    return _ATTRIBUTION_READY
+
+
+def get_funnel_by_channel(days: int = 30):
+    """Leads, signups and revenue per acquisition channel and campaign.
+
+    Leads and accounts are counted separately rather than joined: a visitor may
+    register without ever leaving a lead, and counting only converted leads
+    would understate every channel.
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    query = """
+        SELECT source, campaign, medium,
+               SUM(leads) AS leads,
+               SUM(opt_ins) AS opt_ins,
+               SUM(signups) AS signups,
+               SUM(customers) AS customers,
+               SUM(revenue) AS revenue
+        FROM (
+            SELECT COALESCE(l.utm_source, 'direct') AS source,
+                   COALESCE(l.utm_campaign, '')     AS campaign,
+                   COALESCE(l.utm_medium, '')       AS medium,
+                   COUNT(*)                         AS leads,
+                   SUM(l.opt_in = 1)                AS opt_ins,
+                   0 AS signups, 0 AS customers, 0 AS revenue
+            FROM leads l
+            WHERE l.created_at >= DATE_SUB(NOW(), INTERVAL %s DAY)
+            GROUP BY source, campaign, medium
+
+            UNION ALL
+
+            SELECT COALESCE(u.utm_source, 'direct'),
+                   COALESCE(u.utm_campaign, ''),
+                   COALESCE(u.utm_medium, ''),
+                   0, 0,
+                   COUNT(DISTINCT u.id),
+                   COUNT(DISTINCT o.user),
+                   COALESCE(SUM(o.amount), 0)
+            FROM users u
+            LEFT JOIN orders o ON o.user = u.id
+            WHERE u.created_at >= DATE_SUB(NOW(), INTERVAL %s DAY)
+              AND u.ex <> 9
+            GROUP BY 1, 2, 3
+        ) AS combined
+        GROUP BY source, campaign, medium
+        ORDER BY revenue DESC, leads DESC
+    """
+    cursor.execute(query, (days, days))
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def get_funnel_totals(days: int = 30):
+    """Headline numbers for the period: the four figures that matter."""
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS leads,
+               SUM(opt_in = 1) AS opt_ins,
+               SUM(converted IS NOT NULL) AS converted
+        FROM leads
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL %s DAY)
+        """,
+        (days,),
+    )
+    lead_totals = cursor.fetchone() or {}
+
+    cursor.execute(
+        """
+        SELECT COUNT(DISTINCT u.id) AS signups,
+               COUNT(DISTINCT o.user) AS customers,
+               COALESCE(SUM(o.amount), 0) AS revenue
+        FROM users u
+        LEFT JOIN orders o ON o.user = u.id
+        WHERE u.created_at >= DATE_SUB(NOW(), INTERVAL %s DAY)
+          AND u.ex <> 9
+        """,
+        (days,),
+    )
+    user_totals = cursor.fetchone() or {}
+
+    cursor.execute(
+        """
+        SELECT COALESCE(SUM(amount), 0) AS mrr
+        FROM orders
+        WHERE type = 0 AND exp > NOW()
+        """
+    )
+    recurring = cursor.fetchone() or {}
+
+    cursor.close()
+    conn.close()
+
+    return {
+        "leads": int(lead_totals.get("leads") or 0),
+        "opt_ins": int(lead_totals.get("opt_ins") or 0),
+        "converted_leads": int(lead_totals.get("converted") or 0),
+        "signups": int(user_totals.get("signups") or 0),
+        "customers": int(user_totals.get("customers") or 0),
+        "revenue": float(user_totals.get("revenue") or 0),
+        "active_recurring": float(recurring.get("mrr") or 0),
+    }
+
+
+def get_revenue_by_day(days: int = 30):
+    """Daily paid amount, so the dashboard can plot the trend."""
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """
+        SELECT DATE(created_at) AS day,
+               COALESCE(SUM(amount), 0) AS revenue,
+               COUNT(*) AS orders
+        FROM orders
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL %s DAY)
+        GROUP BY DATE(created_at)
+        ORDER BY day
+        """,
+        (days,),
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def get_top_certifications_by_leads(days: int = 30, limit: int = 10):
+    """Which certifications actually attract prospects."""
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """
+        SELECT c.id AS cert_id,
+               c.name AS cert_name,
+               COUNT(*) AS leads,
+               ROUND(AVG(l.score), 1) AS avg_score,
+               SUM(l.converted IS NOT NULL) AS converted
+        FROM leads l
+        JOIN courses c ON c.id = l.course
+        WHERE l.created_at >= DATE_SUB(NOW(), INTERVAL %s DAY)
+        GROUP BY c.id, c.name
+        ORDER BY leads DESC
+        LIMIT %s
+        """,
+        (days, limit),
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Trainer prospecting
+#
+# Reaching the revenue goal through seats is roughly sixty trainers, which is a
+# list of names rather than a traffic problem. Each prospect gets a playable
+# test generated on the certification they teach: a gift, not a pitch.
+# ---------------------------------------------------------------------------
+
+PROSPECT_STATUSES = (
+    "new",        # sourced, nothing sent
+    "gift_sent",  # the personalised test has gone out
+    "replied",    # they answered
+    "signed_up",  # they opened an account
+    "customer",   # they are paying
+    "declined",   # not interested
+)
+
+_PROSPECT_COLUMNS = (
+    "id", "name", "email", "organisation", "profile_url", "source", "status",
+    "gift_url", "gift_sent_at", "last_contact_at", "follow_ups", "notes",
+    "course", "user", "created_at", "updated_at",
+)
+
+
+def prospects_available() -> bool:
+    """Whether the platform has deployed the prospects table yet."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SHOW TABLES LIKE 'trainer_prospects'")
+        return cursor.fetchone() is not None
+    except Exception:
+        return False
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_prospects(status: str | None = None):
+    """The pipeline, newest first, with the certification each trainer teaches."""
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    columns = ", ".join(f"p.{name}" for name in _PROSPECT_COLUMNS)
+    query = f"""
+        SELECT {columns}, c.name AS course_name
+        FROM trainer_prospects p
+        LEFT JOIN courses c ON c.id = p.course
+    """
+    params: tuple = ()
+    if status:
+        query += " WHERE p.status = %s"
+        params = (status,)
+    query += " ORDER BY p.created_at DESC"
+
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def get_prospect(prospect_id: int):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    columns = ", ".join(_PROSPECT_COLUMNS)
+    cursor.execute(f"SELECT {columns} FROM trainer_prospects WHERE id = %s", (prospect_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return row
+
+
+def insert_prospect(
+    name: str,
+    email: str | None = None,
+    organisation: str | None = None,
+    profile_url: str | None = None,
+    source: str = "manual",
+    course: int | None = None,
+    notes: str | None = None,
+) -> int:
+    """Add one trainer to the pipeline, ignoring an address already sourced."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO trainer_prospects
+            (name, email, organisation, profile_url, source, course, notes, status, created_at, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, 'new', NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+            name = VALUES(name),
+            organisation = COALESCE(VALUES(organisation), organisation),
+            profile_url = COALESCE(VALUES(profile_url), profile_url),
+            course = COALESCE(VALUES(course), course),
+            updated_at = NOW()
+        """,
+        (name, email or None, organisation, profile_url, source, course, notes),
+    )
+    conn.commit()
+    prospect_id = cursor.lastrowid
+    cursor.close()
+    conn.close()
+    return prospect_id
+
+
+def update_prospect_status(prospect_id: int, status: str) -> None:
+    if status not in PROSPECT_STATUSES:
+        raise ValueError(f"Statut inconnu : {status}")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE trainer_prospects
+        SET status = %s,
+            last_contact_at = CASE WHEN %s IN ('gift_sent', 'replied') THEN NOW() ELSE last_contact_at END,
+            updated_at = NOW()
+        WHERE id = %s
+        """,
+        (status, status, prospect_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def record_prospect_gift(prospect_id: int, gift_url: str) -> None:
+    """Store the personalised test and move the prospect along the pipeline."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE trainer_prospects
+        SET gift_url = %s,
+            gift_sent_at = NOW(),
+            last_contact_at = NOW(),
+            status = CASE WHEN status = 'new' THEN 'gift_sent' ELSE status END,
+            follow_ups = follow_ups + 1,
+            updated_at = NOW()
+        WHERE id = %s
+        """,
+        (gift_url, prospect_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def record_prospect_follow_up(prospect_id: int) -> None:
+    """Log that one more message of the sequence has gone out."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE trainer_prospects
+        SET follow_ups = follow_ups + 1,
+            last_contact_at = NOW(),
+            status = CASE WHEN status = 'new' THEN 'gift_sent' ELSE status END,
+            updated_at = NOW()
+        WHERE id = %s
+        """,
+        (prospect_id,),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def match_prospects_to_accounts() -> int:
+    """Link prospects to the accounts they opened, by email.
+
+    Also promotes anyone who has started paying, so the pipeline reflects
+    reality without anyone updating it by hand.
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        UPDATE trainer_prospects p
+        JOIN users u ON LOWER(u.email) = LOWER(p.email) AND u.ex <> 9
+        SET p.user = u.id,
+            p.status = CASE WHEN p.status IN ('new', 'gift_sent', 'replied') THEN 'signed_up' ELSE p.status END,
+            p.updated_at = NOW()
+        WHERE p.email IS NOT NULL AND p.user IS NULL
+        """
+    )
+    linked = cursor.rowcount
+
+    cursor.execute(
+        """
+        UPDATE trainer_prospects p
+        JOIN orders o ON o.user = p.user
+        SET p.status = 'customer', p.updated_at = NOW()
+        WHERE p.user IS NOT NULL AND p.status <> 'customer'
+        """
+    )
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return linked
+
+
+def get_prospect_funnel():
+    """How many trainers sit at each stage of the pipeline."""
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """
+        SELECT status, COUNT(*) AS total
+        FROM trainer_prospects
+        GROUP BY status
+        """
+    )
+    rows = {row["status"]: int(row["total"]) for row in cursor.fetchall()}
+    cursor.close()
+    conn.close()
+
+    return {status: rows.get(status, 0) for status in PROSPECT_STATUSES}
+
+
+# ---------------------------------------------------------------------------
+# Lead magnets
+#
+# The console generates the asset and pushes it to the platform, which hosts
+# the landing page and captures the address. These queries answer the only
+# question that matters afterwards: which asset actually earns addresses.
+# ---------------------------------------------------------------------------
+
+
+def magnets_available() -> bool:
+    """Whether the platform has deployed the lead magnets table yet."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SHOW TABLES LIKE 'lead_magnets'")
+        return cursor.fetchone() is not None
+    except Exception:
+        return False
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_magnets():
+    """Every asset with what it attracted and what it captured."""
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """
+        SELECT m.id, m.slug, m.title, m.locale, m.pub, m.views, m.captures,
+               m.file, m.created_at, c.name AS course_name,
+               (SELECT COUNT(*) FROM leads l WHERE l.magnet = m.id) AS leads,
+               (SELECT COUNT(*) FROM leads l WHERE l.magnet = m.id AND l.converted IS NOT NULL) AS converted
+        FROM lead_magnets m
+        LEFT JOIN courses c ON c.id = m.course
+        ORDER BY m.created_at DESC
+        """
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def get_magnet_totals():
+    """Totals across every asset, published or not."""
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS magnets,
+               COALESCE(SUM(m.pub), 0) AS published,
+               COALESCE(SUM(m.views), 0) AS views,
+               COALESCE(SUM(m.captures), 0) AS captures
+        FROM lead_magnets m
+        """
+    )
+    totals = cursor.fetchone() or {}
+    cursor.execute("SELECT COUNT(*) AS converted FROM leads WHERE magnet IS NOT NULL AND converted IS NOT NULL")
+    converted = cursor.fetchone() or {}
+    cursor.close()
+    conn.close()
+
+    return {
+        "magnets": int(totals.get("magnets") or 0),
+        "published": int(totals.get("published") or 0),
+        "views": int(totals.get("views") or 0),
+        "captures": int(totals.get("captures") or 0),
+        "converted": int(converted.get("converted") or 0),
+    }
+
+
+def set_magnet_published(magnet_id: int, published: bool) -> None:
+    """Take an asset online or offline without touching the platform's code."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE lead_magnets SET pub = %s, updated_at = NOW() WHERE id = %s",
+        (1 if published else 0, magnet_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Quiz videos
+#
+# The question bank is the content: a vertical clip only has to stage it. Only
+# the licensed catalogue is eligible — a trainer's own questions are private to
+# their academy and must never be posted on a public feed.
+# ---------------------------------------------------------------------------
+
+#: Beyond these lengths a question stops being readable on a phone in a few
+#: seconds, so it never becomes a clip.
+VIDEO_QUESTION_MAX_CHARS = 190
+VIDEO_OPTION_MAX_CHARS = 95
+
+
+def get_video_question(certification_id: int | None = None, exclude: tuple = ()):
+    """One question fit for a vertical quiz video, at random.
+
+    Single correct answer, two to four options, no image, short enough to read:
+    anything else makes a clip nobody watches to the end.
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    conditions = [
+        "c.owner IS NULL",
+        "c.pub = 1",
+        "q.owner IS NULL",
+        "q.nature IN (1, 2)",
+        "(q.src_file IS NULL OR q.src_file = '')",
+        "CHAR_LENGTH(q.text) BETWEEN 20 AND %s",
+        "(SELECT COUNT(*) FROM quest_ans qa WHERE qa.question = q.id AND qa.isok = 1) = 1",
+        "(SELECT COUNT(*) FROM quest_ans qa WHERE qa.question = q.id) BETWEEN 2 AND 4",
+        """NOT EXISTS (
+            SELECT 1 FROM quest_ans qa
+            JOIN answers a ON a.id = qa.answer
+            WHERE qa.question = q.id AND CHAR_LENGTH(a.text) > %s
+        )""",
+    ]
+    params: list = [VIDEO_QUESTION_MAX_CHARS, VIDEO_OPTION_MAX_CHARS]
+
+    if certification_id:
+        conditions.append("c.id = %s")
+        params.append(int(certification_id))
+
+    excluded = [int(item) for item in exclude if str(item).strip().isdigit()]
+    if excluded:
+        conditions.append("q.id NOT IN (" + ", ".join(["%s"] * len(excluded)) + ")")
+        params.extend(excluded)
+
+    cursor.execute(
+        f"""
+        SELECT q.id, q.text, c.id AS cert_id, c.name AS cert_name
+        FROM questions q
+        JOIN modules m ON m.id = q.module
+        JOIN courses c ON c.id = m.course
+        WHERE {" AND ".join(conditions)}
+        ORDER BY RAND()
+        LIMIT 1
+        """,
+        tuple(params),
+    )
+    question = cursor.fetchone()
+
+    if not question:
+        cursor.close()
+        conn.close()
+        return None
+
+    cursor.execute(
+        """
+        SELECT a.text, qa.isok, qa.text AS note
+        FROM quest_ans qa
+        JOIN answers a ON a.id = qa.answer
+        WHERE qa.question = %s
+        ORDER BY COALESCE(qa.ord, qa.id)
+        """,
+        (question["id"],),
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    question["options"] = [
+        {"text": row["text"], "isok": bool(row["isok"])} for row in rows
+    ]
+    question["note"] = next(
+        (row["note"] for row in rows if row["isok"] and (row["note"] or "").strip()), ""
+    )
+
+    return question
+
+
+# ---------------------------------------------------------------------------
+# Video publications
+#
+# One row per clip and per feed. Publication is automatic where the console
+# holds a token and manual everywhere else, and a token expires without
+# warning — so every attempt is recorded rather than inferred.
+# ---------------------------------------------------------------------------
+
+VIDEO_PUBLICATION_STATUSES = ("pending", "published", "failed", "needs_token", "manual")
+
+
+def video_publications_available() -> bool:
+    """Whether the platform has deployed the publications table yet."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SHOW TABLES LIKE 'video_publications'")
+        return cursor.fetchone() is not None
+    except Exception:
+        return False
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def queue_video_publication(
+    file: str,
+    channel: str,
+    caption: str | None = None,
+    link: str | None = None,
+    question: int | None = None,
+    course: int | None = None,
+    status: str = "pending",
+) -> int:
+    """Queue one clip for one feed, replacing a previous attempt on the pair."""
+
+    if status not in VIDEO_PUBLICATION_STATUSES:
+        raise ValueError(f"Statut inconnu : {status}")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO video_publications
+            (file, channel, status, caption, link, question, course, attempts, created_at, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, 0, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+            status = VALUES(status),
+            caption = VALUES(caption),
+            link = VALUES(link),
+            attempts = 0,
+            last_error = NULL,
+            notified_at = NULL,
+            updated_at = NOW()
+        """,
+        (file, channel, status, caption, link, question, course),
+    )
+    conn.commit()
+    publication_id = cursor.lastrowid
+    cursor.close()
+    conn.close()
+    return publication_id
+
+
+def get_video_publications(status: str | None = None, limit: int = 100):
+    """The queue, newest first, optionally narrowed to one status."""
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    query = """
+        SELECT p.id, p.file, p.channel, p.status, p.caption, p.link, p.attempts,
+               p.last_error, p.external_url, p.notified_at, p.published_at,
+               p.created_at, p.question, p.course, c.name AS course_name
+        FROM video_publications p
+        LEFT JOIN courses c ON c.id = p.course
+    """
+    params: tuple = ()
+    if status:
+        query += " WHERE p.status = %s"
+        params = (status,)
+    query += " ORDER BY p.created_at DESC LIMIT %s"
+
+    cursor.execute(query, params + (max(int(limit), 1),))
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def get_video_publication(publication_id: int):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """
+        SELECT id, file, channel, status, caption, link, attempts, last_error,
+               external_url, notified_at, published_at, question, course
+        FROM video_publications WHERE id = %s
+        """,
+        (publication_id,),
+    )
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return row
+
+
+def get_due_video_publications(max_attempts: int = 3, limit: int = 20):
+    """Publications still worth trying: queued, and not yet out of attempts."""
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """
+        SELECT id, file, channel, caption, link, attempts
+        FROM video_publications
+        WHERE status = 'pending' AND attempts < %s
+        ORDER BY created_at
+        LIMIT %s
+        """,
+        (max(int(max_attempts), 1), max(int(limit), 1)),
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def record_video_attempt(
+    publication_id: int,
+    status: str,
+    error: str = "",
+    external_url: str = "",
+) -> None:
+    """Store the outcome of one attempt and count it."""
+
+    if status not in VIDEO_PUBLICATION_STATUSES:
+        raise ValueError(f"Statut inconnu : {status}")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE video_publications
+        SET status = %s,
+            attempts = attempts + 1,
+            last_error = %s,
+            external_url = CASE WHEN %s <> '' THEN %s ELSE external_url END,
+            published_at = CASE WHEN %s = 'published' THEN NOW() ELSE published_at END,
+            updated_at = NOW()
+        WHERE id = %s
+        """,
+        (status, error or None, external_url, external_url, status, publication_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def mark_video_published(publication_id: int, external_url: str = "") -> None:
+    """Record a clip the admin posted by hand."""
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE video_publications
+        SET status = 'published',
+            external_url = CASE WHEN %s <> '' THEN %s ELSE external_url END,
+            published_at = NOW(),
+            last_error = NULL,
+            updated_at = NOW()
+        WHERE id = %s
+        """,
+        (external_url, external_url, publication_id),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def requeue_video_publication(publication_id: int) -> None:
+    """Put a publication back in the queue, its attempt counter cleared.
+
+    Used after the admin has renewed a token: the failure is history, the clip
+    deserves a clean run rather than the tail of an exhausted retry budget.
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE video_publications
+        SET status = 'pending', attempts = 0, last_error = NULL,
+            notified_at = NULL, updated_at = NOW()
+        WHERE id = %s
+        """,
+        (publication_id,),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def get_unnotified_video_alerts():
+    """Publications waiting for a human that nobody has been told about."""
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """
+        SELECT id, file, channel, status, last_error
+        FROM video_publications
+        WHERE status IN ('needs_token', 'failed') AND notified_at IS NULL
+        ORDER BY created_at
+        """
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def mark_video_alerts_notified(publication_ids) -> None:
+    identifiers = [int(item) for item in publication_ids or []]
+    if not identifiers:
+        return
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE video_publications SET notified_at = NOW(), updated_at = NOW() "
+        "WHERE id IN (" + ", ".join(["%s"] * len(identifiers)) + ")",
+        tuple(identifiers),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def get_video_publication_summary():
+    """How many publications sit at each status."""
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT status, COUNT(*) AS total FROM video_publications GROUP BY status")
+    rows = {row["status"]: int(row["total"]) for row in cursor.fetchall()}
+    cursor.close()
+    conn.close()
+
+    return {status: rows.get(status, 0) for status in VIDEO_PUBLICATION_STATUSES}

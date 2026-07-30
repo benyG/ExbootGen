@@ -111,3 +111,48 @@ CONFIG = AppConfig(
 # celery.conf.broker_url = CONFIG.redis.broker_url
 # db_connection = mysql.connector.connect(**CONFIG.db_config)
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Growth reporting
+# ---------------------------------------------------------------------------
+# The monthly recurring revenue the growth dashboard measures progress against.
+MONTHLY_REVENUE_GOAL = float(os.environ.get("MONTHLY_REVENUE_GOAL", "5000"))
+
+# ---------------------------------------------------------------------------
+# Lead magnets
+# ---------------------------------------------------------------------------
+# Where the console pushes a generated asset so the platform can gate it.
+EXAMBOOT_MAGNET_URL = os.environ.get(
+    "EXAMBOOT_MAGNET_URL", "https://examboot.net/lead-magnet"
+)
+EXAMBOOT_BASE_URL = os.environ.get("EXAMBOOT_BASE_URL", "https://examboot.net").rstrip("/")
+
+# ---------------------------------------------------------------------------
+# Video publication
+# ---------------------------------------------------------------------------
+# Feeds the console publishes to on its own. Everything else is downloaded and
+# posted by hand — see VIDEO_MANUAL_CHANNELS in videopub.py.
+VIDEO_AUTO_CHANNELS = tuple(
+    channel.strip()
+    for channel in os.environ.get("VIDEO_AUTO_CHANNELS", "linkedin,x").split(",")
+    if channel.strip()
+)
+#: How many times a transient failure is retried before the admin is asked.
+VIDEO_MAX_ATTEMPTS = int(os.environ.get("VIDEO_MAX_ATTEMPTS", "3"))
+
+# ---------------------------------------------------------------------------
+# Admin notifications
+# ---------------------------------------------------------------------------
+# Where the console writes when it needs a human: an expired token, a
+# publication it could not complete. Without SMTP the console still shows the
+# alert in its own interface, it just cannot reach anyone who is not looking.
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
+SMTP_HOST = os.environ.get("SMTP_HOST", "")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_FROM = os.environ.get("SMTP_FROM", "") or SMTP_USER
+SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "1") not in ("0", "false", "False")
+#: Public address of this console, so a notification can link to the page that
+#: fixes the problem rather than merely describing it.
+CONSOLE_BASE_URL = os.environ.get("CONSOLE_BASE_URL", "").rstrip("/")

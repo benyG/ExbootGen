@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rapports dynamiques · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 20% 20%, rgba(76,201,240,0.15), transparent 55%),
+                     radial-gradient(circle at 80% 30%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.22), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --glass-soft: rgba(15, 19, 32, 0.82);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb { position: fixed; width: 32rem; height: 32rem; border-radius: 50%; opacity: 0.45; pointer-events: none; mix-blend-mode: screen; background: radial-gradient(circle, rgba(71,245,192,0.32) 0%, rgba(4,7,17,0) 70%); animation: drift 22s ease-in-out infinite; z-index: 0; }
+    .orb-1 { top: -12rem; left: -6rem; }
+    .orb-2 { bottom: -10rem; right: -4rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.25) 0%, rgba(4,7,17,0) 70%); }
+    .orb-3 { top: 45vh; right: 50%; transform: translateX(50%); animation-delay: -14s; background: radial-gradient(circle, rgba(244,114,182,0.28) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift { 0%, 100% { transform: translate3d(0,0,0) scale(1); } 45% { transform: translate3d(40px, -30px, 0) scale(1.05); } 75% { transform: translate3d(-30px, 25px, 0) scale(0.95); } }
+
+    .stellar-header { position: sticky; top: 0; z-index: 20; background: rgba(4,7,17,0.72); backdrop-filter: saturate(180%) blur(18px); border-bottom: 1px solid rgba(148,163,184,0.18); }
+    .stellar-container { width: min(1200px, 92vw); margin: 0 auto; padding: 1.2rem 0 1.6rem; }
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 18px; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25)); border: 1px solid rgba(148, 163, 184, 0.2); color: var(--accent-strong); font-weight: 600; letter-spacing: 0.05em; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28); }
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .nav-toggle { display: none; width: 2.8rem; height: 2.8rem; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 19, 32, 0.68); color: var(--text-primary); align-items: center; justify-content: center; cursor: pointer; transition: transform 0.35s var(--transition), background 0.35s var(--transition); }
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+    .nav-toggle span, .nav-toggle span::before, .nav-toggle span::after { display: block; width: 18px; height: 2px; background: currentColor; border-radius: 999px; position: relative; transition: transform 0.35s ease, opacity 0.3s ease; }
+    .nav-toggle span::before, .nav-toggle span::after { content: ''; position: absolute; left: 0; }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.4rem; border-radius: var(--radius-lg); padding: 0.35rem; background: rgba(8, 12, 24, 0.55); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
+    .stellar-nav a { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.05rem; border-radius: 14px; text-decoration: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition); }
+    .stellar-nav a::after { content: ''; position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14)); opacity: 0; transition: opacity 0.35s var(--transition); z-index: -1; }
+    .stellar-nav a:hover { color: var(--text-primary); transform: translateY(-2px); }
+    .stellar-nav a:hover::after { opacity: 1; }
+    .stellar-nav a.active { color: var(--text-primary); }
+    .stellar-nav a.active::after { opacity: 1; box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18); }
+
+    .stellar-main { flex: 1; width: min(1200px, 92vw); margin: 0 auto; padding: 4.2rem 0 5.6rem; display: flex; flex-direction: column; gap: 2.8rem; position: relative; z-index: 1; }
+
+    .glass-card { background: var(--glass); border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-strong); padding: clamp(2rem, 3vw, 3rem); backdrop-filter: blur(26px); position: relative; overflow: hidden; }
+    .glass-card::before { content: ''; position: absolute; inset: 1px; border-radius: calc(var(--radius-xl) - 2px); border: 1px solid rgba(148, 163, 184, 0.12); pointer-events: none; }
+
+    .hero-intro h1 { margin: 0 0 1rem; font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.2rem, 4vw, 2.9rem); letter-spacing: -0.01em; }
+    .hero-intro p { margin: 0; color: var(--text-muted); line-height: 1.7; }
+
+    .filter-panel {
+      background: rgba(8, 12, 24, 0.7);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: var(--radius-lg);
+      padding: 1.4rem 1.8rem;
+      box-shadow: 0 18px 40px rgba(3, 7, 18, 0.45);
+    }
+    .filter-form {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      align-items: end;
+    }
+    .filter-field label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .filter-field select {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      background: rgba(10, 15, 28, 0.85);
+      color: var(--text-primary);
+      padding: 0.7rem 0.85rem;
+      font-size: 0.95rem;
+    }
+    .filter-button {
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: rgba(56, 189, 248, 0.2);
+      color: var(--text-primary);
+      font-weight: 600;
+      padding: 0.75rem 1.2rem;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .filter-button:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(56, 189, 248, 0.18); }
+
+    .report-grid { display: grid; gap: 1.6rem; }
+
+    .report-panel { border-radius: var(--radius-lg); padding: 1.6rem 1.8rem; background: rgba(8, 12, 24, 0.75); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: 0 18px 40px rgba(3, 7, 18, 0.55); }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; cursor: pointer; }
+    .panel-header h2 { margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 1.35rem; letter-spacing: 0.04em; }
+    .panel-header span { font-size: 0.8rem; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(124,247,255,0.6); }
+    .panel-header svg { transition: transform 0.3s ease; }
+    .panel-header[aria-expanded="true"] svg { transform: rotate(180deg); }
+    .panel-content { margin-top: 1.6rem; display: none; }
+    .panel-content.active { display: block; }
+
+    table { width: 100%; border-collapse: collapse; background: rgba(7,12,22,0.65); border-radius: 14px; overflow: hidden; }
+    thead { background: rgba(15,23,42,0.85); }
+    th, td { padding: 0.75rem 1rem; text-align: left; font-size: 0.92rem; }
+    th { font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(226,232,240,0.65); }
+    tbody tr:nth-child(even) { background: rgba(15,23,42,0.5); }
+    tbody tr:hover { background: rgba(71,245,192,0.1); }
+    .table-link { color: var(--accent-strong); text-decoration: none; font-weight: 600; }
+    .table-link:hover { text-decoration: underline; }
+    .link-muted { color: var(--text-muted); font-size: 0.85rem; }
+    .provider-block { margin-bottom: 1.2rem; }
+    .provider-block h3 { margin: 0 0 0.6rem; font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.03em; }
+
+    footer { color: rgba(226, 232, 240, 0.55); text-align: center; padding: 2.4rem 0 3rem; font-size: 0.85rem; }
+
+    [data-animate] { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    [data-animate].is-visible { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 960px) {
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 1.2rem; }
+      .stellar-nav { flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+  <div class="stellar-orb orb-3"></div>
+
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <span class="brand-mark">EX</span>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Console d'orchestration pédagogique</span>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
+        </button>
+      </div>
+      {% set active_page = 'growth' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+  <main class="stellar-main">
+    <section class="glass-card hero-intro" data-animate>
+      <h1>Croissance &amp; revenu</h1>
+      <p>Ce que chaque canal a réellement rapporté, du prospect capté à la commande payée. Les liens publiés par le planificateur sont tagués&nbsp;; ces tags suivent le visiteur jusqu'à son compte.</p>
+    </section>
+
+    {% if not attribution_ready %}
+    <section class="glass-card" data-animate>
+      <h2>Attribution pas encore déployée</h2>
+      <p>Les colonnes d'attribution sont absentes de la base. Exécutez les migrations de la plateforme&nbsp;: <code>php artisan migrate</code>. Les chiffres globaux ci-dessous restent valables, seule la répartition par canal est indisponible.</p>
+    </section>
+    {% endif %}
+
+    <section class="filter-panel" data-animate>
+      <form class="filter-form" method="get" action="{{ url_for('growth') }}">
+        <div class="filter-field">
+          <label for="growthDays">Période</label>
+          <select name="days" id="growthDays" onchange="this.form.submit()">
+            {% for option in [7, 30, 90, 365] %}
+            <option value="{{ option }}"{% if option == days %} selected{% endif %}>{{ option }} derniers jours</option>
+            {% endfor %}
+          </select>
+        </div>
+      </form>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <h2>Le tunnel sur {{ days }} jours</h2>
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <span class="kpi-label">Prospects captés</span>
+          <strong class="kpi-value">{{ totals.leads }}</strong>
+          <span class="kpi-hint">dont {{ totals.opt_ins }} acceptant d'être recontactés</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Inscriptions</span>
+          <strong class="kpi-value">{{ totals.signups }}</strong>
+          <span class="kpi-hint">{{ rates.lead_to_signup }}% des prospects deviennent un compte</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Clients payants</span>
+          <strong class="kpi-value">{{ totals.customers }}</strong>
+          <span class="kpi-hint">{{ rates.signup_to_customer }}% des comptes paient</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-label">Encaissé</span>
+          <strong class="kpi-value">{{ '%.0f'|format(totals.revenue) }} $</strong>
+          <span class="kpi-hint">abonnements actifs&nbsp;: {{ '%.0f'|format(totals.active_recurring) }} $</span>
+        </div>
+      </div>
+      <p class="goal-line">
+        Objectif&nbsp;: 5&nbsp;000 $ / mois — abonnements actifs à
+        <strong>{{ '%.0f'|format(totals.active_recurring) }} $</strong>
+        ({{ rates.goal }}%).
+      </p>
+      <div class="goal-bar"><span style="width: {{ rates.goal if rates.goal < 100 else 100 }}%"></span></div>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <h2>Par canal et campagne</h2>
+      {% if channels %}
+      <div class="table-wrap">
+        <table class="growth-table">
+          <thead>
+            <tr>
+              <th>Canal</th><th>Campagne</th>
+              <th>Prospects</th><th>Inscriptions</th><th>Clients</th><th>Revenu</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in channels %}
+            <tr>
+              <td><span class="pill">{{ row.source }}</span></td>
+              <td>{{ row.campaign or '—' }}</td>
+              <td>{{ row.leads }}</td>
+              <td>{{ row.signups }}</td>
+              <td>{{ row.customers }}</td>
+              <td class="{{ 'earning' if row.revenue else '' }}">{{ '%.0f'|format(row.revenue) }} $</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="table-note">Un canal sans revenu qui capte beaucoup de prospects n'est pas mauvais&nbsp;: il est en haut du tunnel. Un canal sans prospect <em>ni</em> revenu coûte du temps pour rien.</p>
+      {% else %}
+      <p>Aucune donnée sur la période. Les colonnes se remplissent dès que le planificateur publie des liens tagués.</p>
+      {% endif %}
+    </section>
+
+    <section class="glass-card" data-animate>
+      <h2>Certifications qui attirent</h2>
+      {% if certifications %}
+      <div class="table-wrap">
+        <table class="growth-table">
+          <thead>
+            <tr><th>Certification</th><th>Prospects</th><th>Score moyen</th><th>Convertis</th></tr>
+          </thead>
+          <tbody>
+            {% for row in certifications %}
+            <tr>
+              <td>{{ row.cert_name }}</td>
+              <td>{{ row.leads }}</td>
+              <td>{{ row.avg_score if row.avg_score is not none else '—' }}{% if row.avg_score is not none %}%{% endif %}</td>
+              <td>{{ row.converted }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p>Aucun prospect encore rattaché à une certification sur la période.</p>
+      {% endif %}
+    </section>
+  </main>
+
+  <style>
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; margin-top: 1.2rem; }
+    .kpi-card { background: var(--glass-soft); border: 1px solid var(--border); border-radius: 18px; padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; }
+    .kpi-label { font-size: 0.82rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .kpi-value { font-size: 2rem; font-family: 'Space Grotesk', sans-serif; color: var(--accent); }
+    .kpi-hint { font-size: 0.82rem; color: var(--text-muted); }
+    .goal-line { margin-top: 1.4rem; color: var(--text-muted); }
+    .goal-bar { margin-top: 0.5rem; height: 10px; border-radius: 999px; background: rgba(148,163,184,0.18); overflow: hidden; }
+    .goal-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-strong)); }
+    .table-wrap { overflow-x: auto; margin-top: 1.1rem; }
+    .growth-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    .growth-table th, .growth-table td { padding: 0.65rem 0.8rem; text-align: left; border-bottom: 1px solid var(--border); }
+    .growth-table th { color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.76rem; letter-spacing: 0.05em; }
+    .growth-table td.earning { color: var(--accent); font-weight: 600; }
+    .pill { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(71,245,192,0.14); border: 1px solid rgba(71,245,192,0.3); font-size: 0.8rem; }
+    .table-note { margin-top: 0.9rem; font-size: 0.86rem; color: var(--text-muted); }
+  </style>
+
+  <script>
+    document.getElementById('navToggle')?.addEventListener('click', (event) => {
+      const nav = document.querySelector('.stellar-nav');
+      const expanded = event.currentTarget.getAttribute('aria-expanded') === 'true';
+      event.currentTarget.setAttribute('aria-expanded', String(!expanded));
+      nav?.classList.toggle('is-open', !expanded);
+    });
+  </script>
+</body>
+</html>

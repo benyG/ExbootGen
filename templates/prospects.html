@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pipeline formateurs · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 20% 20%, rgba(76,201,240,0.15), transparent 55%),
+                     radial-gradient(circle at 80% 30%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.22), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --glass-soft: rgba(15, 19, 32, 0.82);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb { position: fixed; width: 32rem; height: 32rem; border-radius: 50%; opacity: 0.45; pointer-events: none; mix-blend-mode: screen; background: radial-gradient(circle, rgba(71,245,192,0.32) 0%, rgba(4,7,17,0) 70%); animation: drift 22s ease-in-out infinite; z-index: 0; }
+    .orb-1 { top: -12rem; left: -6rem; }
+    .orb-2 { bottom: -10rem; right: -4rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.25) 0%, rgba(4,7,17,0) 70%); }
+    .orb-3 { top: 45vh; right: 50%; transform: translateX(50%); animation-delay: -14s; background: radial-gradient(circle, rgba(244,114,182,0.28) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift { 0%, 100% { transform: translate3d(0,0,0) scale(1); } 45% { transform: translate3d(40px, -30px, 0) scale(1.05); } 75% { transform: translate3d(-30px, 25px, 0) scale(0.95); } }
+
+    .stellar-header { position: sticky; top: 0; z-index: 20; background: rgba(4,7,17,0.72); backdrop-filter: saturate(180%) blur(18px); border-bottom: 1px solid rgba(148,163,184,0.18); }
+    .stellar-container { width: min(1200px, 92vw); margin: 0 auto; padding: 1.2rem 0 1.6rem; }
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 18px; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25)); border: 1px solid rgba(148, 163, 184, 0.2); color: var(--accent-strong); font-weight: 600; letter-spacing: 0.05em; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28); }
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .nav-toggle { display: none; width: 2.8rem; height: 2.8rem; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 19, 32, 0.68); color: var(--text-primary); align-items: center; justify-content: center; cursor: pointer; transition: transform 0.35s var(--transition), background 0.35s var(--transition); }
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+    .nav-toggle span, .nav-toggle span::before, .nav-toggle span::after { display: block; width: 18px; height: 2px; background: currentColor; border-radius: 999px; position: relative; transition: transform 0.35s ease, opacity 0.3s ease; }
+    .nav-toggle span::before, .nav-toggle span::after { content: ''; position: absolute; left: 0; }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.4rem; border-radius: var(--radius-lg); padding: 0.35rem; background: rgba(8, 12, 24, 0.55); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
+    .stellar-nav a { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.05rem; border-radius: 14px; text-decoration: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition); }
+    .stellar-nav a::after { content: ''; position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14)); opacity: 0; transition: opacity 0.35s var(--transition); z-index: -1; }
+    .stellar-nav a:hover { color: var(--text-primary); transform: translateY(-2px); }
+    .stellar-nav a:hover::after { opacity: 1; }
+    .stellar-nav a.active { color: var(--text-primary); }
+    .stellar-nav a.active::after { opacity: 1; box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18); }
+
+    .stellar-main { flex: 1; width: min(1200px, 92vw); margin: 0 auto; padding: 4.2rem 0 5.6rem; display: flex; flex-direction: column; gap: 2.8rem; position: relative; z-index: 1; }
+
+    .glass-card { background: var(--glass); border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-strong); padding: clamp(2rem, 3vw, 3rem); backdrop-filter: blur(26px); position: relative; overflow: hidden; }
+    .glass-card::before { content: ''; position: absolute; inset: 1px; border-radius: calc(var(--radius-xl) - 2px); border: 1px solid rgba(148, 163, 184, 0.12); pointer-events: none; }
+
+    .hero-intro h1 { margin: 0 0 1rem; font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.2rem, 4vw, 2.9rem); letter-spacing: -0.01em; }
+    .hero-intro p { margin: 0 0 0.8rem; color: var(--text-muted); line-height: 1.7; }
+    .hero-intro p:last-child { margin-bottom: 0; }
+
+    h2 { font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.02em; margin-top: 0; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1.2rem; }
+    .kpi-card { background: var(--glass-soft); border: 1px solid var(--border); border-radius: 18px; padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; }
+    .kpi-label { font-size: 0.82rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .kpi-value { font-size: 2rem; font-family: 'Space Grotesk', sans-serif; color: var(--accent); }
+
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 1.2rem; align-items: end; }
+    .form-field label { display: block; font-size: 0.82rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.35rem; }
+    .form-field input, .form-field select, .form-field textarea {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      background: rgba(10, 15, 28, 0.85);
+      color: var(--text-primary);
+      padding: 0.7rem 0.85rem;
+      font-size: 0.95rem;
+      font-family: inherit;
+    }
+
+    .action-button {
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: rgba(56, 189, 248, 0.2);
+      color: var(--text-primary);
+      font-weight: 600;
+      padding: 0.6rem 1.1rem;
+      cursor: pointer;
+      font-size: 0.88rem;
+      font-family: inherit;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .action-button:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(56, 189, 248, 0.18); }
+    .action-button.ghost { background: rgba(148, 163, 184, 0.12); }
+
+    .banner { border-radius: 14px; padding: 0.9rem 1.2rem; margin-top: 1.2rem; border: 1px solid; }
+    .banner.ok { background: rgba(71,245,192,0.12); border-color: rgba(71,245,192,0.35); }
+    .banner.ko { background: rgba(244,114,182,0.12); border-color: rgba(244,114,182,0.38); }
+
+    .table-wrap { overflow-x: auto; margin-top: 1.1rem; }
+    .pipeline-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .pipeline-table th, .pipeline-table td { padding: 0.65rem 0.8rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .pipeline-table th { color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.74rem; letter-spacing: 0.05em; }
+    .pipeline-table tbody tr.is-selected { background: rgba(71,245,192,0.08); }
+
+    .pill { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(71,245,192,0.14); border: 1px solid rgba(71,245,192,0.3); font-size: 0.78rem; white-space: nowrap; }
+    .pill.due { background: rgba(251,191,36,0.16); border-color: rgba(251,191,36,0.38); }
+    .pill.quiet { background: rgba(148,163,184,0.12); border-color: rgba(148,163,184,0.28); color: var(--text-muted); }
+
+    .row-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+    .row-actions form { display: inline-flex; gap: 0.3rem; align-items: center; margin: 0; }
+    .row-actions select { border-radius: 10px; border: 1px solid rgba(148,163,184,0.22); background: rgba(10,15,28,0.85); color: var(--text-primary); padding: 0.35rem 0.5rem; font-size: 0.8rem; }
+
+    .table-link { color: var(--accent-strong); text-decoration: none; font-weight: 600; }
+    .table-link:hover { text-decoration: underline; }
+    .muted { color: var(--text-muted); font-size: 0.86rem; }
+
+    .message-block { background: rgba(8, 12, 24, 0.75); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.2rem 1.4rem; margin-top: 1.2rem; }
+    .message-block h3 { margin: 0 0 0.5rem; font-family: 'Space Grotesk', sans-serif; font-size: 1.05rem; }
+    .message-block pre { white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 0.9rem; color: var(--text-muted); line-height: 1.65; margin: 0; }
+
+    .filter-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.1rem; }
+    .filter-row a { text-decoration: none; }
+
+    footer { color: rgba(226, 232, 240, 0.55); text-align: center; padding: 2.4rem 0 3rem; font-size: 0.85rem; }
+
+    [data-animate] { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    [data-animate].is-visible { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 960px) {
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 1.2rem; }
+      .stellar-nav { flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+  <div class="stellar-orb orb-3"></div>
+
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <span class="brand-mark">EX</span>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Console d'orchestration pédagogique</span>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
+        </button>
+      </div>
+      {% set active_page = 'prospects' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+  {% set status_labels = {
+    'new': 'Sourcé',
+    'gift_sent': 'Cadeau envoyé',
+    'replied': 'A répondu',
+    'signed_up': 'Compte ouvert',
+    'customer': 'Client',
+    'declined': 'Décliné'
+  } %}
+
+  <main class="stellar-main">
+    <section class="glass-card hero-intro" data-animate>
+      <h1>Pipeline formateurs</h1>
+      <p>Soixante formateurs à vingt sièges, c'est l'objectif de 5&nbsp;000&nbsp;$ par mois — et soixante, c'est une liste de noms, pas un problème d'audience.</p>
+      <p>Chaque formateur reçoit un test jouable généré sur la certification qu'il enseigne&nbsp;: un cadeau, pas une offre. Le lien porte son identifiant, donc un compte ouvert trois semaines plus tard remonte quand même jusqu'à lui.</p>
+
+      {% if notice %}<div class="banner ok">{{ notice }}</div>{% endif %}
+      {% if error %}<div class="banner ko">{{ error }}</div>{% endif %}
+    </section>
+
+    {% if not pipeline_ready %}
+    <section class="glass-card" data-animate>
+      <h2>Pipeline pas encore déployé</h2>
+      <p class="muted">La table <code>trainer_prospects</code> est absente de la base. Exécutez les migrations de la plateforme&nbsp;: <code>php artisan migrate</code>.</p>
+    </section>
+    {% else %}
+
+    <section class="glass-card" data-animate>
+      <h2>Où en est la liste</h2>
+      <div class="kpi-grid">
+        {% for status in statuses %}
+        <div class="kpi-card">
+          <span class="kpi-label">{{ status_labels.get(status, status) }}</span>
+          <strong class="kpi-value">{{ funnel.get(status, 0) }}</strong>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="filter-row">
+        <a href="{{ url_for('prospects') }}"><span class="pill {{ '' if status_filter else 'due' }}">Tous</span></a>
+        {% for status in statuses %}
+        <a href="{{ url_for('prospects', status=status) }}"><span class="pill {{ 'due' if status_filter == status else 'quiet' }}">{{ status_labels.get(status, status) }}</span></a>
+        {% endfor %}
+        <form method="post" action="{{ url_for('prospects_sync') }}" style="margin-left:auto">
+          <button class="action-button ghost" type="submit">Rattacher aux comptes</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <h2>Ajouter un formateur</h2>
+      <form method="post" action="{{ url_for('prospects_add') }}">
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="prospectName">Nom</label>
+            <input id="prospectName" name="name" type="text" required>
+          </div>
+          <div class="form-field">
+            <label for="prospectEmail">Email</label>
+            <input id="prospectEmail" name="email" type="email">
+          </div>
+          <div class="form-field">
+            <label for="prospectOrg">Organisme</label>
+            <input id="prospectOrg" name="organisation" type="text">
+          </div>
+          <div class="form-field">
+            <label for="prospectProfile">Profil (LinkedIn, site…)</label>
+            <input id="prospectProfile" name="profile_url" type="url">
+          </div>
+          <div class="form-field">
+            <label for="prospectCourse">Certification enseignée</label>
+            <select id="prospectCourse" name="course">
+              <option value="">—</option>
+              {% for cert in certifications %}
+              <option value="{{ cert.id }}">{{ cert.name }}{% if cert.provider_name %} · {{ cert.provider_name }}{% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="prospectSource">Source</label>
+            <input id="prospectSource" name="source" type="text" value="manual">
+          </div>
+          <div class="form-field">
+            <label for="prospectNotes">Notes</label>
+            <input id="prospectNotes" name="notes" type="text">
+          </div>
+          <div class="form-field">
+            <button class="action-button" type="submit">Ajouter</button>
+          </div>
+        </div>
+      </form>
+      <p class="muted" style="margin-top:1rem">La certification décide du test cadeau&nbsp;: sans elle, rien à générer.</p>
+    </section>
+
+    <section class="glass-card" data-animate>
+      <h2>Le pipeline</h2>
+      {% if prospects %}
+      <div class="table-wrap">
+        <table class="pipeline-table">
+          <thead>
+            <tr>
+              <th>Formateur</th>
+              <th>Certification</th>
+              <th>Statut</th>
+              <th>À faire</th>
+              <th>Cadeau</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in prospects %}
+            <tr{% if selected and selected.id == row.id %} class="is-selected"{% endif %}>
+              <td>
+                <a class="table-link" href="{{ url_for('prospects', prospect=row.id, status=status_filter) }}">{{ row.name }}</a>
+                {% if row.organisation %}<div class="muted">{{ row.organisation }}</div>{% endif %}
+                {% if row.email %}<div class="muted">{{ row.email }}</div>{% endif %}
+              </td>
+              <td>{{ row.course_name or '—' }}</td>
+              <td><span class="pill quiet">{{ status_labels.get(row.status, row.status) }}</span></td>
+              <td>
+                {% if row.follow_up %}
+                <span class="pill {{ 'due' if row.follow_up.overdue else 'quiet' }}">
+                  {{ row.follow_up.step }}. {{ row.follow_up.label }} · {{ row.follow_up.due }}
+                </span>
+                {% else %}
+                <span class="muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.gift_url %}
+                <a class="table-link" href="{{ row.gift_url }}" target="_blank" rel="noopener">Le test</a>
+                {% else %}
+                <span class="muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="row-actions">
+                  {% if not row.gift_url %}
+                  <form method="post" action="{{ url_for('prospects_gift', prospect_id=row.id) }}">
+                    <button class="action-button" type="submit">Générer le cadeau</button>
+                  </form>
+                  {% else %}
+                  <form method="post" action="{{ url_for('prospects_follow_up', prospect_id=row.id) }}">
+                    <button class="action-button ghost" type="submit">Relance envoyée</button>
+                  </form>
+                  {% endif %}
+                  <form method="post" action="{{ url_for('prospects_status', prospect_id=row.id) }}">
+                    <select name="status">
+                      {% for status in statuses %}
+                      <option value="{{ status }}"{% if status == row.status %} selected{% endif %}>{{ status_labels.get(status, status) }}</option>
+                      {% endfor %}
+                    </select>
+                    <button class="action-button ghost" type="submit">OK</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="muted">Aucun formateur dans le pipeline{% if status_filter %} avec ce statut{% endif %}.</p>
+      {% endif %}
+    </section>
+
+    {% if selected %}
+    <section class="glass-card" data-animate>
+      <h2>La séquence pour {{ selected.name }}</h2>
+      <p class="muted">Trois messages, espacés, puis on laisse tranquille. {{ selected.follow_ups or 0 }} envoyé(s).</p>
+      {% for message in messages %}
+      <div class="message-block">
+        <h3>{{ message.step }}. {{ message.label }} — J+{{ message.day }}</h3>
+        <p class="muted"><strong>Objet&nbsp;:</strong> {{ message.subject }}</p>
+        <pre>{{ message.body }}</pre>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    {% endif %}
+  </main>
+
+  <script>
+    document.getElementById('navToggle')?.addEventListener('click', (event) => {
+      const nav = document.querySelector('.stellar-nav');
+      const expanded = event.currentTarget.getAttribute('aria-expanded') === 'true';
+      event.currentTarget.setAttribute('aria-expanded', String(!expanded));
+      nav?.classList.toggle('is-open', !expanded);
+    });
+  </script>
+</body>
+</html>

@@ -84,9 +84,14 @@ except (ModuleNotFoundError, ImportError):  # pragma: no cover - fallback when r
 
 from config import (
     API_REQUEST_DELAY,
+    CONSOLE_BASE_URL,
     DISTRIBUTION,
+    EXAMBOOT_BASE_URL,
     GUI_PASSWORD,
+    MONTHLY_REVENUE_GOAL,
     SESSION_INACTIVITY_MINUTES,
+    VIDEO_AUTO_CHANNELS,
+    VIDEO_MAX_ATTEMPTS,
     _distribution_total,
 )
 import db
@@ -129,6 +134,10 @@ from articles import (
     ExambootTestGenerationError,
 )
 from handsonlab import hol_bp
+from notifications import build_failure_notice, notify_admin
+from outreach import build_messages, gift_link, next_follow_up
+from quizvideo import QuizVideoError, build_caption, build_quiz_video, video_link
+import videopub
 
 # Instanciation de l'application Flask
 BASE_DIR = Path(__file__).resolve().parent
@@ -470,6 +479,10 @@ def make_celery() -> Celery:
         "redis-healthcheck-every-minute": {
             "task": "tasks.redis_healthcheck",
             "schedule": redis_healthcheck_period,
+        },
+        "publish-pending-videos-every-five-minutes": {
+            "task": "videos.dispatch_pending",
+            "schedule": _env_int("VIDEO_DISPATCH_PERIOD_SECONDS", 300, minimum=60),
         },
     }
 
@@ -1715,6 +1728,101 @@ def _redis_healthcheck_targets() -> Dict[str, List[str]]:
     return targets
 
 
+def run_scheduled_video_publication(
+    certification_id: int,
+    landing: str,
+    content: Optional[str] = None,
+    channels: Optional[List[str]] = None,
+) -> Dict[str, object]:
+    """Generate the clips of a planned entry and publish what can be published.
+
+    Raises when no clip could be produced at all — the scheduler treats that as
+    a failed entry. Everything past that point is queue state, not an outage:
+    a refused token leaves the clips waiting for the admin, not lost.
+    """
+
+    question = db.get_video_question(certification_id)
+    if not question:
+        raise ValueError("Aucune question ne convient à une vidéo pour cette certification.")
+
+    channels = channels or list(VIDEO_AUTO_CHANNELS) + list(videopub.MANUAL_CHANNELS)
+    built = _build_clips_for_channels(question, channels, landing, content=content)
+
+    counters = dispatch_pending_videos() if built["queued"] else {}
+    counters["manual"] = len([channel for channel in channels if channel in videopub.MANUAL_CHANNELS])
+
+    return {
+        "files": built["files"],
+        "question_id": question["id"],
+        "publication": counters,
+    }
+
+
+def dispatch_pending_videos(limit: int = 20) -> Dict[str, int]:
+    """Publish what is queued, then tell the admin about what needs them.
+
+    Runs on a timer rather than at generation time so an expired token stops
+    one clip instead of the whole planned publication, and so a renewed token
+    picks the queue back up on its own.
+    """
+
+    counters = {"published": 0, "retry": 0, "needs_token": 0, "failed": 0, "manual": 0}
+
+    if not db.video_publications_available():
+        return counters
+
+    for row in db.get_due_video_publications(VIDEO_MAX_ATTEMPTS, limit=limit):
+        outcome = videopub.publish(
+            row["channel"],
+            VIDEO_DIR / row["file"],
+            row.get("caption") or "",
+        )
+
+        status = outcome["status"]
+        attempts_left = int(row.get("attempts") or 0) + 1 < VIDEO_MAX_ATTEMPTS
+
+        if status == videopub.STATUS_FAILED and outcome["retryable"] and attempts_left:
+            # Worth another go later: keep it queued and count the attempt.
+            db.record_video_attempt(row["id"], videopub.STATUS_PENDING, outcome["error"])
+            counters["retry"] += 1
+            continue
+
+        db.record_video_attempt(row["id"], status, outcome["error"], outcome["external_url"])
+        counters[status if status in counters else "failed"] += 1
+
+    notify_video_alerts()
+
+    return counters
+
+
+def notify_video_alerts() -> int:
+    """Email the admin once per publication that is waiting for them."""
+
+    alerts = db.get_unnotified_video_alerts()
+    if not alerts:
+        return 0
+
+    subject, body = build_failure_notice(
+        alerts, console_url=f"{CONSOLE_BASE_URL}/videos" if CONSOLE_BASE_URL else ""
+    )
+
+    if not notify_admin(subject, body):
+        # Nothing left: the console still shows the alert, and a later SMTP
+        # configuration will pick these up rather than lose them.
+        return 0
+
+    db.mark_video_alerts_notified([row["id"] for row in alerts])
+
+    return len(alerts)
+
+
+@celery_app.task(name="videos.dispatch_pending")
+def dispatch_pending_videos_task() -> Dict[str, int]:
+    """Beat entry point for the publication queue."""
+
+    return dispatch_pending_videos()
+
+
 @celery_app.task(name="tasks.redis_healthcheck")
 def redis_healthcheck() -> Dict[str, object]:
     """Ping Redis targets used by Celery and record pool metrics."""
@@ -1841,7 +1949,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         content_label = entry.get("contentTypeLabel") or entry.get("contentType") or "Contenu"
         link = (entry.get("link") or "").strip()
         time_of_day = entry.get("time") or "Heure non précisée"
-        allowed_channels = {"article", "linkedin", "x", "carousel"}
+        allowed_channels = {"article", "linkedin", "x", "carousel", "video"}
         channels = [channel for channel in (entry.get("channels") or []) if channel in allowed_channels]
         attach_image = bool(entry.get("addImage", True))
         if "linkedin" in channels or "x" in channels:
@@ -1953,7 +2061,13 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
         _update_entry_status(entry_id, "running", stamp=True)
         channel_results: Dict[str, Dict[str, object]] = {}
         try:
-            if "carousel" in channels:
+            if "video" in channels:
+                result = run_scheduled_video_publication(
+                    certification_id=cert_id,
+                    landing=link,
+                    content=str(entry_id) if entry_id else None,
+                )
+            elif "carousel" in channels:
                 carousel_topic_id = entry.get("carouselTopicId")
                 try:
                     carousel_topic_id_int = int(carousel_topic_id)
@@ -1965,6 +2079,7 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
                     exam_url=link,
                     topic_id=carousel_topic_id_int,
                     attach_image=attach_image,
+                    content=str(entry_id) if entry_id else None,
                 )
             else:
                 result = run_scheduled_publication(
@@ -1974,6 +2089,9 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
                     topic_type=str(entry.get("subject") or ""),
                     channels=channels,
                     attach_image=attach_image,
+                    # The schedule entry id is the campaign's finest grain: it
+                    # ties a lead back to one specific planned publication.
+                    content=str(entry_id) if entry_id else None,
                 )
         except Exception as exc:  # pragma: no cover - surfaced in job log
             counters["failed"] += 1
@@ -2076,11 +2194,34 @@ def _execute_planned_actions(context: JobContext, date: str, entries: List[dict]
                     channel_results["carousel"] = {"status": "failed", "message": error}
                     context.log(error)
 
+            if "video" in channels:
+                counts = result.get("publication") or {}
+                waiting = int(counts.get("needs_token", 0)) + int(counts.get("failed", 0))
+                manual = int(counts.get("manual", 0))
+                published = int(counts.get("published", 0))
+
+                if waiting:
+                    # Not an outright failure: the clips exist and are queued.
+                    # The admin has been emailed and can finish from the console.
+                    channel_outcomes.append(False)
+                    message = f"{waiting} publication(s) en attente d'une action admin (jeton ou échec)."
+                    channel_results["video"] = {"status": "failed", "message": message}
+                    context.log(message)
+                else:
+                    channel_outcomes.append(True)
+                    message = f"{published} publiée(s) automatiquement, {manual} à publier à la main."
+                    channel_results["video"] = {"status": "succeeded", "message": message}
+                    context.log(f"Clips générés : {', '.join(result.get('files') or [])}")
+                    context.log(message)
+
             success_count = sum(1 for outcome in channel_outcomes if outcome)
             total_channels = len(channel_outcomes)
             summary_parts = []
             for channel_name, result_data in channel_results.items():
-                label = {"article": "Article", "linkedin": "LinkedIn", "x": "X", "carousel": "Carousel"}.get(channel_name, channel_name)
+                label = {
+                    "article": "Article", "linkedin": "LinkedIn", "x": "X",
+                    "carousel": "Carousel", "video": "Vidéo",
+                }.get(channel_name, channel_name)
                 status_label = "OK" if result_data.get("status") == "succeeded" else "KO"
                 message = result_data.get("message")
                 summary_parts.append(f"{label}: {status_label}{f' ({message})' if message else ''}")
@@ -2336,6 +2477,384 @@ def mcp_schedule_status(job_id: str):
     """Return status for a scheduled MCP job."""
 
     return schedule_status(job_id)
+
+
+@app.route("/growth")
+def growth():
+    """What each acquisition channel actually produced, down to the revenue."""
+
+    days = request.args.get("days", type=int) or 30
+    if days not in (7, 30, 90, 365):
+        days = 30
+
+    attribution_ready = db.attribution_available()
+
+    totals = db.get_funnel_totals(days)
+    channels = db.get_funnel_by_channel(days) if attribution_ready else []
+    certifications = db.get_top_certifications_by_leads(days)
+
+    for row in channels:
+        row["revenue"] = float(row.get("revenue") or 0)
+        for key in ("leads", "opt_ins", "signups", "customers"):
+            row[key] = int(row.get(key) or 0)
+
+    def rate(numerator: float, denominator: float) -> float:
+        return round(100 * numerator / denominator, 1) if denominator else 0.0
+
+    rates = {
+        "lead_to_signup": rate(totals["signups"], totals["leads"]),
+        "signup_to_customer": rate(totals["customers"], totals["signups"]),
+        "goal": rate(totals["active_recurring"], MONTHLY_REVENUE_GOAL),
+    }
+
+    return render_template(
+        "growth.html",
+        days=days,
+        totals=totals,
+        rates=rates,
+        channels=channels,
+        certifications=certifications,
+        attribution_ready=attribution_ready,
+    )
+
+
+#: Generated clips live beside the carousels the console already produces.
+VIDEO_DIR = Path(__file__).resolve().parent / "uploads" / "videos"
+
+
+@app.route("/videos")
+def videos():
+    """The quiz video factory: one question, one clip, one tagged link."""
+
+    clips = []
+    if VIDEO_DIR.exists():
+        clips = sorted(
+            (path.name for path in VIDEO_DIR.glob("*.mp4")),
+            reverse=True,
+        )[:20]
+
+    published = []
+    if db.magnets_available():
+        published = [row for row in db.get_magnets() if row.get("pub")]
+
+    queue = []
+    summary = {}
+    queue_ready = db.video_publications_available()
+    if queue_ready:
+        queue = db.get_video_publications()
+        summary = db.get_video_publication_summary()
+
+    return render_template(
+        "videos.html",
+        certifications=db.get_public_certifications(),
+        magnets=published,
+        clips=clips,
+        queue=queue,
+        queue_ready=queue_ready,
+        summary=summary,
+        auto_channels=VIDEO_AUTO_CHANNELS,
+        channels=videopub.CHANNELS,
+        needs_attention=[
+            row for row in queue if row["status"] in (videopub.STATUS_NEEDS_TOKEN, videopub.STATUS_FAILED)
+        ],
+        storyboard=session.pop("video_storyboard", None),
+        notice=request.args.get("ok", ""),
+        error=request.args.get("error", ""),
+    )
+
+
+@app.route("/videos/queue/<int:publication_id>/retry", methods=["POST"])
+def videos_retry(publication_id: int):
+    """Put a publication back in the queue and try it straight away.
+
+    This is the button the admin presses after renewing a token: the attempt
+    counter is cleared, so a fixed credential gets a full run rather than the
+    tail of an exhausted budget.
+    """
+
+    db.requeue_video_publication(publication_id)
+    dispatch_pending_videos()
+
+    publication = db.get_video_publication(publication_id) or {}
+    status = publication.get("status", "")
+
+    if status == videopub.STATUS_PUBLISHED:
+        return redirect(url_for("videos", ok="Publié."))
+    if status == videopub.STATUS_NEEDS_TOKEN:
+        return redirect(url_for("videos", error="Le jeton est toujours refusé : reconnectez le compte."))
+
+    return redirect(url_for("videos", ok="Remis en file."))
+
+
+@app.route("/videos/queue/<int:publication_id>/published", methods=["POST"])
+def videos_mark_published(publication_id: int):
+    """Record a clip the admin posted by hand."""
+
+    db.mark_video_published(publication_id, (request.form.get("url") or "").strip())
+
+    return redirect(url_for("videos", ok="Marqué comme publié."))
+
+
+@app.route("/videos/generate", methods=["POST"])
+def videos_generate():
+    """Draw a clip from a question of the licensed catalogue."""
+
+    certification_id = request.form.get("certification_id", type=int)
+    channels = [
+        channel for channel in request.form.getlist("channels") if channel in videopub.CHANNELS
+    ] or ["shorts"]
+
+    question = db.get_video_question(certification_id)
+    if not question:
+        return redirect(
+            url_for("videos", error="Aucune question ne convient à une vidéo pour cette certification.")
+        )
+
+    # The clip ends on the gated guide when there is one: a view that never
+    # reaches the platform earns nothing.
+    slug = (request.form.get("magnet") or "").strip()
+    landing = f"{EXAMBOOT_BASE_URL}/guide/{slug}" if slug else EXAMBOOT_BASE_URL
+
+    try:
+        built = _build_clips_for_channels(question, channels, landing)
+    except QuizVideoError as exc:
+        return redirect(url_for("videos", error=str(exc)))
+
+    session["video_storyboard"] = [
+        {"kind": frame.kind, "duration": frame.duration, "title": frame.title}
+        for frame in built["storyboard"]
+    ]
+
+    # Publish now rather than waiting for the next beat: the admin is here, and
+    # a token problem is worth seeing while they still have the page open.
+    if built["queued"]:
+        dispatch_pending_videos()
+
+    return redirect(
+        url_for("videos", ok=f"{len(built['files'])} clip(s) · {built['duration']} s")
+    )
+
+
+def _build_clips_for_channels(
+    question: dict,
+    channels: List[str],
+    landing: str,
+    content: Optional[str] = None,
+) -> Dict[str, object]:
+    """One clip per feed, each ending on its own tagged link.
+
+    The link is drawn into the last frame, so a per-feed tag means a per-feed
+    render. Rendering costs seconds; knowing which feed produced an address is
+    the entire point of the exercise.
+    """
+
+    caption = build_caption(question, landing)
+    files: List[str] = []
+    storyboard = []
+    duration = 0.0
+    queued = False
+
+    for channel in channels:
+        cta = video_link(landing, channel=channel, content=content or str(question["id"]))
+        name = f"quiz-{question['cert_id']}-{question['id']}-{channel}.mp4"
+        clip = build_quiz_video(question, VIDEO_DIR / name, cta_url=cta)
+
+        files.append(name)
+        storyboard = clip["storyboard"]
+        duration = clip["duration"]
+
+        if db.video_publications_available():
+            db.queue_video_publication(
+                file=name,
+                channel=channel,
+                caption=f"{caption}\n\n{cta}",
+                link=cta,
+                question=question["id"],
+                course=question["cert_id"],
+                status="pending" if channel in VIDEO_AUTO_CHANNELS else videopub.STATUS_MANUAL,
+            )
+            queued = True
+
+    return {"files": files, "storyboard": storyboard, "duration": duration, "queued": queued}
+
+
+@app.route("/videos/<path:filename>")
+def videos_download(filename: str):
+    """Serve one generated clip for upload to the short-form feeds."""
+
+    try:
+        resolved = (VIDEO_DIR / filename).resolve()
+        resolved.relative_to(VIDEO_DIR.resolve())
+    except (ValueError, RuntimeError):
+        return jsonify({"error": "Chemin de fichier invalide."}), 400
+
+    if resolved.suffix.lower() != ".mp4" or not resolved.is_file():
+        return jsonify({"error": "Fichier introuvable."}), 404
+
+    return send_from_directory(resolved.parent, resolved.name, as_attachment=True)
+
+
+@app.route("/magnets")
+def magnets():
+    """Which gated asset earns addresses, and which one only gets read."""
+
+    if not db.magnets_available():
+        return render_template(
+            "magnets.html",
+            magnets_ready=False,
+            magnets=[],
+            totals={},
+            notice=request.args.get("ok", ""),
+            error=request.args.get("error", ""),
+        )
+
+    rows = db.get_magnets()
+    for row in rows:
+        views = int(row.get("views") or 0)
+        row["rate"] = round(100 * int(row.get("captures") or 0) / views, 1) if views else 0.0
+        row["url"] = f"{EXAMBOOT_BASE_URL}/guide/{row['slug']}"
+
+    return render_template(
+        "magnets.html",
+        magnets_ready=True,
+        magnets=rows,
+        totals=db.get_magnet_totals(),
+        notice=request.args.get("ok", ""),
+        error=request.args.get("error", ""),
+    )
+
+
+@app.route("/magnets/<int:magnet_id>/publish", methods=["POST"])
+def magnets_publish(magnet_id: int):
+    """Take one asset online or offline."""
+
+    published = request.form.get("pub") == "1"
+    db.set_magnet_published(magnet_id, published)
+
+    return redirect(url_for("magnets", ok="En ligne." if published else "Retiré."))
+
+
+@app.route("/prospects")
+def prospects():
+    """The trainer pipeline: who was sourced, who got the gift, who signed."""
+
+    if not db.prospects_available():
+        return render_template(
+            "prospects.html",
+            pipeline_ready=False,
+            prospects=[],
+            funnel={},
+            statuses=db.PROSPECT_STATUSES,
+            certifications=[],
+            selected=None,
+            messages=[],
+            status_filter="",
+            notice=request.args.get("ok", ""),
+            error=request.args.get("error", ""),
+        )
+
+    status_filter = request.args.get("status", "").strip()
+    if status_filter not in db.PROSPECT_STATUSES:
+        status_filter = ""
+
+    rows = db.get_prospects(status_filter or None)
+    for row in rows:
+        row["follow_up"] = next_follow_up(row)
+
+    selected_id = request.args.get("prospect", type=int)
+    selected = next((row for row in rows if row["id"] == selected_id), None)
+    if selected is None and selected_id:
+        selected = db.get_prospect(selected_id)
+
+    return render_template(
+        "prospects.html",
+        pipeline_ready=True,
+        prospects=rows,
+        funnel=db.get_prospect_funnel(),
+        statuses=db.PROSPECT_STATUSES,
+        certifications=db.get_public_certifications(),
+        selected=selected,
+        messages=build_messages(selected) if selected else [],
+        status_filter=status_filter,
+        notice=request.args.get("ok", ""),
+        error=request.args.get("error", ""),
+    )
+
+
+@app.route("/prospects/add", methods=["POST"])
+def prospects_add():
+    """Source one trainer into the pipeline."""
+
+    name = (request.form.get("name") or "").strip()
+    if not name:
+        return redirect(url_for("prospects", error="Le nom est obligatoire."))
+
+    db.insert_prospect(
+        name=name,
+        email=(request.form.get("email") or "").strip() or None,
+        organisation=(request.form.get("organisation") or "").strip() or None,
+        profile_url=(request.form.get("profile_url") or "").strip() or None,
+        source=(request.form.get("source") or "manual").strip() or "manual",
+        course=request.form.get("course", type=int),
+        notes=(request.form.get("notes") or "").strip() or None,
+    )
+
+    return redirect(url_for("prospects", ok=f"{name} ajouté au pipeline."))
+
+
+@app.route("/prospects/<int:prospect_id>/gift", methods=["POST"])
+def prospects_gift(prospect_id: int):
+    """Generate the personalised test and tag it back to this prospect."""
+
+    prospect = db.get_prospect(prospect_id)
+    if not prospect:
+        return redirect(url_for("prospects", error="Prospect introuvable."))
+
+    certification_id = prospect.get("course")
+    if not certification_id:
+        return redirect(
+            url_for("prospects", error="Choisissez d'abord la certification que ce formateur enseigne.")
+        )
+
+    try:
+        url, _ = ensure_exam_url(int(certification_id), "")
+    except ExambootTestGenerationError as exc:
+        return redirect(url_for("prospects", error=str(exc)))
+
+    tagged = gift_link(url, prospect_id)
+    db.record_prospect_gift(prospect_id, tagged)
+
+    return redirect(url_for("prospects", prospect=prospect_id, ok="Test cadeau généré."))
+
+
+@app.route("/prospects/<int:prospect_id>/follow-up", methods=["POST"])
+def prospects_follow_up(prospect_id: int):
+    """Log that the next message of the sequence has been sent."""
+
+    db.record_prospect_follow_up(prospect_id)
+
+    return redirect(url_for("prospects", prospect=prospect_id, ok="Relance enregistrée."))
+
+
+@app.route("/prospects/<int:prospect_id>/status", methods=["POST"])
+def prospects_status(prospect_id: int):
+    """Move a prospect along the pipeline by hand."""
+
+    try:
+        db.update_prospect_status(prospect_id, (request.form.get("status") or "").strip())
+    except ValueError as exc:
+        return redirect(url_for("prospects", error=str(exc)))
+
+    return redirect(url_for("prospects", ok="Statut mis à jour."))
+
+
+@app.route("/prospects/sync", methods=["POST"])
+def prospects_sync():
+    """Reconcile the pipeline with the accounts and orders on the platform."""
+
+    linked = db.match_prospects_to_accounts()
+
+    return redirect(url_for("prospects", ok=f"{linked} prospect(s) rattaché(s) à un compte."))
 
 
 @app.route("/reports")

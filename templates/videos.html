@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vidéos quiz · ExBoot Laboratory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-primary: radial-gradient(circle at 20% 20%, rgba(76,201,240,0.15), transparent 55%),
+                     radial-gradient(circle at 80% 30%, rgba(244,114,182,0.18), transparent 60%),
+                     radial-gradient(circle at 50% 80%, rgba(16,185,129,0.22), transparent 65%),
+                     #040711;
+      --glass: rgba(10, 14, 24, 0.72);
+      --glass-soft: rgba(15, 19, 32, 0.82);
+      --border: rgba(148, 163, 184, 0.22);
+      --accent: #47f5c0;
+      --accent-strong: #7cf7ff;
+      --text-primary: #f8fafc;
+      --text-muted: rgba(226, 232, 240, 0.72);
+      --shadow-strong: 0 20px 45px rgba(15, 23, 42, 0.35);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --transition: cubic-bezier(.25,.8,.25,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      overflow-x: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stellar-orb { position: fixed; width: 32rem; height: 32rem; border-radius: 50%; opacity: 0.45; pointer-events: none; mix-blend-mode: screen; background: radial-gradient(circle, rgba(71,245,192,0.32) 0%, rgba(4,7,17,0) 70%); animation: drift 22s ease-in-out infinite; z-index: 0; }
+    .orb-1 { top: -12rem; left: -6rem; }
+    .orb-2 { bottom: -10rem; right: -4rem; animation-delay: -8s; background: radial-gradient(circle, rgba(124,247,255,0.25) 0%, rgba(4,7,17,0) 70%); }
+    .orb-3 { top: 45vh; right: 50%; transform: translateX(50%); animation-delay: -14s; background: radial-gradient(circle, rgba(244,114,182,0.28) 0%, rgba(4,7,17,0) 70%); }
+
+    @keyframes drift { 0%, 100% { transform: translate3d(0,0,0) scale(1); } 45% { transform: translate3d(40px, -30px, 0) scale(1.05); } 75% { transform: translate3d(-30px, 25px, 0) scale(0.95); } }
+
+    .stellar-header { position: sticky; top: 0; z-index: 20; background: rgba(4,7,17,0.72); backdrop-filter: saturate(180%) blur(18px); border-bottom: 1px solid rgba(148,163,184,0.18); }
+    .stellar-container { width: min(1200px, 92vw); margin: 0 auto; padding: 1.2rem 0 1.6rem; }
+    .stellar-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .stellar-brand { display: flex; align-items: center; gap: 0.9rem; font-family: 'Space Grotesk', sans-serif; }
+    .brand-mark { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 18px; background: linear-gradient(135deg, rgba(71,245,192,0.2), rgba(124,247,255,0.25)); border: 1px solid rgba(148, 163, 184, 0.2); color: var(--accent-strong); font-weight: 600; letter-spacing: 0.05em; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12), 0 10px 20px rgba(15,23,42,0.28); }
+    .brand-text strong { display: block; font-size: 1.05rem; letter-spacing: 0.02em; }
+    .brand-text span { font-size: 0.8rem; color: var(--text-muted); }
+
+    .nav-toggle { display: none; width: 2.8rem; height: 2.8rem; border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 19, 32, 0.68); color: var(--text-primary); align-items: center; justify-content: center; cursor: pointer; transition: transform 0.35s var(--transition), background 0.35s var(--transition); }
+    .nav-toggle:hover { background: rgba(30, 41, 69, 0.75); }
+    .nav-toggle span, .nav-toggle span::before, .nav-toggle span::after { display: block; width: 18px; height: 2px; background: currentColor; border-radius: 999px; position: relative; transition: transform 0.35s ease, opacity 0.3s ease; }
+    .nav-toggle span::before, .nav-toggle span::after { content: ''; position: absolute; left: 0; }
+    .nav-toggle span::before { top: -6px; }
+    .nav-toggle span::after { top: 6px; }
+    .nav-toggle.is-open span { background: transparent; }
+    .nav-toggle.is-open span::before { transform: translateY(6px) rotate(45deg); }
+    .nav-toggle.is-open span::after { transform: translateY(-6px) rotate(-45deg); }
+
+    .stellar-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.4rem; border-radius: var(--radius-lg); padding: 0.35rem; background: rgba(8, 12, 24, 0.55); border: 1px solid rgba(148, 163, 184, 0.16); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06); }
+    .stellar-nav a { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.65rem 1.05rem; border-radius: 14px; text-decoration: none; font-size: 0.9rem; font-weight: 500; color: var(--text-muted); transition: color 0.3s var(--transition), transform 0.3s var(--transition), background 0.3s var(--transition); }
+    .stellar-nav a::after { content: ''; position: absolute; inset: 0; border-radius: 14px; background: linear-gradient(135deg, rgba(71,245,192,0.16), rgba(124,247,255,0.14)); opacity: 0; transition: opacity 0.35s var(--transition); z-index: -1; }
+    .stellar-nav a:hover { color: var(--text-primary); transform: translateY(-2px); }
+    .stellar-nav a:hover::after { opacity: 1; }
+    .stellar-nav a.active { color: var(--text-primary); }
+    .stellar-nav a.active::after { opacity: 1; box-shadow: 0 8px 20px rgba(71, 245, 192, 0.18); }
+
+    .stellar-main { flex: 1; width: min(1200px, 92vw); margin: 0 auto; padding: 4.2rem 0 5.6rem; display: flex; flex-direction: column; gap: 2.8rem; position: relative; z-index: 1; }
+
+    .glass-card { background: var(--glass); border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-strong); padding: clamp(2rem, 3vw, 3rem); backdrop-filter: blur(26px); position: relative; overflow: hidden; }
+    .glass-card::before { content: ''; position: absolute; inset: 1px; border-radius: calc(var(--radius-xl) - 2px); border: 1px solid rgba(148, 163, 184, 0.12); pointer-events: none; }
+
+    .hero-intro h1 { margin: 0 0 1rem; font-family: 'Space Grotesk', sans-serif; font-size: clamp(2.2rem, 4vw, 2.9rem); letter-spacing: -0.01em; }
+    .hero-intro p { margin: 0 0 0.8rem; color: var(--text-muted); line-height: 1.7; }
+    .hero-intro p:last-child { margin-bottom: 0; }
+
+    h2 { font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.02em; margin-top: 0; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1.2rem; }
+    .kpi-card { background: var(--glass-soft); border: 1px solid var(--border); border-radius: 18px; padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; }
+    .kpi-label { font-size: 0.82rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .kpi-value { font-size: 2rem; font-family: 'Space Grotesk', sans-serif; color: var(--accent); }
+
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 1.2rem; align-items: end; }
+    .form-field label { display: block; font-size: 0.82rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.35rem; }
+    .form-field input, .form-field select, .form-field textarea {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      background: rgba(10, 15, 28, 0.85);
+      color: var(--text-primary);
+      padding: 0.7rem 0.85rem;
+      font-size: 0.95rem;
+      font-family: inherit;
+    }
+
+    .action-button {
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: rgba(56, 189, 248, 0.2);
+      color: var(--text-primary);
+      font-weight: 600;
+      padding: 0.6rem 1.1rem;
+      cursor: pointer;
+      font-size: 0.88rem;
+      font-family: inherit;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .action-button:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(56, 189, 248, 0.18); }
+    .action-button.ghost { background: rgba(148, 163, 184, 0.12); }
+
+    .banner { border-radius: 14px; padding: 0.9rem 1.2rem; margin-top: 1.2rem; border: 1px solid; }
+    .banner.ok { background: rgba(71,245,192,0.12); border-color: rgba(71,245,192,0.35); }
+    .banner.ko { background: rgba(244,114,182,0.12); border-color: rgba(244,114,182,0.38); }
+
+    .table-wrap { overflow-x: auto; margin-top: 1.1rem; }
+    .pipeline-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .pipeline-table th, .pipeline-table td { padding: 0.65rem 0.8rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .pipeline-table th { color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.74rem; letter-spacing: 0.05em; }
+    .pipeline-table tbody tr.is-selected { background: rgba(71,245,192,0.08); }
+
+    .pill { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(71,245,192,0.14); border: 1px solid rgba(71,245,192,0.3); font-size: 0.78rem; white-space: nowrap; }
+    .pill.due { background: rgba(251,191,36,0.16); border-color: rgba(251,191,36,0.38); }
+    .pill.quiet { background: rgba(148,163,184,0.12); border-color: rgba(148,163,184,0.28); color: var(--text-muted); }
+
+    .row-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+    .row-actions form { display: inline-flex; gap: 0.3rem; align-items: center; margin: 0; }
+    .row-actions select { border-radius: 10px; border: 1px solid rgba(148,163,184,0.22); background: rgba(10,15,28,0.85); color: var(--text-primary); padding: 0.35rem 0.5rem; font-size: 0.8rem; }
+
+    .table-link { color: var(--accent-strong); text-decoration: none; font-weight: 600; }
+    .table-link:hover { text-decoration: underline; }
+    .muted { color: var(--text-muted); font-size: 0.86rem; }
+
+    .message-block { background: rgba(8, 12, 24, 0.75); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.2rem 1.4rem; margin-top: 1.2rem; }
+    .message-block h3 { margin: 0 0 0.5rem; font-family: 'Space Grotesk', sans-serif; font-size: 1.05rem; }
+    .message-block pre { white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 0.9rem; color: var(--text-muted); line-height: 1.65; margin: 0; }
+
+    .filter-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.1rem; }
+    .filter-row a { text-decoration: none; }
+
+    .channel-choices { display: flex; flex-direction: column; gap: 0.4rem; }
+    .channel-choice { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.9rem; color: var(--text-muted); text-transform: none; letter-spacing: 0; }
+    .row-actions input[type="url"] { border-radius: 10px; border: 1px solid rgba(148,163,184,0.22); background: rgba(10,15,28,0.85); color: var(--text-primary); padding: 0.35rem 0.5rem; font-size: 0.8rem; width: 150px; }
+    footer { color: rgba(226, 232, 240, 0.55); text-align: center; padding: 2.4rem 0 3rem; font-size: 0.85rem; }
+
+    [data-animate] { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    [data-animate].is-visible { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 960px) {
+      .nav-toggle { display: inline-flex; }
+      body.nav-open .stellar-nav { max-height: 600px; opacity: 1; pointer-events: auto; margin-top: 1.2rem; }
+      .stellar-nav { flex-direction: column; max-height: 0; opacity: 0; pointer-events: none; overflow: hidden; transition: max-height 0.4s ease, opacity 0.4s ease; }
+      .stellar-nav a { width: 100%; justify-content: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stellar-orb orb-1"></div>
+  <div class="stellar-orb orb-2"></div>
+  <div class="stellar-orb orb-3"></div>
+
+  <header class="stellar-header">
+    <div class="stellar-container">
+      <div class="stellar-top">
+        <div class="stellar-brand">
+          <span class="brand-mark">EX</span>
+          <div class="brand-text">
+            <strong>ExBoot Laboratory</strong>
+            <span>Console d'orchestration pédagogique</span>
+          </div>
+        </div>
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Afficher le menu">
+          <span></span>
+        </button>
+      </div>
+      {% set active_page = 'videos' %}
+      {% include '_nav.html' %}
+    </div>
+  </header>
+
+
+
+  <main class="stellar-main">
+    <section class="glass-card hero-intro" data-animate>
+      <h1>Vidéos quiz</h1>
+      <p>Une question, ses réponses, un décompte de trois secondes, la bonne réponse et pourquoi&nbsp;: le format qui circule sur Shorts, Reels et TikTok. Aucun modèle vidéo n'est appelé et rien n'est facturé au clip — les images sont dessinées, ffmpeg les assemble.</p>
+      <p>La banque de questions est le contenu. Seul le catalogue sous licence est éligible&nbsp;: les questions d'un formateur restent privées à son académie.</p>
+
+      {% if notice %}<div class="banner ok">{{ notice }}</div>{% endif %}
+      {% if error %}<div class="banner ko">{{ error }}</div>{% endif %}
+    </section>
+
+    <section class="glass-card" data-animate>
+      <h2>Fabriquer un clip</h2>
+      <form method="post" action="{{ url_for('videos_generate') }}">
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="videoCert">Certification</label>
+            <select id="videoCert" name="certification_id">
+              <option value="">Au hasard dans tout le catalogue</option>
+              {% for cert in certifications %}
+              <option value="{{ cert.id }}">{{ cert.name }}{% if cert.provider_name %} · {{ cert.provider_name }}{% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="videoMagnet">Destination du lien</label>
+            <select id="videoMagnet" name="magnet">
+              <option value="">Page d'accueil</option>
+              {% for magnet in magnets %}
+              <option value="{{ magnet.slug }}">{{ magnet.title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Canaux</label>
+            <div class="channel-choices">
+              {% for channel in channels %}
+              <label class="channel-choice">
+                <input type="checkbox" name="channels" value="{{ channel }}"{% if channel in auto_channels %} checked{% endif %}>
+                {{ channel }}
+                <span class="pill {{ '' if channel in auto_channels else 'quiet' }}">{{ 'auto' if channel in auto_channels else 'manuel' }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="form-field">
+            <button class="action-button" type="submit">Générer</button>
+          </div>
+        </div>
+      </form>
+      <p class="muted" style="margin-top:1rem">Un clip par canal, chacun terminant sur son propre lien tagué&nbsp;: une adresse captée remonte jusqu'au canal exact qui l'a produite, visible dans <a class="table-link" href="{{ url_for('growth') }}">Croissance &amp; revenu</a>. LinkedIn et X partent tout seuls&nbsp;; les autres se téléchargent et se publient à la main.</p>
+    </section>
+
+    {% if storyboard %}
+    <section class="glass-card" data-animate>
+      <h2>Le dernier clip, image par image</h2>
+      <div class="table-wrap">
+        <table class="pipeline-table">
+          <thead>
+            <tr><th>Séquence</th><th>Durée</th><th>Texte</th></tr>
+          </thead>
+          <tbody>
+            {% for frame in storyboard %}
+            <tr>
+              <td><span class="pill quiet">{{ frame.kind }}</span></td>
+              <td>{{ frame.duration }} s</td>
+              <td>{{ frame.title }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if needs_attention %}
+    <section class="glass-card" data-animate>
+      <h2>⚠ En attente d'une action de votre part</h2>
+      <p class="muted">Un jeton expiré ne se répare pas tout seul et la console ne réessaie pas indéfiniment&nbsp;: elle s'arrête, vous prévient par e-mail, et garde les clips prêts. Reconnectez le compte puis relancez, ou publiez à la main et marquez-le ici.</p>
+      <div class="table-wrap">
+        <table class="pipeline-table">
+          <thead>
+            <tr><th>Canal</th><th>Clip</th><th>Raison</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            {% for row in needs_attention %}
+            <tr>
+              <td><span class="pill {{ 'due' if row.status == 'needs_token' else 'quiet' }}">{{ 'jeton expiré' if row.status == 'needs_token' else 'échec' }}</span> {{ row.channel }}</td>
+              <td><a class="table-link" href="{{ url_for('videos_download', filename=row.file) }}">{{ row.file }}</a></td>
+              <td class="muted">{{ (row.last_error or '')[:180] }}</td>
+              <td>
+                <div class="row-actions">
+                  <form method="post" action="{{ url_for('videos_retry', publication_id=row.id) }}">
+                    <button class="action-button" type="submit">Réessayer</button>
+                  </form>
+                  <form method="post" action="{{ url_for('videos_mark_published', publication_id=row.id) }}">
+                    <input type="url" name="url" placeholder="URL publiée (facultatif)">
+                    <button class="action-button ghost" type="submit">Publié à la main</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if queue_ready %}
+    <section class="glass-card" data-animate>
+      <h2>File de publication</h2>
+      <div class="kpi-grid">
+        {% for status, label in [('published','Publiées'), ('pending','En file'), ('manual','À publier à la main'), ('needs_token','Jeton expiré'), ('failed','Échouées')] %}
+        <div class="kpi-card">
+          <span class="kpi-label">{{ label }}</span>
+          <strong class="kpi-value">{{ summary.get(status, 0) }}</strong>
+        </div>
+        {% endfor %}
+      </div>
+
+      {% if queue %}
+      <div class="table-wrap">
+        <table class="pipeline-table">
+          <thead>
+            <tr><th>Clip</th><th>Canal</th><th>Statut</th><th>Tentatives</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            {% for row in queue %}
+            <tr>
+              <td>
+                <a class="table-link" href="{{ url_for('videos_download', filename=row.file) }}">{{ row.file }}</a>
+                {% if row.course_name %}<div class="muted">{{ row.course_name }}</div>{% endif %}
+              </td>
+              <td>{{ row.channel }}</td>
+              <td>
+                <span class="pill {{ 'quiet' if row.status != 'published' else '' }}">{{ row.status }}</span>
+                {% if row.external_url %}<div><a class="table-link" href="{{ row.external_url }}" target="_blank" rel="noopener">voir</a></div>{% endif %}
+              </td>
+              <td>{{ row.attempts }}</td>
+              <td>
+                <div class="row-actions">
+                  {% if row.status != 'published' %}
+                  <form method="post" action="{{ url_for('videos_mark_published', publication_id=row.id) }}">
+                    <button class="action-button ghost" type="submit">Marquer publié</button>
+                  </form>
+                  {% endif %}
+                  {% if row.status in ['failed', 'needs_token', 'manual'] %}
+                  <form method="post" action="{{ url_for('videos_retry', publication_id=row.id) }}">
+                    <button class="action-button ghost" type="submit">Réessayer</button>
+                  </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="muted">Rien en file.</p>
+      {% endif %}
+    </section>
+    {% else %}
+    <section class="glass-card" data-animate>
+      <h2>File de publication pas encore déployée</h2>
+      <p class="muted">La table <code>video_publications</code> est absente de la base. Exécutez les migrations de la plateforme&nbsp;: <code>php artisan migrate</code>. Les clips se génèrent quand même, mais rien n'est publié automatiquement.</p>
+    </section>
+    {% endif %}
+
+    <section class="glass-card" data-animate>
+      <h2>Clips produits</h2>
+      {% if clips %}
+      <div class="table-wrap">
+        <table class="pipeline-table">
+          <thead>
+            <tr><th>Fichier</th><th>Action</th></tr>
+          </thead>
+          <tbody>
+            {% for clip in clips %}
+            <tr>
+              <td>{{ clip }}</td>
+              <td><a class="table-link" href="{{ url_for('videos_download', filename=clip) }}">Télécharger</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="muted" style="margin-top:1rem">TikTok, Shorts et Reels n'ont pas d'identifiants dans cette console&nbsp;: leurs clips se téléchargent ici et se publient à la main. LinkedIn et X, eux, sont déjà connectés et partent automatiquement.</p>
+      {% else %}
+      <p class="muted">Aucun clip produit pour l'instant.</p>
+      {% endif %}
+    </section>
+  </main>
+
+  <script>
+    document.getElementById('navToggle')?.addEventListener('click', (event) => {
+      const nav = document.querySelector('.stellar-nav');
+      const expanded = event.currentTarget.getAttribute('aria-expanded') === 'true';
+      event.currentTarget.setAttribute('aria-expanded', String(!expanded));
+      nav?.classList.toggle('is-open', !expanded);
+    });
+  </script>
+</body>
+
+</html>

@@ -23,6 +23,14 @@ import mysql.connector
 import requests
 from flask import Blueprint, jsonify, render_template, request, send_file, url_for
 
+from attribution import default_campaign, tag_link
+from magnets import (
+    MagnetPublicationError,
+    build_promise,
+    bullets_from_pages,
+    magnet_link,
+    push_magnet,
+)
 from config import (
     DB_CONFIG,
     EXAMBOOT_API_KEY,
@@ -1814,6 +1822,8 @@ def run_scheduled_publication(
     topic_type: str,
     channels: Iterable[str],
     attach_image: bool = False,
+    campaign: Optional[str] = None,
+    content: Optional[str] = None,
 ) -> dict:
     """Execute the publication workflow for scheduled posts.
 
@@ -1833,6 +1843,14 @@ def run_scheduled_publication(
 
     exam_url, _ = ensure_exam_url(certification_id, exam_url)
 
+    # One tagged variant per channel: the platform reads the tags off the
+    # landing page and carries them to the lead, the account and the order.
+    campaign = campaign or default_campaign(topic_type)
+    tagged = {
+        channel: tag_link(exam_url, channel=channel, campaign=campaign, content=content)
+        for channel in channels_set
+    }
+
     selection = _fetch_selection(provider_id, certification_id)
 
     article_payload: Optional[dict] = None
@@ -1848,7 +1866,7 @@ def run_scheduled_publication(
             executor.submit(
                 _generate_and_persist_article_task,
                 selection,
-                exam_url,
+                tagged["article"],
                 topic_type,
                 certification_id,
             )
@@ -1859,7 +1877,7 @@ def run_scheduled_publication(
             executor.submit(
                 _generate_and_publish_tweet_task,
                 selection,
-                exam_url,
+                tagged["x"],
                 topic_type,
                 attach_image,
             )
@@ -1870,7 +1888,7 @@ def run_scheduled_publication(
             executor.submit(
                 _generate_and_publish_linkedin_task,
                 selection,
-                exam_url,
+                tagged["linkedin"],
                 topic_type,
                 attach_image,
             )
@@ -2260,12 +2278,50 @@ def _run_linkedin_workflow(
     )
 
 
+def _publish_carousel_magnet(
+    subject: str,
+    question: str,
+    pages: list,
+    pdf_path: Path,
+    certification_id: int,
+    campaign: Optional[str] = None,
+    content: Optional[str] = None,
+) -> Optional[dict]:
+    """Gate the generated carousel behind a landing page, best effort.
+
+    A failure here must never stop a publication that is otherwise ready: the
+    post still goes out, it just points at the free test instead of the form.
+    """
+
+    try:
+        published = push_magnet(
+            title=subject,
+            promise=build_promise(subject, question),
+            bullets=bullets_from_pages(pages),
+            course=certification_id,
+            pdf_path=pdf_path,
+        )
+    except MagnetPublicationError:
+        return None
+
+    link = magnet_link(
+        published["url"],
+        channel="linkedin",
+        campaign=campaign,
+        content=content or published.get("slug"),
+    )
+
+    return {**published, "link": link}
+
+
 def run_scheduled_carousel_publication(
     provider_id: int,
     certification_id: int,
     exam_url: str,
     topic_id: int,
     attach_image: bool = False,
+    campaign: Optional[str] = None,
+    content: Optional[str] = None,
 ) -> dict:
     """Generate a carousel PDF from a saved topic and publish its companion post on LinkedIn."""
 
@@ -2289,7 +2345,14 @@ def run_scheduled_carousel_publication(
 
     _mark_carousel_topic_processed(topic_id)
 
-    linkedin_text = generate_carousel_linkedin_post(subject, question, exam_url)
+    # The post links to the gated guide when there is one: a carousel read on
+    # LinkedIn earns nothing, the same carousel behind a form earns an address.
+    magnet = _publish_carousel_magnet(
+        subject, question, pages, pdf_path, certification_id, campaign, content
+    )
+    call_to_action = magnet["link"] if magnet else exam_url
+
+    linkedin_text = generate_carousel_linkedin_post(subject, question, call_to_action)
     linkedin_result = _run_linkedin_workflow(
         selection,
         exam_url,
@@ -2308,6 +2371,7 @@ def run_scheduled_carousel_publication(
         "topic_id": topic_id,
         "topic": subject,
         "template": selected_template,
+        "magnet": magnet,
     }
 
 

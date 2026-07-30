@@ -72,6 +72,7 @@
       <a href="{{ url_for('certification') }}" data-route="{{ url_for('certification') }}"{% if active_page|default('') == 'certification' %} class="active"{% endif %}>Certification</a>
       <a href="{{ url_for('articles.index') }}" data-route="{{ url_for('articles.index') }}"{% if active_page|default('') == 'articles' %} class="active"{% endif %}>Article Builder(AI)</a>
       <a href="{{ url_for('articles.carousel_topics_page') }}" data-route="{{ url_for('articles.carousel_topics_page') }}"{% if active_page|default('') == 'carousel_topics' %} class="active"{% endif %}>Carousel Topics(AI)</a>
+      <a href="{{ url_for('videos') }}" data-route="{{ url_for('videos') }}"{% if active_page|default('') == 'videos' %} class="active"{% endif %}>Vidéos quiz</a>
       <a href="{{ url_for('schedule') }}" data-route="{{ url_for('schedule') }}"{% if active_page|default('') == 'schedule' %} class="active"{% endif %}>Schedule</a>
       <a href="{{ url_for('pdf.export_index') }}" data-route="{{ url_for('pdf.export_index') }}"{% if active_page|default('') == 'pdf_export' %} class="active"{% endif %}>PDF Export</a>
     </div>
@@ -93,6 +94,9 @@
     </button>
     <div class="nav-children is-collapsed" id="nav-stats">
       <a href="{{ url_for('dashboard') }}" data-route="{{ url_for('dashboard') }}"{% if active_page|default('') == 'dashboard' %} class="active"{% endif %}>Dashboard</a>
+      <a href="{{ url_for('growth') }}" data-route="{{ url_for('growth') }}"{% if active_page|default('') == 'growth' %} class="active"{% endif %}>Growth &amp; Revenue</a>
+      <a href="{{ url_for('prospects') }}" data-route="{{ url_for('prospects') }}"{% if active_page|default('') == 'prospects' %} class="active"{% endif %}>Pipeline formateurs</a>
+      <a href="{{ url_for('magnets') }}" data-route="{{ url_for('magnets') }}"{% if active_page|default('') == 'magnets' %} class="active"{% endif %}>Aimants à prospects</a>
       <a href="{{ url_for('reports') }}" data-route="{{ url_for('reports') }}"{% if active_page|default('') == 'reports' %} class="active"{% endif %}>Reports</a>
       <a href="{{ url_for('stats_files') }}" data-route="{{ url_for('stats_files') }}"{% if active_page|default('') == 'stats_files' %} class="active"{% endif %}>Files</a>
       <a href="{{ url_for('stats_webhook') }}" data-route="{{ url_for('stats_webhook') }}"{% if active_page|default('') == 'webhook' %} class="active"{% endif %}>Webhook</a>
